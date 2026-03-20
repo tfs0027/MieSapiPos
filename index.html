@@ -995,7 +995,15 @@ function renderLogin(){
     </div>`).join('');
 }
 function selectUser(id){
-  ST.selUserId=id;ST.pin='';
+  ST.selUserId=id;ST.pin='';renderLogin();
+  document.getElementById('pin-section').style.display='block';
+  document.getElementById('pin-label').textContent='PIN untuk '+USERS.find(u=>u.id===id).name;
+  document.getElementById('pin-err').style.display='none';
+  renderPinDots();
+  document.getElementById('pin-pad').innerHTML=
+    ['1','2','3','4','5','6','7','8','9','←','0','✓'].map(k=>
+      `<div class="pin-key${k==='✓'?' confirm':''}" onclick="pinKey('${k}')">${k}</div>`).join('');
+}
 /* ══════════ CONFIG / SETTINGS ══════════ */
 const CFG_KEY='warungku_cfg';
 let CFG={
@@ -1344,16 +1352,6 @@ function kirimWA(){
   window.open('https://wa.me/'+fullNomor+'?text='+encoded,'_blank');
   closeModal('wa-modal');
   showNotif('✅ Membuka WhatsApp...','#25D366');
-}
-
-renderLogin();
-  document.getElementById('pin-section').style.display='block';
-  document.getElementById('pin-label').textContent='PIN untuk '+USERS.find(u=>u.id===id).name;
-  document.getElementById('pin-err').style.display='none';
-  renderPinDots();
-  document.getElementById('pin-pad').innerHTML=
-    ['1','2','3','4','5','6','7','8','9','←','0','✓'].map(k=>
-      `<div class="pin-key${k==='✓'?' confirm':''}" onclick="pinKey('${k}')">${k}</div>`).join('');
 }
 function renderPinDots(){
   document.getElementById('pin-dots').innerHTML=[0,1,2,3].map(i=>
