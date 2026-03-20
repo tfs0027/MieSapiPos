@@ -206,6 +206,16 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .cart-var-badge{padding:2px 6px;border-radius:10px;font-size:9px;font-weight:600;background:var(--accent3);color:var(--accent)}
 .opt-group-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)}
 .opt-group-row:last-child{border-bottom:none}
+
+.pending-badge{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.pending-tab{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:var(--radius);border:1.5px solid var(--brd2);cursor:pointer;font-size:11px;font-weight:600;color:var(--txt2);background:var(--bg);transition:all .15s;white-space:nowrap}
+.pending-tab:hover{border-color:var(--accent2);color:var(--accent);background:var(--accent3)}
+.pending-tab.active{border-color:var(--accent);color:var(--accent);background:var(--accent3)}
+.pending-tab.new-btn{background:var(--green);color:#fff;border-color:var(--green)}
+.pending-tab.new-btn:hover{background:var(--green-dk)}
+.pending-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius);border:1px solid var(--brd);background:var(--bg);cursor:pointer;transition:all .15s;margin-bottom:6px}
+.pending-item:hover{border-color:var(--accent2);background:var(--accent3)}
+.pending-item.active-order{border-color:var(--accent);background:var(--accent3)}
 </style>
 </head>
 <body>
@@ -265,9 +275,23 @@ tr:hover td{background:rgba(108,92,231,.03)}
           </div>
           <div class="cart-panel">
             <div class="cart-hd">
-              <div style="font-size:13px;font-weight:700;margin-bottom:5px">🧾 Pesanan Baru</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <span style="font-size:13px;font-weight:700">🧾 Pesanan</span>
+                <div style="display:flex;gap:5px;align-items:center">
+                  <button class="btn btn-sm" onclick="simpanPesanan()" title="Simpan pesanan ini & mulai pesanan baru" style="font-size:10px;padding:3px 8px">💾 Tunda</button>
+                  <div style="position:relative">
+                    <button class="btn btn-sm" onclick="togglePendingPanel()" id="btn-pending" style="font-size:10px;padding:3px 8px">📋 Tertunda</button>
+                    <div class="pending-badge" id="pending-count" style="display:none">0</div>
+                  </div>
+                </div>
+              </div>
               <div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--txt2)">
                 Meja: <select class="fi" id="cart-meja" style="width:auto;padding:3px 7px;font-size:11px"></select>
+              </div>
+              <div id="pending-panel" style="display:none;margin-top:8px;border-top:1px solid var(--brd);padding-top:8px">
+                <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Pesanan Tertunda</div>
+                <div id="pending-list"></div>
+                <div id="pending-empty" style="font-size:11px;color:var(--txt3);text-align:center;padding:10px 0">Tidak ada pesanan tertunda</div>
               </div>
             </div>
             <div class="cart-body" id="cart-body"><div class="cart-empty">Pilih menu untuk memulai</div></div>
@@ -356,9 +380,66 @@ tr:hover td{background:rgba(108,92,231,.03)}
 
       <div class="page" id="page-stok">
         <div class="g3" id="stok-kpi"></div>
-        <div class="card">
-          <div class="card-hd"><span class="card-title">Stok Bahan Baku</span><button class="btn btn-primary btn-sm" onclick="openStokModal()">+ Tambah</button></div>
-          <div class="tbl-wrap"><table><thead><tr><th>Bahan</th><th>Kategori</th><th>Stok</th><th>Min</th><th>Status</th><th>Harga/Satuan</th><th>Aksi</th></tr></thead><tbody id="stok-table"></tbody></table></div>
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+          <button class="shift-tab active" id="stok-tab-daftar" onclick="switchStokTab('daftar',this)">📦 Daftar Stok</button>
+          <button class="shift-tab" id="stok-tab-riwayat" onclick="switchStokTab('riwayat',this)">📋 Riwayat Perubahan</button>
+          <button class="shift-tab" id="stok-tab-setting" onclick="switchStokTab('setting',this)">⚙️ Pengaturan</button>
+        </div>
+        <div id="stok-panel-daftar">
+          <div class="card">
+            <div class="card-hd">
+              <span class="card-title">Stok Bahan Baku</span>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select class="fi" id="stok-filter-cat" style="width:140px;font-size:11px" onchange="renderStok()">
+                  <option value="">Semua Kategori</option>
+                </select>
+                <input class="fi" id="stok-search" placeholder="Cari bahan..." style="width:150px;font-size:11px" oninput="renderStok()">
+                <button class="btn btn-primary btn-sm" onclick="openStokModal()">+ Tambah</button>
+              </div>
+            </div>
+            <div class="tbl-wrap"><table><thead><tr><th>Bahan</th><th>Kategori</th><th>Stok</th><th>Min</th><th>Status</th><th>Harga/Satuan</th><th>Nilai</th><th>Aksi</th></tr></thead><tbody id="stok-table"></tbody></table></div>
+          </div>
+        </div>
+        <div id="stok-panel-riwayat" style="display:none">
+          <div class="card">
+            <div class="card-hd">
+              <span class="card-title">Riwayat Perubahan Stok</span>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <input type="date" class="fi" id="riwayat-tgl-dari" style="width:140px;font-size:11px" onchange="renderRiwayatStok()">
+                <input type="date" class="fi" id="riwayat-tgl-sampai" style="width:140px;font-size:11px" onchange="renderRiwayatStok()">
+                <select class="fi" id="riwayat-tipe" style="width:130px;font-size:11px" onchange="renderRiwayatStok()">
+                  <option value="">Semua Tipe</option>
+                  <option value="masuk">Masuk</option>
+                  <option value="keluar">Keluar</option>
+                  <option value="penyesuaian">Penyesuaian</option>
+                  <option value="terjual">Terjual (auto)</option>
+                </select>
+                <button class="btn btn-sm" onclick="resetRiwayatFilter()">Reset Filter</button>
+              </div>
+            </div>
+            <div id="riwayat-stok-summary" style="margin-bottom:10px"></div>
+            <div class="tbl-wrap"><table><thead><tr><th>Waktu</th><th>Bahan</th><th>Tipe</th><th>Jumlah</th><th>Sebelum</th><th>Sesudah</th><th>Keterangan</th><th>Kasir</th></tr></thead><tbody id="riwayat-stok-table"></tbody></table></div>
+          </div>
+        </div>
+        <div id="stok-panel-setting" style="display:none">
+          <div class="g2">
+            <div class="card">
+              <div class="card-hd"><span class="card-title">⚙️ Mode Pengelolaan Stok</span></div>
+              <div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius);padding:12px 14px;font-size:12px;color:var(--green-dk)">
+                <div style="font-weight:700;margin-bottom:4px">🔧 Mode Manual Aktif</div>
+                Stok dikelola sepenuhnya secara manual. Gunakan tombol <b>+Restock</b> untuk menambah stok masuk, dan tombol <b>Sesuaikan</b> untuk koreksi stok opname. Semua perubahan tercatat otomatis di Riwayat Perubahan.
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-hd"><span class="card-title">📂 Kelola Kategori Stok</span></div>
+              <div id="stok-kat-list" style="margin-bottom:10px"></div>
+              <div style="display:flex;gap:8px">
+                <input class="fi" id="stok-kat-new" placeholder="Nama kategori baru..." style="flex:1" onkeydown="if(event.key==='Enter')tambahStokKat()">
+                <button class="btn btn-primary" onclick="tambahStokKat()">+ Tambah</button>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -638,7 +719,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
     <h3 id="stok-modal-title">Tambah Stok</h3>
     <div class="frow" style="margin-bottom:10px">
       <div class="form-group"><label class="form-lbl">Nama Bahan</label><input class="fi" id="fs-name" placeholder="Beras"></div>
-      <div class="form-group"><label class="form-lbl">Kategori</label><select class="fi" id="fs-cat"><option>Bahan Pokok</option><option>Bumbu</option><option>Sayur</option><option>Daging</option><option>Minuman</option><option>Lainnya</option></select></div>
+      <div class="form-group"><label class="form-lbl">Kategori</label><select class="fi" id="fs-cat"></select></div>
     </div>
     <div class="frow" style="margin-bottom:10px">
       <div class="form-group"><label class="form-lbl">Stok</label><input class="fi" type="number" id="fs-qty" placeholder="50"></div>
@@ -650,6 +731,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('stok-modal')">Batal</button>
+      <div class="form-group" id="fs-ket-group"><label class="form-lbl">Keterangan Perubahan Stok</label><input class="fi" id="fs-ket" placeholder="Contoh: Restock dari supplier, koreksi stok opname..."></div>
       <button class="btn btn-primary" onclick="saveStok()">Simpan</button>
     </div>
   </div>
@@ -704,6 +786,7 @@ const USERS = [
 ];
 
 let MENU_CATS = ['Makanan','Minuman','Camilan','Dessert'];
+let STOK_CATS = ['Bahan Pokok','Bumbu','Sayur','Daging','Minuman','Lainnya'];
 
 const CAT_COLORS = {
   'Bahan Baku':'#E17055','Operasional':'#FDCB6E','Utilitas':'#74B9FF',
@@ -769,6 +852,13 @@ const ST = {
   editMenuId: null, editStokId: null,
   activeCat: 'Semua', pengFilter: null,
   trxCounter: 3, shiftCounter: 2,
+  pendingOrders: [], pendingCounter: 1,
+  stokLog: [
+    {id:1,stokId:1,stokName:'Beras',tipe:'masuk',jumlah:10,satuan:'kg',sblm:35,sesudah:45,ket:'Restock dari supplier',ref:'',waktu:'08:00',tanggal:'19 Mar 2026',kasir:'Budi Santoso'},
+    {id:2,stokId:2,stokName:'Minyak Goreng',tipe:'keluar',jumlah:2,satuan:'liter',sblm:10,sesudah:8,ket:'Pemakaian dapur',ref:'',waktu:'09:30',tanggal:'19 Mar 2026',kasir:'Siti Rahayu'},
+    {id:3,stokId:3,stokName:'Ayam Potong',tipe:'masuk',jumlah:5,satuan:'kg',sblm:10,sesudah:15,ket:'Restock',ref:'Nota#103',waktu:'07:45',tanggal:'20 Mar 2026',kasir:'Budi Santoso'},
+    {id:4,stokId:4,stokName:'Bawang Merah',tipe:'penyesuaian',jumlah:1,satuan:'kg',sblm:4,sesudah:3,ket:'Koreksi stok opname',ref:'',waktu:'14:00',tanggal:'20 Mar 2026',kasir:'Budi Santoso'},
+  ], stokLogCounter: 5,
 };
 
 // ═══════════════════════════════
@@ -1096,6 +1186,113 @@ function updateTotals() {
 }
 
 function clearCart() { ST.cart = []; $('disc-pct').value = 0; renderCart(); }
+
+// ═══════════════════════════════
+// PENDING ORDERS
+// ═══════════════════════════════
+function simpanPesanan() {
+  if (!ST.cart.length) { showNotif('Keranjang kosong, tidak ada yang disimpan','#E17055'); return; }
+  const meja = $('cart-meja').value;
+  const disc = parseFloat($('disc-pct').value)||0;
+  const sub = ST.cart.reduce((a,c)=>a+c.price*c.qty,0);
+  const discAmt = sub*disc/100;
+  const tax = CFG.enablePajak ? (sub-discAmt)*(CFG.pajak/100) : 0;
+  const total = Math.round(sub-discAmt+tax);
+  const label = 'P-' + String(ST.pendingCounter).padStart(2,'0');
+  ST.pendingCounter++;
+  ST.pendingOrders.push({
+    id: Date.now(),
+    label,
+    meja,
+    cart: JSON.parse(JSON.stringify(ST.cart)),
+    disc,
+    total,
+    itemCount: ST.cart.reduce((a,c)=>a+c.qty,0),
+    time: fmtTime(new Date()),
+  });
+  ST.cart = [];
+  $('disc-pct').value = 0;
+  renderCart();
+  renderPendingList();
+  updatePendingBadge();
+  showNotif('💾 Pesanan ' + label + ' disimpan — ' + (meja==='takeaway'?'Takeaway':'Meja '+meja), '#6C5CE7');
+}
+
+function muatPesanan(id) {
+  const idx = ST.pendingOrders.findIndex(p=>p.id===id);
+  if (idx<0) return;
+  if (ST.cart.length) {
+    if (!confirm('Keranjang aktif akan digantikan pesanan ini. Lanjutkan?')) return;
+  }
+  const pending = ST.pendingOrders[idx];
+  ST.cart = JSON.parse(JSON.stringify(pending.cart));
+  $('disc-pct').value = pending.disc;
+  const sel = $('cart-meja');
+  if (sel) sel.value = pending.meja;
+  ST.pendingOrders.splice(idx, 1);
+  renderCart();
+  renderPendingList();
+  updatePendingBadge();
+  showNotif('📋 Pesanan ' + pending.label + ' dimuat ke keranjang', '#00B894');
+  closePendingPanel();
+}
+
+function hapusPesananTertunda(id, e) {
+  e.stopPropagation();
+  ST.pendingOrders = ST.pendingOrders.filter(p=>p.id!==id);
+  renderPendingList();
+  updatePendingBadge();
+  showNotif('Pesanan tertunda dihapus','#A8A5BE');
+}
+
+function renderPendingList() {
+  const el = $('pending-list');
+  const emptyEl = $('pending-empty');
+  if (!el) return;
+  if (!ST.pendingOrders.length) {
+    el.innerHTML = '';
+    if (emptyEl) emptyEl.style.display = 'block';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  el.innerHTML = ST.pendingOrders.map(p =>
+    '<div class="pending-item" onclick="muatPesanan(' + p.id + ')">' +
+    '<div style="flex:1;min-width:0">' +
+    '<div style="font-size:12px;font-weight:700;color:var(--accent)">' + p.label + '</div>' +
+    '<div style="font-size:10px;color:var(--txt2);margin-top:1px">' +
+    (p.meja==='takeaway'?'Takeaway':'Meja '+p.meja) + ' · ' + p.itemCount + ' item · ' + p.time +
+    '</div>' +
+    '</div>' +
+    '<div style="text-align:right;flex-shrink:0">' +
+    '<div style="font-size:11px;font-weight:700">' + fmt(p.total) + '</div>' +
+    '<button class="btn btn-sm" style="color:var(--red-dk);border-color:transparent;padding:2px 5px;font-size:11px;margin-top:2px" onclick="hapusPesananTertunda(' + p.id + ',event)">✕</button>' +
+    '</div>' +
+    '</div>'
+  ).join('');
+}
+
+function updatePendingBadge() {
+  const badge = $('pending-count');
+  if (!badge) return;
+  const n = ST.pendingOrders.length;
+  badge.style.display = n > 0 ? 'flex' : 'none';
+  badge.textContent = n > 9 ? '9+' : n;
+  const btn = $('btn-pending');
+  if (btn) { btn.style.borderColor = n>0?'var(--accent)':''; btn.style.color = n>0?'var(--accent)':''; }
+}
+
+function togglePendingPanel() {
+  const panel = $('pending-panel');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) renderPendingList();
+}
+
+function closePendingPanel() {
+  const panel = $('pending-panel');
+  if (panel) panel.style.display = 'none';
+}
 
 // ═══════════════════════════════
 // MEJA
@@ -1447,14 +1644,35 @@ function saveMenu() {
 // ═══════════════════════════════
 // STOK
 // ═══════════════════════════════
+function switchStokTab(tab, btn) {
+  document.querySelectorAll('[id^="stok-tab-"]').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  ['daftar','riwayat','setting'].forEach(t=>{
+    const el=$('stok-panel-'+t); if(el) el.style.display=t===tab?'block':'none';
+  });
+  if(tab==='riwayat') renderRiwayatStok();
+  if(tab==='setting') { renderStokKatList(); }
+}
+
 function renderStok() {
   const low = ST.stocks.filter(s=>s.qty<=s.min).length;
   const nilai = ST.stocks.reduce((a,s)=>a+s.qty*s.cost,0);
+  const habis = ST.stocks.filter(s=>s.qty===0).length;
   $('stok-kpi').innerHTML =
     '<div class="metric"><div class="metric-lbl">Total Item</div><div class="metric-val" style="color:var(--accent)">' + ST.stocks.length + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Hampir Habis</div><div class="metric-val" style="color:var(--red)">' + low + '</div></div>' +
+    '<div class="metric"><div class="metric-lbl">Hampir Habis / Kosong</div><div class="metric-val" style="color:var(--red)">' + low + '</div><div class="metric-sub">' + habis + ' kosong, ' + (low-habis) + ' hampir habis</div></div>' +
     '<div class="metric"><div class="metric-lbl">Nilai Total Stok</div><div class="metric-val" style="color:var(--amber-dk)">' + fmt(nilai) + '</div></div>';
-  $('stok-table').innerHTML = ST.stocks.map(s => {
+  const filterCatEl = $('stok-filter-cat');
+  if (filterCatEl && filterCatEl.options.length <= 1) {
+    filterCatEl.innerHTML = '<option value="">Semua Kategori</option>' + STOK_CATS.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+  }
+  const filterCat = filterCatEl ? filterCatEl.value : '';
+  const search = ($('stok-search')||{value:''}).value.toLowerCase();
+  const stocks = ST.stocks.filter(s =>
+    (!filterCat || s.cat===filterCat) &&
+    (!search || s.name.toLowerCase().includes(search) || s.cat.toLowerCase().includes(search))
+  );
+  $('stok-table').innerHTML = stocks.length ? stocks.map(s => {
     const pct = Math.min(100,Math.round(s.qty/Math.max(s.min*2,1)*100));
     const col = s.qty===0?'var(--red)':s.qty<=s.min?'var(--amber-dk)':'var(--green)';
     const status = s.qty===0?'Kosong':s.qty<=s.min?'Hampir Habis':'Cukup';
@@ -1466,28 +1684,173 @@ function renderStok() {
       '<td>' + s.min + ' ' + s.unit + '</td>' +
       '<td><span class="badge ' + bc + '">' + status + '</span></td>' +
       '<td>' + fmt(s.cost) + '/' + s.unit + '</td>' +
-      '<td style="display:flex;gap:5px">' +
-      '<button class="btn btn-sm" onclick="restok(' + s.id + ')">+Restock</button>' +
+      '<td style="font-weight:500">' + fmt(s.qty*s.cost) + '</td>' +
+      '<td style="display:flex;gap:4px;flex-wrap:wrap">' +
+      '<button class="btn btn-sm" onclick="openRestokModal(' + s.id + ')">+Restock</button>' +
       '<button class="btn btn-sm" onclick="openStokModal(' + s.id + ')">Edit</button>' +
+      '<button class="btn btn-sm" onclick="penyesuaianStok(' + s.id + ')" style="color:var(--amber-dk)">Sesuaikan</button>' +
       '</td></tr>';
+  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--txt3);padding:20px">Tidak ada bahan ditemukan</td></tr>';
+}
+
+function addStokLog(stokId, stokName, tipe, jumlah, satuan, sblm, sesudah, ket) {
+  const now = new Date();
+  ST.stokLog.unshift({
+    id: ST.stokLogCounter++,
+    stokId, stokName, tipe, jumlah, satuan, sblm, sesudah, ket: ket||'',
+    ref: '', waktu: fmtTime(now),
+    tanggal: fmtDate(now), kasir: ST.cu ? ST.cu.name : 'Sistem'
+  });
+}
+
+function openRestokModal(id) {
+  const s = ST.stocks.find(x=>x.id===id);
+  const a = prompt('Tambah stok ' + s.name + ' (' + s.unit + '):\n(masukkan jumlah yang ditambahkan)');
+  if (!a || isNaN(a) || parseFloat(a)<=0) return;
+  const jumlah = parseFloat(a);
+  const sblm = s.qty;
+  s.qty += jumlah;
+  addStokLog(s.id, s.name, 'masuk', jumlah, s.unit, sblm, s.qty, 'Restock manual');
+  renderStok();
+  showNotif(s.name + ': +' + jumlah + ' ' + s.unit, '#00B894');
+}
+
+function penyesuaianStok(id) {
+  const s = ST.stocks.find(x=>x.id===id);
+  const a = prompt('Penyesuaian stok ' + s.name + '\nStok saat ini: ' + s.qty + ' ' + s.unit + '\n\nMasukkan jumlah stok AKTUAL (stok opname):');
+  if (a===null || isNaN(a)) return;
+  const baru = parseFloat(a);
+  const sblm = s.qty;
+  const selisih = baru - sblm;
+  const ket = prompt('Keterangan penyesuaian:') || 'Koreksi stok opname';
+  s.qty = baru;
+  addStokLog(s.id, s.name, 'penyesuaian', Math.abs(selisih), s.unit, sblm, baru,
+    ket + (selisih>=0?' (+'+selisih+')':' ('+selisih+')')
+  );
+  renderStok();
+  showNotif('Penyesuaian stok ' + s.name + ': ' + sblm + ' → ' + baru + ' ' + s.unit);
+}
+
+function renderRiwayatStok() {
+  const dari = $('riwayat-tgl-dari').value;
+  const sampai = $('riwayat-tgl-sampai').value;
+  const tipe = $('riwayat-tipe').value;
+  let logs = ST.stokLog.filter(l => {
+    if (tipe && l.tipe !== tipe) return false;
+    if (dari || sampai) {
+      const d = parseLogDate(l.tanggal);
+      if (dari && d < new Date(dari)) return false;
+      if (sampai && d > new Date(sampai + 'T23:59:59')) return false;
+    }
+    return true;
+  });
+  const totalMasuk = logs.filter(l=>l.tipe==='masuk').reduce((a,l)=>a+l.jumlah,0);
+  const totalKeluar = logs.filter(l=>l.tipe!=='masuk').reduce((a,l)=>a+l.jumlah,0);
+  const el = $('riwayat-stok-summary');
+  if (el) el.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
+    '<div class="metric"><div class="metric-lbl">Total Log</div><div class="metric-val" style="color:var(--accent)">' + logs.length + '</div></div>' +
+    '<div class="metric"><div class="metric-lbl">Total Masuk</div><div class="metric-val" style="color:var(--green)">+' + totalMasuk.toFixed(1) + '</div></div>' +
+    '<div class="metric"><div class="metric-lbl">Total Keluar/Sesuai</div><div class="metric-val" style="color:var(--red)">-' + totalKeluar.toFixed(1) + '</div></div>' +
+    '</div>';
+  const tbody = $('riwayat-stok-table');
+  const tipeBadge = {masuk:'b-green',keluar:'b-red',penyesuaian:'b-amber',terjual:'b-blue'};
+  const tipeLabel = {masuk:'Masuk',keluar:'Keluar',penyesuaian:'Penyesuaian',terjual:'Terjual'};
+  tbody.innerHTML = logs.length ? logs.map(l =>
+    '<tr>' +
+    '<td style="font-size:10px">' + l.waktu + '<br><span style="color:var(--txt3)">' + l.tanggal + '</span></td>' +
+    '<td><b>' + l.stokName + '</b></td>' +
+    '<td><span class="badge ' + (tipeBadge[l.tipe]||'b-gray') + '">' + (tipeLabel[l.tipe]||l.tipe) + '</span></td>' +
+    '<td style="font-weight:700;color:' + (l.tipe==='masuk'?'var(--green-dk)':'var(--red-dk)') + '">' + (l.tipe==='masuk'?'+':'-') + l.jumlah + ' ' + l.satuan + '</td>' +
+    '<td style="color:var(--txt2)">' + l.sblm + ' ' + l.satuan + '</td>' +
+    '<td style="font-weight:500">' + l.sesudah + ' ' + l.satuan + '</td>' +
+    '<td style="font-size:11px;color:var(--txt2)">' + (l.ket||'—') + '</td>' +
+    '<td style="font-size:11px">' + l.kasir + '</td>' +
+    '</tr>'
+  ).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--txt3);padding:20px">Tidak ada riwayat untuk filter ini</td></tr>';
+}
+
+function parseLogDate(tanggal) {
+  const months = {Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,Jun:5,Jul:6,Agu:7,Sep:8,Okt:9,Nov:10,Des:11};
+  const parts = tanggal.split(' ');
+  if (parts.length===3) return new Date(parts[2], months[parts[1]]||0, parseInt(parts[0]));
+  return new Date(tanggal);
+}
+
+function resetRiwayatFilter() {
+  $('riwayat-tgl-dari').value=''; $('riwayat-tgl-sampai').value='';
+  $('riwayat-tipe').value='';
+  renderRiwayatStok();
+}
+
+
+function renderStokKatList() {
+  const el=$('stok-kat-list');if(!el)return;
+  el.innerHTML=STOK_CATS.map((cat,i)=>{
+    const used=ST.stocks.filter(s=>s.cat===cat).length;
+    return '<div class="opt-group-row">' +
+      '<div id="sk-view-'+i+'" style="flex:1;display:flex;align-items:center;gap:8px"><span style="font-size:12px">'+cat+'</span>'+
+      '<span style="font-size:10px;color:var(--txt3)">('+used+' bahan)</span></div>' +
+      '<div id="sk-edit-'+i+'" style="flex:1;display:none"><input class="fi" id="sk-inp-'+i+'" value="'+cat+'" style="font-size:12px" onkeydown="if(event.key===\'Enter\')simpanStokKat('+i+')"></div>' +
+      '<button class="btn btn-sm" onclick="startEditStokKat('+i+')" id="sk-btn-edit-'+i+'">✏️</button>' +
+      '<button class="btn btn-sm" style="display:none" onclick="simpanStokKat('+i+')" id="sk-btn-save-'+i+'">✅</button>' +
+      '<button class="btn btn-sm" style="color:var(--red-dk)'+(used?';opacity:.4;cursor:not-allowed':'')+'"
+        onclick="'+(used?'showNotif(\'Kategori masih digunakan '+used+' bahan\',\'#E17055\')':'hapusStokKat('+i+')')+'">🗑️</button>' +
+      '</div>';
   }).join('');
 }
 
-function restok(id) {
-  const s = ST.stocks.find(x=>x.id===id);
-  const a = prompt('Tambah stok ' + s.name + ' (' + s.unit + '):');
-  if (a && !isNaN(a)) { s.qty += parseFloat(a); renderStok(); showNotif(s.name+': +'+a+' '+s.unit); }
+function startEditStokKat(i){
+  $('sk-view-'+i).style.display='none';$('sk-edit-'+i).style.display='flex';
+  $('sk-btn-edit-'+i).style.display='none';$('sk-btn-save-'+i).style.display='';
+  const inp=$('sk-inp-'+i);if(inp){inp.focus();inp.select();}
 }
+
+function simpanStokKat(i){
+  const newName=$('sk-inp-'+i).value.trim();
+  if(!newName){showNotif('Nama tidak boleh kosong','#E17055');return;}
+  if(STOK_CATS.includes(newName)&&STOK_CATS[i]!==newName){showNotif('Nama sudah ada','#E17055');return;}
+  const old=STOK_CATS[i];
+  STOK_CATS[i]=newName;
+  ST.stocks.forEach(s=>{if(s.cat===old)s.cat=newName;});
+  renderStokKatList();renderStok();
+  showNotif('Kategori diubah: '+old+' → '+newName);
+}
+
+function hapusStokKat(i){
+  const cat=STOK_CATS[i];
+  const used=ST.stocks.filter(s=>s.cat===cat).length;
+  if(used>0){showNotif('Masih digunakan '+used+' bahan','#E17055');return;}
+  STOK_CATS.splice(i,1);renderStokKatList();
+  showNotif('Kategori '+cat+' dihapus','#A8A5BE');
+}
+
+function tambahStokKat(){
+  const name=($('stok-kat-new')||{value:''}).value.trim();
+  if(!name){showNotif('Masukkan nama kategori','#E17055');return;}
+  if(STOK_CATS.includes(name)){showNotif('Kategori sudah ada','#E17055');return;}
+  STOK_CATS.push(name);$('stok-kat-new').value='';
+  renderStokKatList();
+  showNotif('Kategori '+name+' ditambahkan','#00B894');
+}
+
+
 
 function openStokModal(id) {
   ST.editStokId = id || null;
   $('stok-modal-title').textContent = id ? 'Edit Stok' : 'Tambah Stok';
+  const catSel=$('fs-cat');
+  if(catSel) catSel.innerHTML=STOK_CATS.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
   if (id) {
     const s = ST.stocks.find(x=>x.id===id);
-    $('fs-name').value=s.name; $('fs-cat').value=s.cat; $('fs-qty').value=s.qty;
+    $('fs-name').value=s.name;
+    if(catSel) catSel.value=s.cat;
+    $('fs-qty').value=s.qty;
     $('fs-unit').value=s.unit; $('fs-min').value=s.min; $('fs-cost').value=s.cost;
+    const ket=$('fs-ket');if(ket)ket.value='';
   } else {
     ['fs-name','fs-qty','fs-unit','fs-min','fs-cost'].forEach(x=>$(x).value='');
+    const ket=$('fs-ket');if(ket)ket.value='';
   }
   $('stok-modal').classList.add('open');
 }
@@ -1495,9 +1858,22 @@ function openStokModal(id) {
 function saveStok() {
   const name = $('fs-name').value.trim();
   if (!name) { showNotif('Nama wajib diisi','#E17055'); return; }
-  const data = {name,cat:$('fs-cat').value,qty:parseFloat($('fs-qty').value)||0,unit:$('fs-unit').value||'pcs',min:parseFloat($('fs-min').value)||0,cost:parseFloat($('fs-cost').value)||0};
-  if (ST.editStokId) Object.assign(ST.stocks.find(s=>s.id===ST.editStokId),data);
-  else ST.stocks.push({...data,id:Date.now()});
+  const newQty = parseFloat($('fs-qty').value)||0;
+  const ket = ($('fs-ket')||{value:''}).value.trim() || (ST.editStokId?'Edit data stok':'Stok baru');
+  const data = {name,cat:$('fs-cat').value,qty:newQty,unit:$('fs-unit').value||'pcs',min:parseFloat($('fs-min').value)||0,cost:parseFloat($('fs-cost').value)||0};
+  if (ST.editStokId) {
+    const existing = ST.stocks.find(s=>s.id===ST.editStokId);
+    const sblm = existing.qty;
+    Object.assign(existing, data);
+    if (sblm !== newQty) {
+      const selisih = newQty - sblm;
+      addStokLog(existing.id, existing.name, selisih>=0?'masuk':'keluar', Math.abs(selisih), existing.unit, sblm, newQty, ket);
+    }
+  } else {
+    const newId = Date.now();
+    ST.stocks.push({...data,id:newId});
+    if(newQty>0) addStokLog(newId, name, 'masuk', newQty, data.unit, 0, newQty, 'Stok awal: '+ket);
+  }
   closeModal('stok-modal'); renderStok(); showNotif('Stok disimpan');
 }
 
