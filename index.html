@@ -266,7 +266,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <div class="tot-row"><span>Diskon</span>
                 <div class="disc-row"><input class="disc-inp" type="number" id="disc-pct" min="0" max="100" value="0" oninput="updateTotals()">%</div>
               </div>
-              <div class="tot-row"><span>Pajak (<span id="pajak-label">10</span>%)</span><span id="c-tax">Rp 0</span></div>
+              <div class="tot-row" id="cart-tax-row"><span>Pajak (<span id="pajak-label">10</span>%)</span><span id="c-tax">Rp 0</span></div>
               <div class="tot-row tot-grand"><span>TOTAL</span><span id="c-grand">Rp 0</span></div>
               <div class="pay-grid">
                 <button class="btn btn-success" onclick="openPay('cash')">💵 Tunai</button>
@@ -400,11 +400,25 @@ tr:hover td{background:rgba(108,92,231,.03)}
             </div>
             <div class="card">
               <div class="card-hd"><span class="card-title">💰 Pajak &amp; Diskon</span></div>
-              <div class="frow"><div class="form-group"><label class="form-lbl">Pajak (%)</label><input class="fi" type="number" id="cfg-pajak" value="10" min="0" max="100"></div>
-              <div class="form-group"><label class="form-lbl">Nama Pajak</label><input class="fi" id="cfg-pajak-nm" value="PPN"></div></div>
+              <div class="form-group">
+                <label class="form-lbl">Aktifkan Pajak di Penghitungan Total</label>
+                <div style="display:flex;gap:8px;margin-top:6px">
+                  <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;flex:1;padding:8px 12px;border:1.5px solid var(--brd2);border-radius:var(--radius);background:var(--bg)" id="lbl-pajak-yes">
+                    <input type="radio" name="enablePajak" id="cfg-enable-pajak-1" value="1" onchange="togglePajakFields()"> <span>✅ Aktif — hitung pajak di total</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;flex:1;padding:8px 12px;border:1.5px solid var(--brd2);border-radius:var(--radius);background:var(--bg)" id="lbl-pajak-no">
+                    <input type="radio" name="enablePajak" id="cfg-enable-pajak-0" value="0" onchange="togglePajakFields()"> <span>🚫 Tidak ada pajak</span>
+                  </label>
+                </div>
+              </div>
+              <div id="pajak-detail-fields">
+                <div class="frow"><div class="form-group"><label class="form-lbl">Persentase Pajak (%)</label><input class="fi" type="number" id="cfg-pajak" value="10" min="0" max="100"></div>
+                <div class="form-group"><label class="form-lbl">Nama Pajak</label><input class="fi" id="cfg-pajak-nm" value="PPN"></div></div>
+                <div class="form-group"><label class="form-lbl">Tampilkan Baris Pajak di Struk</label><select class="fi" id="cfg-show-pajak"><option value="1">Ya, tampilkan</option><option value="0">Sembunyikan</option></select></div>
+              </div>
               <div class="frow"><div class="form-group"><label class="form-lbl">Maks. Diskon (%)</label><input class="fi" type="number" id="cfg-discmax" value="100"></div>
-              <div class="form-group"><label class="form-lbl">Tampilkan Pajak di Struk</label><select class="fi" id="cfg-show-pajak"><option value="1">Ya</option><option value="0">Tidak</option></select></div></div>
-              <button class="btn btn-primary" style="width:100%" onclick="saveCfgPajak()">💾 Simpan Pajak</button>
+              <div class="form-group" style="display:flex;align-items:flex-end"><div style="font-size:11px;color:var(--txt2);padding-bottom:8px">Batas diskon maks yang bisa diberikan kasir</div></div></div>
+              <button class="btn btn-primary" style="width:100%" onclick="saveCfgPajak()">💾 Simpan Pengaturan Pajak</button>
             </div>
           </div>
           <div>
@@ -575,13 +589,28 @@ tr:hover td{background:rgba(108,92,231,.03)}
       <div class="form-group"><label class="form-lbl">Harga (Rp)</label><input class="fi" type="number" id="fm-price" placeholder="15000"></div>
     </div>
     <div class="frow" style="margin-bottom:10px">
-      <div class="form-group"><label class="form-lbl">Kategori</label><select class="fi" id="fm-cat"><option>Makanan</option><option>Minuman</option><option>Camilan</option><option>Dessert</option></select></div>
+      <div class="form-group"><label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">Kategori<button type="button" class="btn btn-sm" onclick="openKategoriModal()" style="font-size:9px;padding:2px 8px;margin-left:auto">⚙️ Kelola Kategori</button></label><select class="fi" id="fm-cat" style="margin-top:4px"></select></div>
       <div class="form-group"><label class="form-lbl">Emoji</label><input class="fi" id="fm-emoji" placeholder="🍳" maxlength="2"></div>
     </div>
     <div class="form-group"><label class="form-lbl">Status</label><select class="fi" id="fm-status"><option value="available">Tersedia</option><option value="out">Habis</option></select></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('menu-modal')">Batal</button>
       <button class="btn btn-primary" onclick="saveMenu()">Simpan Menu</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="kategori-modal">
+  <div class="modal">
+    <h3>⚙️ Kelola Kategori Menu</h3>
+    <div class="modal-sub">Tambah, edit, atau hapus kategori menu</div>
+    <div id="kat-list" style="margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px">
+      <input class="fi" id="kat-new-input" placeholder="Nama kategori baru..." style="flex:1" onkeydown="if(event.key==='Enter')tambahKategori()">
+      <button class="btn btn-primary" onclick="tambahKategori()">+ Tambah</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal('kategori-modal');renderFmCatSelect()">✅ Selesai</button>
     </div>
   </div>
 </div>
@@ -638,6 +667,8 @@ const USERS = [
   {id:3,name:'Andi Wijaya',role:'kasir',pin:'9012',avatar:'AW',bg:'#FDCB6E',tc:'#9A7D1A',
    perms:{order:1,meja:1,shift:1,menu:0,stok:0,laporan:0,riwayat:1,users:0,settings:0,diskon:1,void_trx:0,edit_harga:0}},
 ];
+
+let MENU_CATS = ['Makanan','Minuman','Camilan','Dessert'];
 
 const CAT_COLORS = {
   'Bahan Baku':'#E17055','Operasional':'#FDCB6E','Utilitas':'#74B9FF',
@@ -714,7 +745,7 @@ let CFG = {
   alamat:'Jl. Contoh No.1, Madiun, Jawa Timur',
   telp:'0851-xxxx-xxxx', wa:'6285xxxxxxxx', sosmed:'@warungku',
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
-  logo:'\u{1F35C}', pajak:10, pajakNm:'PPN', discMax:100, showPajak:1,
+  logo:'\u{1F35C}', pajak:10, pajakNm:'PPN', discMax:100, showPajak:1, enablePajak:1,
   paper:'80',
   se:{logo:1,alamat:1,telp:1,shift:0,kasir:1,meja:1,disc:1,sosmed:0,footer:1},
   printerType:'browser', printerIp:'', printerPort:'9100',
@@ -881,7 +912,10 @@ renderClock();
 // ORDER
 // ═══════════════════════════════
 function buildCatTabs() {
-  const cats = ['Semua', ...new Set(ST.menus.map(m => m.cat))];
+  const usedCats = new Set(ST.menus.map(m => m.cat));
+  const orderedCats = MENU_CATS.filter(c => usedCats.has(c));
+  const extraCats = [...usedCats].filter(c => !MENU_CATS.includes(c));
+  const cats = ['Semua', ...orderedCats, ...extraCats];
   $('cat-bar').innerHTML = cats.map(c =>
     '<button class="cat-btn' + (c===ST.activeCat?' active':'') + '" onclick="filterCat(\'' + c + '\')">' + c + '</button>'
   ).join('');
@@ -944,12 +978,14 @@ function updateTotals() {
   const disc = parseFloat($('disc-pct').value) || 0;
   const discAmt = sub * disc / 100;
   const taxable = sub - discAmt;
-  const tax = taxable * (CFG.pajak/100);
+  const tax = CFG.enablePajak ? taxable * (CFG.pajak/100) : 0;
   const grand = Math.round(taxable + tax);
   $('c-sub').textContent = fmt(sub);
   $('c-tax').textContent = fmt(tax);
   $('c-grand').textContent = fmt(grand);
   $('pajak-label').textContent = CFG.pajak;
+  const taxRow = $('cart-tax-row');
+  if (taxRow) taxRow.style.display = CFG.enablePajak ? '' : 'none';
 }
 
 function clearCart() { ST.cart = []; $('disc-pct').value = 0; renderCart(); }
@@ -1010,7 +1046,7 @@ function openPay(method) {
   const disc = parseFloat($('disc-pct').value) || 0;
   const discAmt = sub*disc/100;
   const taxable = sub-discAmt;
-  const tax = taxable*(CFG.pajak/100);
+  const tax = CFG.enablePajak ? taxable*(CFG.pajak/100) : 0;
   const grand = Math.round(taxable+tax);
   const suggested = Math.ceil(grand/1000)*1000;
   const icons = {cash:'💵',qris:'📱',transfer:'🏦'};
@@ -1021,7 +1057,7 @@ function openPay(method) {
     '<div style="border-top:1px solid var(--brd);margin:6px 0"></div>' +
     '<div class="sum-row"><span>Subtotal</span><b>' + fmt(sub) + '</b></div>' +
     (disc ? '<div class="sum-row"><span>Diskon ' + disc + '%</span><b>−' + fmt(discAmt) + '</b></div>' : '') +
-    '<div class="sum-row"><span>Pajak ' + CFG.pajak + '%</span><b>' + fmt(tax) + '</b></div>' +
+    (CFG.enablePajak ? '<div class="sum-row"><span>Pajak ' + CFG.pajak + '%</span><b>' + fmt(tax) + '</b></div>' : '') +
     '<div class="sum-total"><span>TOTAL</span><span style="color:var(--accent)">' + fmt(grand) + '</span></div>' +
     '</div>';
   if (method === 'cash') {
@@ -1055,7 +1091,7 @@ function processPayment() {
   const disc = parseFloat($('disc-pct').value) || 0;
   const discAmt = sub*disc/100;
   const taxable = sub-discAmt;
-  const tax = taxable*(CFG.pajak/100);
+  const tax = CFG.enablePajak ? taxable*(CFG.pajak/100) : 0;
   const grand = Math.round(taxable+tax);
   const mejaVal = $('cart-meja').value;
   const cashRec = ST.payMethod==='cash' ? (parseFloat($('cash-inp') ? $('cash-inp').value : grand)||grand) : grand;
@@ -1105,7 +1141,7 @@ function showReceipt(trx) {
   html += '<hr class="r-d">';
   html += '<div class="r-r"><span>Subtotal</span><span>' + fmt(trx.subtotal) + '</span></div>';
   if (CFG.se.disc && trx.disc) html += '<div class="r-r"><span>Diskon ' + trx.disc + '%</span><span>−' + fmt(trx.discAmt) + '</span></div>';
-  if (CFG.showPajak) html += '<div class="r-r"><span>' + CFG.pajakNm + ' ' + CFG.pajak + '%</span><span>' + fmt(trx.tax) + '</span></div>';
+  if (CFG.enablePajak && CFG.showPajak) html += '<div class="r-r"><span>' + CFG.pajakNm + ' ' + CFG.pajak + '%</span><span>' + fmt(trx.tax) + '</span></div>';
   html += '<div class="r-r r-b" style="font-size:12px;margin-top:3px"><span>TOTAL</span><span>' + fmt(trx.total) + '</span></div>';
   html += '<hr class="r-d">';
   html += '<div class="r-r"><span>Bayar (' + (trx.pay==='cash'?'Tunai':trx.pay==='qris'?'QRIS':'Transfer') + ')</span><span>' + fmt(trx.cashRec) + '</span></div>';
@@ -1151,17 +1187,90 @@ function toggleMenuStatus(id) {
   showNotif('Status ' + m.name + ' diubah');
 }
 
+function renderFmCatSelect(selectedCat) {
+  const sel = $('fm-cat'); if(!sel) return;
+  sel.innerHTML = MENU_CATS.map(c => '<option value="' + c + '"' + (c===selectedCat?' selected':'') + '>' + c + '</option>').join('');
+}
+
 function openMenuModal(id) {
   ST.editMenuId = id || null;
   $('menu-modal-title').textContent = id ? 'Edit Menu' : 'Tambah Menu';
   if (id) {
     const m = ST.menus.find(x => x.id===id);
     $('fm-name').value = m.name; $('fm-price').value = m.price;
-    $('fm-cat').value = m.cat; $('fm-emoji').value = m.emoji; $('fm-status').value = m.status;
+    renderFmCatSelect(m.cat);
+    $('fm-emoji').value = m.emoji; $('fm-status').value = m.status;
   } else {
     ['fm-name','fm-price','fm-emoji'].forEach(x => $(x).value = '');
+    renderFmCatSelect(MENU_CATS[0]);
   }
   $('menu-modal').classList.add('open');
+}
+
+function openKategoriModal() {
+  renderKatList();
+  $('kat-new-input').value = '';
+  $('kategori-modal').classList.add('open');
+}
+
+function renderKatList() {
+  const usedCats = new Set(ST.menus.map(m => m.cat));
+  $('kat-list').innerHTML = MENU_CATS.length ? MENU_CATS.map((cat, i) =>
+    '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)">' +
+    '<div id="kat-view-' + i + '" style="flex:1;display:flex;align-items:center;gap:8px">' +
+    '<span style="font-size:13px">' + cat + '</span>' +
+    (usedCats.has(cat) ? '<span style="font-size:10px;color:var(--txt3)">(' + ST.menus.filter(m=>m.cat===cat).length + ' menu)</span>' : '<span style="font-size:10px;color:var(--txt3)">(kosong)</span>') +
+    '</div>' +
+    '<div id="kat-edit-' + i + '" style="flex:1;display:none">' +
+    '<input class="fi" id="kat-inp-' + i + '" value="' + cat + '" style="font-size:12px" onkeydown="if(event.key===\'Enter\')simpanKategori(' + i + ')"></div>' +
+    '<button class="btn btn-sm" onclick="startEditKat(' + i + ')" id="kat-btn-edit-' + i + '">✏️</button>' +
+    '<button class="btn btn-sm" style="display:none" onclick="simpanKategori(' + i + ')" id="kat-btn-save-' + i + '">✅</button>' +
+    '<button class="btn btn-sm" style="color:var(--red-dk)' + (usedCats.has(cat)?';opacity:.4;cursor:not-allowed':'') + '" ' +
+    'onclick="' + (usedCats.has(cat) ? 'showNotif(\'Kategori masih digunakan '+ST.menus.filter(m=>m.cat===cat).length+' menu\',\'#E17055\')' : 'hapusKategori('+i+')') + '">🗑️</button>' +
+    '</div>'
+  ).join('') :
+    '<div style="text-align:center;padding:20px;color:var(--txt3);font-size:12px">Belum ada kategori</div>';
+}
+
+function startEditKat(i) {
+  $('kat-view-'+i).style.display='none';
+  $('kat-edit-'+i).style.display='flex';
+  $('kat-btn-edit-'+i).style.display='none';
+  $('kat-btn-save-'+i).style.display='';
+  const inp=$('kat-inp-'+i); if(inp){inp.focus();inp.select();}
+}
+
+function simpanKategori(i) {
+  const newName = $('kat-inp-'+i).value.trim();
+  if (!newName) { showNotif('Nama kategori tidak boleh kosong','#E17055'); return; }
+  if (MENU_CATS.includes(newName) && MENU_CATS[i]!==newName) { showNotif('Nama kategori sudah ada','#E17055'); return; }
+  const oldName = MENU_CATS[i];
+  MENU_CATS[i] = newName;
+  ST.menus.forEach(m => { if(m.cat===oldName) m.cat=newName; });
+  renderKatList();
+  renderMenuTable(); renderMenuGrid(); buildCatTabs();
+  showNotif('Kategori diubah: ' + oldName + ' → ' + newName);
+}
+
+function hapusKategori(i) {
+  const cat = MENU_CATS[i];
+  const used = ST.menus.filter(m=>m.cat===cat).length;
+  if (used>0) { showNotif('Kategori masih digunakan ' + used + ' menu','#E17055'); return; }
+  MENU_CATS.splice(i,1);
+  renderKatList();
+  buildCatTabs();
+  showNotif('Kategori ' + cat + ' dihapus','#A8A5BE');
+}
+
+function tambahKategori() {
+  const newName = $('kat-new-input').value.trim();
+  if (!newName) { showNotif('Nama kategori tidak boleh kosong','#E17055'); return; }
+  if (MENU_CATS.includes(newName)) { showNotif('Kategori sudah ada','#E17055'); return; }
+  MENU_CATS.push(newName);
+  $('kat-new-input').value = '';
+  renderKatList();
+  buildCatTabs();
+  showNotif('Kategori ' + newName + ' ditambahkan','#00B894');
 }
 
 function saveMenu() {
@@ -1417,20 +1526,45 @@ function showTutupModal() {
   const totalPengeluaran = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
   const labaBersih = totalPenjualan-totalPengeluaran;
   const tunai = sh.transaksi.filter(t=>t.pay==='cash').reduce((a,t)=>a+t.total,0);
+  const qris = sh.transaksi.filter(t=>t.pay==='qris').reduce((a,t)=>a+t.total,0);
+  const transfer = sh.transaksi.filter(t=>t.pay==='transfer').reduce((a,t)=>a+t.total,0);
+  const nonTunai = qris + transfer;
   const ekspKas = sh.modalAwal+tunai;
-  $('tutup-body').innerHTML = '<div class="sum-box">' +
-    '<div class="sum-row"><span>Shift</span><b>' + sh.id + '</b></div>' +
-    '<div class="sum-row"><span>Kasir</span><b>' + sh.kasir + '</b></div>' +
-    '<div class="sum-row"><span>Jam Buka</span><b>' + sh.waktuBuka + '</b></div>' +
-    '<div style="border-top:1px solid var(--brd);margin:6px 0"></div>' +
-    '<div class="sum-row"><span>Transaksi</span><b>' + sh.transaksi.length + '</b></div>' +
-    '<div class="sum-row"><span>Total Penjualan</span><b style="color:var(--green-dk)">+' + fmt(totalPenjualan) + '</b></div>' +
-    '<div class="sum-row"><span>Total Pengeluaran</span><b style="color:var(--red-dk)">−' + fmt(totalPengeluaran) + '</b></div>' +
-    '<div class="sum-total" style="color:' + (labaBersih>=0?'var(--green-dk)':'var(--red-dk)') + '"><span>Laba Bersih</span><span>' + (labaBersih>=0?'+':'') + fmt(labaBersih) + '</span></div>' +
-    '<div style="border-top:1px solid var(--brd);margin:6px 0"></div>' +
-    '<div class="sum-row"><span>Modal Awal</span><b>' + fmt(sh.modalAwal) + '</b></div>' +
-    '<div class="sum-row"><span>+ Penerimaan Tunai</span><b>' + fmt(tunai) + '</b></div>' +
-    '<div class="sum-total"><span>Ekspektasi Kas</span><span>' + fmt(ekspKas) + '</span></div>' +
+  const trxCount = sh.transaksi.length;
+  const trxTunai = sh.transaksi.filter(t=>t.pay==='cash').length;
+  const trxQris = sh.transaksi.filter(t=>t.pay==='qris').length;
+  const trxTransfer = sh.transaksi.filter(t=>t.pay==='transfer').length;
+  $('tutup-body').innerHTML =
+    '<div class="sum-box" style="margin-bottom:10px">' +
+      '<div class="sum-row"><span>Shift</span><b>' + sh.id + '</b></div>' +
+      '<div class="sum-row"><span>Kasir</span><b>' + sh.kasir + '</b></div>' +
+      '<div class="sum-row"><span>Jam Buka</span><b>' + sh.waktuBuka + '</b></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">' +
+      '<div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius-lg);padding:12px">' +
+        '<div style="font-size:10px;font-weight:600;color:var(--green-dk);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">💵 Penerimaan Tunai</div>' +
+        '<div style="font-size:20px;font-weight:700;color:var(--green-dk)">' + fmt(tunai) + '</div>' +
+        '<div style="font-size:10px;color:var(--green-dk);margin-top:3px">' + trxTunai + ' transaksi</div>' +
+      '</div>' +
+      '<div style="background:var(--blue-bg);border:1px solid #85B7EB;border-radius:var(--radius-lg);padding:12px">' +
+        '<div style="font-size:10px;font-weight:600;color:var(--blue-dk);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">📱 Non Tunai (QRIS + Transfer)</div>' +
+        '<div style="font-size:20px;font-weight:700;color:var(--blue-dk)">' + fmt(nonTunai) + '</div>' +
+        '<div style="font-size:10px;color:var(--blue-dk);margin-top:3px">QRIS ' + fmt(qris) + ' · Transfer ' + fmt(transfer) + '</div>' +
+        '<div style="font-size:10px;color:var(--blue-dk);">' + (trxQris+trxTransfer) + ' transaksi (' + trxQris + ' QRIS, ' + trxTransfer + ' transfer)</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="sum-box" style="margin-bottom:10px">' +
+      '<div class="sum-row"><span>Total Transaksi</span><b>' + trxCount + ' transaksi</b></div>' +
+      '<div class="sum-row"><span>Total Penjualan</span><b style="color:var(--green-dk)">+' + fmt(totalPenjualan) + '</b></div>' +
+      '<div class="sum-row"><span>Total Pengeluaran</span><b style="color:var(--red-dk)">−' + fmt(totalPengeluaran) + '</b></div>' +
+      '<div class="sum-total" style="color:' + (labaBersih>=0?'var(--green-dk)':'var(--red-dk)') + '"><span>Laba Bersih Shift</span><span>' + (labaBersih>=0?'+':'') + fmt(labaBersih) + '</span></div>' +
+    '</div>' +
+    '<div class="sum-box">' +
+      '<div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">🏦 Posisi Kas Tunai</div>' +
+      '<div class="sum-row"><span>Modal Awal</span><b>' + fmt(sh.modalAwal) + '</b></div>' +
+      '<div class="sum-row"><span>+ Penerimaan Tunai</span><b style="color:var(--green-dk)">+' + fmt(tunai) + '</b></div>' +
+      '<div class="sum-row" style="font-size:10px;color:var(--txt3);padding-left:8px"><span>Non tunai (QRIS+Transfer) tidak masuk kas</span></div>' +
+      '<div class="sum-total"><span>Ekspektasi Kas Tunai</span><span style="color:var(--accent)">' + fmt(ekspKas) + '</span></div>' +
     '</div>';
   $('kas-fisik').value=''; $('selisih-box').style.display='none'; $('tutup-ket').value='';
   $('tutup-modal').classList.add('open');
@@ -1722,7 +1856,7 @@ function renderWAPreview() {
   lines.push('──────────────────');
   lines.push('Subtotal: ' + fmt(t.subtotal));
   if (t.disc) lines.push('Diskon ' + t.disc + '%: −' + fmt(t.discAmt));
-  lines.push(CFG.pajakNm + ' ' + CFG.pajak + '%: ' + fmt(t.tax));
+  if (CFG.enablePajak && t.tax) lines.push(CFG.pajakNm + ' ' + CFG.pajak + '%: ' + fmt(t.tax));
   lines.push('*TOTAL: ' + fmt(t.total) + '*');
   lines.push('Bayar (' + (t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':'Transfer') + '): ' + fmt(t.cashRec));
   if (t.pay==='cash') lines.push('Kembalian: *' + fmt(t.change) + '*');
@@ -1758,10 +1892,14 @@ function renderSettings() {
   $('cfg-f1').value = CFG.f1;
   $('cfg-f2').value = CFG.f2;
   $('cfg-logo').value = CFG.logo;
+  const ep1 = $('cfg-enable-pajak-1'); const ep0 = $('cfg-enable-pajak-0');
+  if (ep1) ep1.checked = CFG.enablePajak ? true : false;
+  if (ep0) ep0.checked = CFG.enablePajak ? false : true;
   $('cfg-pajak').value = CFG.pajak;
   $('cfg-pajak-nm').value = CFG.pajakNm;
   $('cfg-discmax').value = CFG.discMax;
   $('cfg-show-pajak').value = CFG.showPajak;
+  togglePajakFields();
   $('cfg-paper').value = CFG.paper;
   $('cfg-printer-type').value = CFG.printerType;
   $('cfg-copies').value = CFG.copies;
@@ -1791,12 +1929,16 @@ function saveCfgToko() {
 }
 
 function saveCfgPajak() {
+  CFG.enablePajak = parseInt($('cfg-enable-pajak-1').checked ? 1 : 0);
   CFG.pajak = parseFloat($('cfg-pajak').value)||10;
   CFG.pajakNm = $('cfg-pajak-nm').value||'PPN';
   CFG.discMax = parseFloat($('cfg-discmax').value)||100;
   CFG.showPajak = parseInt($('cfg-show-pajak').value);
   saveCFG();
-  $('pajak-label').textContent = CFG.pajak;
+  updateTotals();
+  renderStrukPreview();
+  const taxRow = $('cart-tax-row');
+  if (taxRow) taxRow.style.display = CFG.enablePajak ? '' : 'none';
   showNotif('✅ Pengaturan pajak disimpan','#00B894');
 }
 
@@ -1808,6 +1950,15 @@ function saveCfgStruk() {
   });
   saveCFG(); renderStrukPreview();
   showNotif('✅ Tampilan struk disimpan','#00B894');
+}
+
+function togglePajakFields() {
+  const active = $('cfg-enable-pajak-1') && $('cfg-enable-pajak-1').checked;
+  const fields = $('pajak-detail-fields');
+  if (fields) fields.style.display = active ? 'block' : 'none';
+  const lblYes = $('lbl-pajak-yes'), lblNo = $('lbl-pajak-no');
+  if (lblYes) { lblYes.style.borderColor = active ? 'var(--green)' : 'var(--brd2)'; lblYes.style.background = active ? 'var(--green-bg)' : 'var(--bg)'; }
+  if (lblNo) { lblNo.style.borderColor = !active ? 'var(--red)' : 'var(--brd2)'; lblNo.style.background = !active ? 'var(--red-bg)' : 'var(--bg)'; }
 }
 
 function renderStrukPreview() {
@@ -1831,7 +1982,7 @@ function renderStrukPreview() {
   lines.push('--------------------------------');
   lines.push(pad('Subtotal',22)+pad('Rp 51.000',10));
   if (CFG.se.disc) lines.push(pad('Diskon 10%',22)+pad('-Rp 5.100',10));
-  if (CFG.showPajak) lines.push(pad(CFG.pajakNm+' '+CFG.pajak+'%',22)+pad('Rp 4.590',10));
+  if (CFG.enablePajak && CFG.showPajak) lines.push(pad(CFG.pajakNm+' '+CFG.pajak+'%',22)+pad('Rp 4.590',10));
   lines.push('================================');
   lines.push(pad('TOTAL',22)+pad('Rp 50.490',10));
   lines.push(pad('Bayar (Tunai)',22)+pad('Rp 55.000',10));
