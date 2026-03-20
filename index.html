@@ -1804,7 +1804,7 @@ function renderStokKatList() {
     if (canDel) {
       html += '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusStokKat(' + i + ')">🗑️</button>';
     } else {
-      html += '<button class="btn btn-sm" style="opacity:.4;cursor:not-allowed" onclick="showNotif('Masih digunakan ' + used + ' bahan','#E17055')">🗑️</button>';
+      html += '<button class="btn btn-sm" style="opacity:.4;cursor:not-allowed" onclick="showNotif(&quot;Masih digunakan ' + used + ' bahan&quot;,&quot;#E17055&quot;)">🗑️</button>';
     }
     html += '</div>';
   }
