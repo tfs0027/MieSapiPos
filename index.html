@@ -367,7 +367,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         </div>
         <div class="card">
           <div class="card-hd"><span class="card-title">Riwayat Shift</span></div>
-          <div class="tbl-wrap"><table><thead><tr><th>Shift</th><th>Kasir</th><th>Buka</th><th>Tutup</th><th>Penjualan</th><th>Pengeluaran</th><th>Laba Bersih</th><th>Selisih Kas</th><th>Aksi</th></tr></thead><tbody id="shift-hist"></tbody></table></div>
+          <div class="tbl-wrap"><table><thead><tr><th>Shift</th><th>Kasir</th><th>Buka</th><th>Tutup</th><th>Penjualan</th><th>Pengeluaran</th><th>Laba Bersih</th><th>Online</th><th>Selisih Kas</th><th>Aksi</th></tr></thead><tbody id="shift-hist"></tbody></table></div>
         </div>
       </div>
 
@@ -444,12 +444,33 @@ tr:hover td{background:rgba(108,92,231,.03)}
       </div>
 
       <div class="page" id="page-laporan">
+        <div class="card" style="margin-bottom:14px;padding:12px 16px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:600;color:var(--txt2)">📅 Filter Rentang:</span>
+            <div style="display:flex;gap:4px;flex-wrap:wrap" id="lap-preset-btns">
+              <button class="cat-btn active" onclick="setLapPreset('hari',this)">Hari Ini</button>
+              <button class="cat-btn" onclick="setLapPreset('minggu',this)">7 Hari</button>
+              <button class="cat-btn" onclick="setLapPreset('bulan',this)">30 Hari</button>
+              <button class="cat-btn" onclick="setLapPreset('semua',this)">Semua</button>
+              <button class="cat-btn" onclick="setLapPreset('custom',this)">Custom</button>
+            </div>
+            <div id="lap-custom-range" style="display:none;display:flex;gap:6px;align-items:center">
+              <input type="date" class="fi" id="lap-dari" style="width:140px;font-size:11px" onchange="renderLaporan()">
+              <span style="font-size:11px;color:var(--txt2)">s/d</span>
+              <input type="date" class="fi" id="lap-sampai" style="width:140px;font-size:11px" onchange="renderLaporan()">
+            </div>
+            <span id="lap-range-label" style="font-size:11px;color:var(--txt2);margin-left:4px"></span>
+          </div>
+        </div>
         <div class="g4" id="lap-kpi"></div>
         <div class="g2">
-          <div class="card"><div class="card-hd"><span class="card-title">Penjualan 7 Hari</span></div><div class="bar-chart" id="bar-chart"></div></div>
+          <div class="card"><div class="card-hd"><span class="card-title" id="bar-chart-title">Penjualan Harian</span></div><div class="bar-chart" id="bar-chart"></div></div>
           <div class="card"><div class="card-hd"><span class="card-title">Menu Terlaris</span></div><div id="top-menus"></div></div>
         </div>
-        <div class="card"><div class="card-hd"><span class="card-title">Ringkasan Kategori</span></div><div class="tbl-wrap"><table><thead><tr><th>Kategori</th><th>Item Terjual</th><th>Pendapatan</th><th>%</th></tr></thead><tbody id="cat-table"></tbody></table></div></div>
+        <div class="g2">
+          <div class="card"><div class="card-hd"><span class="card-title">Ringkasan Kategori</span></div><div class="tbl-wrap"><table><thead><tr><th>Kategori</th><th>Item Terjual</th><th>Pendapatan</th><th>%</th></tr></thead><tbody id="cat-table"></tbody></table></div></div>
+          <div class="card"><div class="card-hd"><span class="card-title">🌐 Penjualan Online per Shift</span></div><div id="online-summary-lap"></div></div>
+        </div>
       </div>
 
       <div class="page" id="page-riwayat">
@@ -653,6 +674,12 @@ tr:hover td{background:rgba(108,92,231,.03)}
     <div id="tutup-body"></div>
     <div class="form-group"><label class="form-lbl">Kas Fisik Dihitung (Rp)</label><input class="fi" type="number" id="kas-fisik" placeholder="0" oninput="hitungSelisih()"></div>
     <div id="selisih-box" style="display:none" class="selisih-box"></div>
+    <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">🌐 Penjualan Online / Platform Lain</div>
+      <div style="font-size:10px;color:var(--txt3);margin-bottom:10px">Catat penjualan dari platform lain (GoFood, GrabFood, ShopeeFood, dll.) yang tidak tercatat di kasir ini.</div>
+      <div id="online-platform-list"></div>
+      <button class="btn btn-sm" onclick="tambahPlatformOnline()" style="width:100%;margin-top:6px;font-size:11px">+ Tambah Platform</button>
+    </div>
     <div class="form-group"><label class="form-lbl">Catatan Penutupan</label><input class="fi" id="tutup-ket" placeholder="Opsional..."></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('tutup-modal')">Batal</button>
@@ -853,6 +880,7 @@ const ST = {
   activeCat: 'Semua', pengFilter: null,
   trxCounter: 3, shiftCounter: 2,
   pendingOrders: [], pendingCounter: 1,
+  lapPreset: 'hari', lapDari: null, lapSampai: null,
   stokLog: [
     {id:1,stokId:1,stokName:'Beras',tipe:'masuk',jumlah:10,satuan:'kg',sblm:35,sesudah:45,ket:'Restock dari supplier',ref:'',waktu:'08:00',tanggal:'19 Mar 2026',kasir:'Budi Santoso'},
     {id:2,stokId:2,stokName:'Minyak Goreng',tipe:'keluar',jumlah:2,satuan:'liter',sblm:10,sesudah:8,ket:'Pemakaian dapur',ref:'',waktu:'09:30',tanggal:'19 Mar 2026',kasir:'Siti Rahayu'},
@@ -1891,26 +1919,156 @@ function saveStok() {
 // ═══════════════════════════════
 // LAPORAN
 // ═══════════════════════════════
+
+// ═══════════════════════════════
+// LAPORAN FILTER
+// ═══════════════════════════════
+function getLapFilteredTrx() {
+  var now = new Date();
+  var dari, sampai;
+  if (ST.lapPreset === 'hari') {
+    dari = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    sampai = new Date(dari); sampai.setDate(sampai.getDate()+1);
+  } else if (ST.lapPreset === 'minggu') {
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-7);
+  } else if (ST.lapPreset === 'bulan') {
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-30);
+  } else if (ST.lapPreset === 'custom') {
+    var dEl = $('lap-dari'), sEl = $('lap-sampai');
+    dari = dEl && dEl.value ? new Date(dEl.value) : null;
+    sampai = sEl && sEl.value ? new Date(sEl.value+'T23:59:59') : null;
+  }
+  if (ST.lapPreset === 'semua' || (!dari && !sampai)) return ST.transactions;
+  return ST.transactions.filter(function(t) {
+    var d = parseTrxDate(t.date, t.time);
+    if (dari && d < dari) return false;
+    if (sampai && d > sampai) return false;
+    return true;
+  });
+}
+
+function parseTrxDate(dateStr, timeStr) {
+  var months = {Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,Jun:5,Jul:6,Agu:7,Sep:8,Okt:9,Nov:10,Des:11};
+  var parts = (dateStr||'').split(' ');
+  if (parts.length===3) {
+    var d = new Date(parseInt(parts[2]), months[parts[1]]||0, parseInt(parts[0]));
+    if (timeStr) { var tp=timeStr.split(':'); d.setHours(parseInt(tp[0])||0,parseInt(tp[1])||0); }
+    return d;
+  }
+  return new Date(dateStr);
+}
+
+function setLapPreset(preset, btn) {
+  ST.lapPreset = preset;
+  document.querySelectorAll('#lap-preset-btns .cat-btn').forEach(function(b){b.classList.remove('active');});
+  if (btn) btn.classList.add('active');
+  var customEl = $('lap-custom-range');
+  if (customEl) customEl.style.display = preset==='custom' ? 'flex' : 'none';
+  renderLaporan();
+}
+
+function getLapRangeLabel() {
+  var labels = {hari:'Hari ini', minggu:'7 hari terakhir', bulan:'30 hari terakhir', semua:'Semua data'};
+  if (ST.lapPreset !== 'custom') return labels[ST.lapPreset] || '';
+  var d = $('lap-dari'), s = $('lap-sampai');
+  if (d && s && d.value && s.value) return d.value + ' s/d ' + s.value;
+  return 'Rentang custom';
+}
+
+// ═══════════════════════════════
+// PENJUALAN ONLINE
+// ═══════════════════════════════
+var _onlinePlatforms = [];
+
+function tambahPlatformOnline() {
+  _onlinePlatforms.push({id: Date.now(), nama: 'GoFood', jumlah: 0});
+  renderOnlinePlatformList();
+}
+
+function hapusPlatformOnline(id) {
+  _onlinePlatforms = _onlinePlatforms.filter(function(p){ return p.id !== id; });
+  renderOnlinePlatformList();
+}
+
+function setOnlinePlatformNama(id, val) {
+  var p = _onlinePlatforms.find(function(x){return x.id===id;});
+  if (p) p.nama = val;
+}
+
+function setOnlinePlatformJumlah(id, val) {
+  var p = _onlinePlatforms.find(function(x){return x.id===id;});
+  if (p) p.jumlah = parseFloat(val)||0;
+}
+
+function renderOnlinePlatformList() {
+  var el = $('online-platform-list'); if (!el) return;
+  if (!_onlinePlatforms.length) {
+    el.innerHTML = '<div style="color:var(--txt3);font-size:11px;text-align:center;padding:8px 0">Belum ada platform. Klik tombol di bawah untuk menambahkan.</div>';
+    return;
+  }
+  var html = '';
+  var platforms = ['GoFood','GrabFood','ShopeeFood','TravelokaFood','Tokopedia','Shopee','WhatsApp Order','Lainnya'];
+  for (var i = 0; i < _onlinePlatforms.length; i++) {
+    var p = _onlinePlatforms[i];
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">';
+    html += '<select class="fi" style="flex:1;font-size:11px" onchange="setOnlinePlatformNama(' + p.id + ',this.value)">';
+    for (var j=0; j<platforms.length; j++) {
+      html += '<option value="' + platforms[j] + '"' + (p.nama===platforms[j]?' selected':'') + '>' + platforms[j] + '</option>';
+    }
+    html += '</select>';
+    html += '<input class="fi" type="number" placeholder="Rp 0" value="' + (p.jumlah||'') + '" style="width:120px;font-size:11px" onchange="setOnlinePlatformJumlah(' + p.id + ',this.value)">';
+    html += '<button class="btn btn-sm" style="color:var(--red-dk);flex-shrink:0" onclick="hapusPlatformOnline(' + p.id + ')">✕</button>';
+    html += '</div>';
+  }
+  var total = _onlinePlatforms.reduce(function(a,p){return a+(p.jumlah||0);},0);
+  if (_onlinePlatforms.length > 1) {
+    html += '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:6px 0;border-top:1px solid var(--brd);margin-top:4px"><span>Total Online</span><span style="color:var(--blue-dk)">' + fmt(total) + '</span></div>';
+  }
+  el.innerHTML = html;
+}
+
 function renderLaporan() {
-  const totalRev = ST.transactions.reduce((a,t)=>a+t.total,0);
-  const avgOrder = ST.transactions.length ? Math.round(totalRev/ST.transactions.length) : 0;
-  const totalItems = ST.transactions.reduce((a,t)=>a+t.items.reduce((b,i)=>b+i.qty,0),0);
+  var trxs = getLapFilteredTrx();
+  var totalRev = trxs.reduce(function(a,t){return a+t.total;},0);
+  const avgOrder = trxs.length ? Math.round(totalRev/trxs.length) : 0;
+  const totalItems = trxs.reduce((a,t)=>a+t.items.reduce((b,i)=>b+i.qty,0),0);
+  // Online sales from closed shifts in range
+  var onlineTotal = 0;
+  ST.shifts.filter(s=>s.status==='closed').forEach(function(s) {
+    if (s.onlinePlatforms) s.onlinePlatforms.forEach(function(p){ onlineTotal+=p.jumlah; });
+  });
   $('lap-kpi').innerHTML =
-    '<div class="metric"><div class="metric-lbl">Total Transaksi</div><div class="metric-val" style="color:var(--accent)">' + ST.transactions.length + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Total Pendapatan</div><div class="metric-val" style="color:var(--green)">' + fmt(totalRev) + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Rata-rata Order</div><div class="metric-val" style="color:var(--amber-dk)">' + fmt(avgOrder) + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Item Terjual</div><div class="metric-val">' + totalItems + '</div></div>';
-  const days=['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
-  const sales=[320000,415000,280000,520000,445000,680000,590000];
-  const maxS = Math.max(...sales);
-  $('bar-chart').innerHTML = days.map((d,i) =>
-    '<div class="bar-col">' +
-    '<div class="bar-val">' + (sales[i]/1000).toFixed(0) + 'k</div>' +
-    '<div class="bar-fill" style="height:' + Math.round((sales[i]/maxS)*110) + 'px"></div>' +
-    '<div class="bar-lbl">' + d + '</div></div>'
-  ).join('');
+    '<div class="metric"><div class="metric-lbl">Total Transaksi Kasir</div><div class="metric-val" style="color:var(--accent)">' + trxs.length + '</div></div>' +
+    '<div class="metric"><div class="metric-lbl">Penjualan Kasir</div><div class="metric-val" style="color:var(--green)">' + fmt(totalRev) + '</div></div>' +
+    '<div class="metric"><div class="metric-lbl">Penjualan Online</div><div class="metric-val" style="color:var(--blue-dk)">' + fmt(onlineTotal) + '</div></div>' +
+    '<div class="metric"><div class="metric-lbl">Total Gabungan</div><div class="metric-val" style="color:var(--accent)">' + fmt(totalRev+onlineTotal) + '</div></div>' +
+    '<div class="metric"><div class="metric-lbl">Rata-rata Order</div><div class="metric-val" style="color:var(--amber-dk)">' + fmt(avgOrder) + '</div></div>';
+  // Build daily chart from filtered transactions
+  var dayMap = {};
+  trxs.forEach(function(t) {
+    var d = t.date || 'Unknown';
+    dayMap[d] = (dayMap[d]||0) + t.total;
+  });
+  var dayEntries = Object.entries(dayMap).slice(-10);
+  var barTitle = $('bar-chart-title');
+  if (barTitle) barTitle.textContent = 'Penjualan ' + (dayEntries.length > 1 ? 'per Hari' : 'Hari Ini');
+  if (!dayEntries.length) {
+    $('bar-chart').innerHTML = '<div style="width:100%;text-align:center;color:var(--txt3);font-size:12px;padding:20px 0">Tidak ada data penjualan</div>';
+  } else {
+    var maxS = Math.max.apply(null, dayEntries.map(function(e){return e[1];}));
+    $('bar-chart').innerHTML = dayEntries.map(function(e) {
+      var parts = (e[0]||'').split(' ');
+      var lbl = parts.length>=2 ? parts[0]+' '+parts[1] : e[0];
+      return '<div class="bar-col">' +
+        '<div class="bar-val">' + (e[1]/1000).toFixed(0) + 'k</div>' +
+        '<div class="bar-fill" style="height:' + (maxS?Math.round((e[1]/maxS)*110):4) + 'px"></div>' +
+        '<div class="bar-lbl" style="font-size:8px">' + lbl + '</div></div>';
+    }).join('');
+  }
   const mc = {};
-  ST.transactions.forEach(t => t.items.forEach(i => { mc[i.name]=(mc[i.name]||0)+i.qty; }));
+  trxs.forEach(t => t.items.forEach(i => { mc[i.name]=(mc[i.name]||0)+i.qty; }));
   const sorted = Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const maxQ = sorted.length ? Math.max(...sorted.map(x=>x[1])) : 1;
   $('top-menus').innerHTML = sorted.map(([name,qty],i) =>
@@ -1921,7 +2079,7 @@ function renderLaporan() {
     '<span style="font-size:12px;font-weight:700;color:var(--accent)">' + qty + '</span></div>'
   ).join('');
   const catData = {};
-  ST.transactions.forEach(t => t.items.forEach(item => {
+  trxs.forEach(t => t.items.forEach(item => {
     const m = ST.menus.find(x=>x.name===item.name);
     const cat = m ? m.cat : 'Lainnya';
     if (!catData[cat]) catData[cat] = {qty:0,rev:0};
@@ -1931,6 +2089,33 @@ function renderLaporan() {
   $('cat-table').innerHTML = Object.entries(catData).sort((a,b)=>b[1].rev-a[1].rev).map(([cat,d]) =>
     '<tr><td>' + cat + '</td><td>' + d.qty + ' item</td><td style="font-weight:700">' + fmt(d.rev) + '</td><td>' + (totalRevAll?Math.round(d.rev/totalRevAll*100):0) + '%</td></tr>'
   ).join('');
+  // Online sales summary
+  var onlineEl = $('online-summary-lap');
+  if (onlineEl) {
+    var onlineShifts = ST.shifts.filter(function(s){ return s.status==='closed' && s.onlinePlatforms && s.onlinePlatforms.length; });
+    if (!onlineShifts.length) {
+      onlineEl.innerHTML = '<div style="text-align:center;color:var(--txt3);font-size:12px;padding:20px 0">Belum ada data penjualan online</div>';
+    } else {
+      var platMap = {};
+      onlineShifts.forEach(function(s) {
+        s.onlinePlatforms.forEach(function(p) {
+          if (!platMap[p.nama]) platMap[p.nama] = {total:0,count:0};
+          platMap[p.nama].total += p.jumlah;
+          platMap[p.nama].count++;
+        });
+      });
+      var grandOnline = Object.values(platMap).reduce(function(a,v){return a+v.total;},0);
+      onlineEl.innerHTML = Object.entries(platMap).sort(function(a,b){return b[1].total-a[1].total;}).map(function(e) {
+        var pct = grandOnline ? Math.round(e[1].total/grandOnline*100) : 0;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--brd)">' +
+          '<div><div style="font-size:12px;font-weight:600">' + e[0] + '</div>' +
+          '<div style="font-size:10px;color:var(--txt3)">' + e[1].count + ' shift</div></div>' +
+          '<div style="text-align:right"><div style="font-size:12px;font-weight:700;color:var(--blue-dk)">' + fmt(e[1].total) + '</div>' +
+          '<div style="font-size:10px;color:var(--txt3)">' + pct + '% online</div></div></div>';
+      }).join('') +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding-top:8px;margin-top:4px;border-top:1px solid var(--brd2)"><span>Total Online</span><span style="color:var(--blue-dk)">' + fmt(grandOnline) + '</span></div>';
+    }
+  }
 }
 
 // ═══════════════════════════════
@@ -2115,6 +2300,8 @@ function showTutupModal() {
       '<div class="sum-total"><span>Ekspektasi Kas Tunai</span><span style="color:var(--accent)">' + fmt(ekspKas) + '</span></div>' +
     '</div>';
   $('kas-fisik').value=''; $('selisih-box').style.display='none'; $('tutup-ket').value='';
+  _onlinePlatforms = [];
+  renderOnlinePlatformList();
   $('tutup-modal').classList.add('open');
 }
 
@@ -2141,11 +2328,14 @@ function prosesTutupKasir() {
   const transfer = sh.transaksi.filter(t=>t.pay==='transfer').reduce((a,t)=>a+t.total,0);
   const ekspKas = sh.modalAwal+tunai;
   const now = new Date();
+  var validOnline = _onlinePlatforms.filter(function(p){return p.jumlah>0;});
+  var totalOnline = validOnline.reduce(function(a,p){return a+p.jumlah;},0);
   const closed = {
     ...sh, waktuTutup:fmtTime(now), status:'closed',
     totalPenjualan, totalPengeluaran, labaBersih:totalPenjualan-totalPengeluaran,
     tunai, qris, transfer, ekspektasiKas:ekspKas, kasFisik:fisik,
     selisih:fisik-ekspKas, catatanTutup:$('tutup-ket').value,
+    onlinePlatforms: validOnline, totalOnline,
   };
   ST.shifts.unshift(closed); ST.currentShift = null;
   closeModal('tutup-modal'); updateShiftTopbar(); renderShiftPage();
@@ -2311,6 +2501,7 @@ function renderShiftHist() {
           '<td style="color:var(--red-dk);font-weight:700">−' + fmt(s.totalPengeluaran) + '</td>' +
           '<td style="font-weight:700;color:' + (s.labaBersih>=0?'var(--green-dk)':'var(--red-dk)') + '">' + (s.labaBersih>=0?'+':'') + fmt(s.labaBersih) + '</td>' +
           '<td><span class="badge ' + sc + '">' + st + '</span></td>' +
+          '<td style="color:var(--blue-dk);font-weight:600">' + (s.totalOnline ? fmt(s.totalOnline) : '—') + '</td>' +
           '<td><button class="btn btn-sm" onclick="lihatLaporanShift(\'' + s.id + '\')">Laporan</button></td></tr>';
       }).join('')
     : '<tr><td colspan="9" style="text-align:center;color:var(--txt3);padding:16px">Belum ada riwayat shift</td></tr>';
@@ -2361,6 +2552,14 @@ function lihatLaporanShift(id) {
   html += '<div class="r-r"><span>Kas Fisik Dihitung</span><span>' + fmt(sh.kasFisik) + '</span></div>';
   html += '<div style="background:' + (sh.selisih===0?'var(--green-bg)':sh.selisih>0?'var(--blue-bg)':'var(--red-bg)') + ';border-radius:6px;padding:5px 9px;margin-top:4px;display:flex;justify-content:space-between;font-weight:700;color:' + sc + '"><span>Selisih Kas</span><span>' + st + '</span></div>';
   if (sh.catatanTutup) html += '<hr class="r-d"><div class="r-r"><span>Ket. Tutup</span><span>' + sh.catatanTutup + '</span></div>';
+  if (sh.onlinePlatforms && sh.onlinePlatforms.length) {
+    html += '<hr class="r-d"><div class="r-c r-b">PENJUALAN ONLINE</div><hr class="r-d">';
+    sh.onlinePlatforms.forEach(function(p) {
+      html += '<div class="r-r"><span>' + p.nama + '</span><span>' + fmt(p.jumlah) + '</span></div>';
+    });
+    html += '<div class="r-r r-b" style="color:var(--blue-dk)"><span>Total Online</span><span>' + fmt(sh.totalOnline||0) + '</span></div>';
+    html += '<div class="r-r" style="color:var(--green-dk);font-weight:700"><span>Total Gabungan</span><span>' + fmt((sh.totalPenjualan||0)+(sh.totalOnline||0)) + '</span></div>';
+  }
   html += '<hr class="r-d"><div class="r-c" style="color:var(--txt2);font-size:9px">Laporan dicetak otomatis oleh sistem ' + CFG.nama + ' POS</div>';
   html += '</div>';
   $('shift-lap-body').innerHTML = html;
