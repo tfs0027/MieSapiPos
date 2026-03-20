@@ -1785,19 +1785,30 @@ function resetRiwayatFilter() {
 
 
 function renderStokKatList() {
-  const el=$('stok-kat-list');if(!el)return;
-  el.innerHTML=STOK_CATS.map((cat,i)=>{
-    const used=ST.stocks.filter(s=>s.cat===cat).length;
-    return '<div class="opt-group-row">' +
-      '<div id="sk-view-'+i+'" style="flex:1;display:flex;align-items:center;gap:8px"><span style="font-size:12px">'+cat+'</span>'+
-      '<span style="font-size:10px;color:var(--txt3)">('+used+' bahan)</span></div>' +
-      '<div id="sk-edit-'+i+'" style="flex:1;display:none"><input class="fi" id="sk-inp-'+i+'" value="'+cat+'" style="font-size:12px" onkeydown="if(event.key===\'Enter\')simpanStokKat('+i+')"></div>' +
-      '<button class="btn btn-sm" onclick="startEditStokKat('+i+')" id="sk-btn-edit-'+i+'">✏️</button>' +
-      '<button class="btn btn-sm" style="display:none" onclick="simpanStokKat('+i+')" id="sk-btn-save-'+i+'">✅</button>' +
-      '<button class="btn btn-sm" style="color:var(--red-dk)'+(used?';opacity:.4;cursor:not-allowed':'')+'"
-        onclick="'+(used?'showNotif(\'Kategori masih digunakan '+used+' bahan\',\'#E17055\')':'hapusStokKat('+i+')')+'">🗑️</button>' +
-      '</div>';
-  }).join('');
+  var el = $('stok-kat-list'); if (!el) return;
+  var html = '';
+  for (var i = 0; i < STOK_CATS.length; i++) {
+    var cat = STOK_CATS[i];
+    var used = ST.stocks.filter(function(s){ return s.cat===cat; }).length;
+    var canDel = used === 0;
+    html += '<div class="opt-group-row">';
+    html += '<div id="sk-view-' + i + '" style="flex:1;display:flex;align-items:center;gap:8px">';
+    html += '<span style="font-size:12px">' + cat + '</span>';
+    html += '<span style="font-size:10px;color:var(--txt3)">(' + used + ' bahan)</span>';
+    html += '</div>';
+    html += '<div id="sk-edit-' + i + '" style="flex:1;display:none">';
+    html += '<input class="fi" id="sk-inp-' + i + '" value="' + cat + '" style="font-size:12px">';
+    html += '</div>';
+    html += '<button class="btn btn-sm" id="sk-btn-edit-' + i + '" onclick="startEditStokKat(' + i + ')">✏️</button>';
+    html += '<button class="btn btn-sm" id="sk-btn-save-' + i + '" style="display:none" onclick="simpanStokKat(' + i + ')">✅</button>';
+    if (canDel) {
+      html += '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusStokKat(' + i + ')">🗑️</button>';
+    } else {
+      html += '<button class="btn btn-sm" style="opacity:.4;cursor:not-allowed" onclick="showNotif('Masih digunakan ' + used + ' bahan','#E17055')">🗑️</button>';
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html;
 }
 
 function startEditStokKat(i){
