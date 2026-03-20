@@ -366,7 +366,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
           <div id="stab-lr" style="display:none"><div id="lr-content"></div></div>
         </div>
         <div class="card">
-          <div class="card-hd"><span class="card-title">Riwayat Shift</span></div>
+          <div class="card-hd"><span class="card-title">Riwayat Shift</span><button class="btn btn-danger btn-sm" onclick="openManualPengModal()" style="font-size:11px">📝 Input Pengeluaran Manual</button></div>
           <div class="tbl-wrap"><table><thead><tr><th>Shift</th><th>Kasir</th><th>Buka</th><th>Tutup</th><th>Penjualan</th><th>Pengeluaran</th><th>Laba Bersih</th><th>Online</th><th>Selisih Kas</th><th>Aksi</th></tr></thead><tbody id="shift-hist"></tbody></table></div>
         </div>
       </div>
@@ -444,6 +444,13 @@ tr:hover td{background:rgba(108,92,231,.03)}
       </div>
 
       <div class="page" id="page-laporan">
+        <div style="display:flex;gap:4px;margin-bottom:12px">
+          <button class="shift-tab active" id="lap-sub-jual" onclick="switchLapTab('jual',this)">📊 Laporan Penjualan</button>
+          <button class="shift-tab" id="lap-sub-peng" onclick="switchLapTab('peng',this)">💸 Laporan Pengeluaran</button>
+        </div>
+
+        <!-- LAPORAN PENJUALAN -->
+        <div id="lap-panel-jual">
         <div class="card" style="margin-bottom:14px;padding:12px 16px">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span style="font-size:11px;font-weight:600;color:var(--txt2)">📅 Filter Rentang:</span>
@@ -462,7 +469,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
             <span id="lap-range-label" style="font-size:11px;color:var(--txt2);margin-left:4px"></span>
           </div>
         </div>
-        <div class="g4" id="lap-kpi"></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px" id="lap-kpi"></div>
         <div class="g2">
           <div class="card"><div class="card-hd"><span class="card-title" id="bar-chart-title">Penjualan Harian</span></div><div class="bar-chart" id="bar-chart"></div></div>
           <div class="card"><div class="card-hd"><span class="card-title">Menu Terlaris</span></div><div id="top-menus"></div></div>
@@ -471,19 +478,81 @@ tr:hover td{background:rgba(108,92,231,.03)}
           <div class="card"><div class="card-hd"><span class="card-title">Ringkasan Kategori</span></div><div class="tbl-wrap"><table><thead><tr><th>Kategori</th><th>Item Terjual</th><th>Pendapatan</th><th>%</th></tr></thead><tbody id="cat-table"></tbody></table></div></div>
           <div class="card"><div class="card-hd"><span class="card-title">🌐 Penjualan Online per Shift</span></div><div id="online-summary-lap"></div></div>
         </div>
+        </div><!-- end lap-panel-jual -->
+
+        <!-- LAPORAN PENGELUARAN -->
+        <div id="lap-panel-peng" style="display:none">
+        <div class="card" style="margin-bottom:14px;padding:12px 16px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:600;color:var(--txt2)">📅 Filter Rentang:</span>
+            <div style="display:flex;gap:4px;flex-wrap:wrap" id="peng-preset-btns">
+              <button class="cat-btn active" onclick="setPengPreset('hari',this)">Hari Ini</button>
+              <button class="cat-btn" onclick="setPengPreset('minggu',this)">7 Hari</button>
+              <button class="cat-btn" onclick="setPengPreset('bulan',this)">30 Hari</button>
+              <button class="cat-btn" onclick="setPengPreset('semua',this)">Semua</button>
+              <button class="cat-btn" onclick="setPengPreset('custom',this)">Custom</button>
+            </div>
+            <div id="peng-custom-range" style="display:none;gap:6px;align-items:center">
+              <input type="date" class="fi" id="peng-lap-dari" style="width:140px;font-size:11px" onchange="renderLaporanPengeluaran()">
+              <span style="font-size:11px;color:var(--txt2)">s/d</span>
+              <input type="date" class="fi" id="peng-lap-sampai" style="width:140px;font-size:11px" onchange="renderLaporanPengeluaran()">
+            </div>
+            <span id="peng-range-label" style="font-size:11px;color:var(--txt2);margin-left:4px"></span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px" id="peng-lap-kpi"></div>
+        <div class="g2">
+          <div class="card"><div class="card-hd"><span class="card-title" id="peng-bar-title">Pengeluaran Harian</span></div><div class="bar-chart" id="peng-bar-chart"></div></div>
+          <div class="card"><div class="card-hd"><span class="card-title">Pengeluaran Terbesar</span></div><div id="peng-top-list"></div></div>
+        </div>
+        <div class="g2">
+          <div class="card"><div class="card-hd"><span class="card-title">Per Kategori Pengeluaran</span></div><div class="tbl-wrap"><table><thead><tr><th>Kategori</th><th>Frekuensi</th><th>Total</th><th>%</th><th>Rata/Hari</th></tr></thead><tbody id="peng-cat-table"></tbody></table></div></div>
+          <div class="card"><div class="card-hd"><span class="card-title">Riwayat Pengeluaran</span><input class="fi" id="peng-lap-search" placeholder="Cari..." style="width:140px;font-size:11px" oninput="renderLaporanPengeluaran()"></div><div class="tbl-wrap"><table><thead><tr><th>Tanggal</th><th>Nama</th><th>Kategori</th><th>Nominal</th><th>Shift</th></tr></thead><tbody id="peng-riwayat-table"></tbody></table></div></div>
+        </div>
+        </div><!-- end lap-panel-peng -->
+
       </div>
 
       <div class="page" id="page-riwayat">
-        <div class="card">
-          <div class="card-hd"><span class="card-title">Riwayat Transaksi</span>
-            <div style="display:flex;gap:8px">
-              <input class="fi" placeholder="Cari..." id="srch-trx" style="width:150px" oninput="renderRiwayat()">
+        <div class="card" style="margin-bottom:12px;padding:12px 16px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+            <div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Cari</div>
+              <input class="fi" placeholder="No. transaksi, meja, kasir..." id="srch-trx" style="width:200px" oninput="renderRiwayat()">
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Metode Bayar</div>
               <select class="fi" id="flt-pay" style="width:130px" onchange="renderRiwayat()">
                 <option value="">Semua</option><option value="cash">Tunai</option><option value="qris">QRIS</option><option value="transfer">Transfer</option>
               </select>
             </div>
+            <div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Dari Tanggal</div>
+              <input type="date" class="fi" id="trx-dari" style="width:150px" onchange="renderRiwayat()">
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Sampai Tanggal</div>
+              <input type="date" class="fi" id="trx-sampai" style="width:150px" onchange="renderRiwayat()">
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Waktu Dari</div>
+              <input type="time" class="fi" id="trx-jam-dari" style="width:120px" onchange="renderRiwayat()">
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Waktu Sampai</div>
+              <input type="time" class="fi" id="trx-jam-sampai" style="width:120px" onchange="renderRiwayat()">
+            </div>
+            <button class="btn btn-sm" onclick="resetRiwayatTrxFilter()" style="align-self:flex-end">↺ Reset</button>
           </div>
-          <div class="tbl-wrap"><table><thead><tr><th>No.</th><th>Waktu</th><th>Meja</th><th>Total</th><th>Bayar</th><th>Kasir</th><th>Shift</th><th>Aksi</th></tr></thead><tbody id="riwayat-body"></tbody></table></div>
+          <div id="trx-filter-summary" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--brd);display:none">
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-title">Riwayat Transaksi</span>
+            <span id="trx-count-label" style="font-size:11px;color:var(--txt2)"></span>
+          </div>
+          <div class="tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><th>Waktu</th><th>Meja</th><th>Total</th><th>Bayar</th><th>Kasir</th><th>Shift</th><th>Aksi</th></tr></thead><tbody id="riwayat-body"></tbody></table></div>
         </div>
       </div>
 
@@ -796,6 +865,59 @@ tr:hover td{background:rgba(108,92,231,.03)}
   </div>
 </div>
 
+
+<div class="modal-wrap" id="manual-peng-modal">
+  <div class="modal">
+    <h3>📝 Input Pengeluaran Manual</h3>
+    <div class="modal-sub" id="manual-peng-sub">Tambah pengeluaran ke shift atau tanggal tertentu</div>
+    <div class="form-group">
+      <label class="form-lbl">Masukkan ke Shift</label>
+      <select class="fi" id="mpeng-shift-sel" style="font-size:12px"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Tanggal Pengeluaran</label>
+      <input type="date" class="fi" id="mpeng-tanggal">
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Waktu</label>
+      <input type="time" class="fi" id="mpeng-waktu" value="00:00">
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Nama Pengeluaran</label>
+      <input class="fi" id="mpeng-nama" placeholder="Beli bahan, bayar tagihan...">
+    </div>
+    <div class="frow">
+      <div class="form-group">
+        <label class="form-lbl">Nominal (Rp)</label>
+        <input class="fi" type="number" id="mpeng-nominal" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-lbl">Kategori</label>
+        <select class="fi" id="mpeng-kategori">
+          <option>Bahan Baku</option>
+          <option>Operasional</option>
+          <option>Utilitas</option>
+          <option>Gaji / Upah</option>
+          <option>Pemeliharaan</option>
+          <option>Lain-lain</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Keterangan</label>
+      <input class="fi" id="mpeng-ket" placeholder="Detail pengeluaran (opsional)">
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">No. Referensi / Nota</label>
+      <input class="fi" id="mpeng-ref" placeholder="Nomor nota, nama supplier...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('manual-peng-modal')">Batal</button>
+      <button class="btn btn-danger" onclick="simpanManualPengeluaran()">💾 Simpan Pengeluaran</button>
+    </div>
+  </div>
+</div>
+
 <div class="notif" id="notif"></div>
 
 <script>
@@ -881,6 +1003,7 @@ const ST = {
   trxCounter: 3, shiftCounter: 2,
   pendingOrders: [], pendingCounter: 1,
   lapPreset: 'hari', lapDari: null, lapSampai: null,
+  pengPreset: 'hari',
   stokLog: [
     {id:1,stokId:1,stokName:'Beras',tipe:'masuk',jumlah:10,satuan:'kg',sblm:35,sesudah:45,ket:'Restock dari supplier',ref:'',waktu:'08:00',tanggal:'19 Mar 2026',kasir:'Budi Santoso'},
     {id:2,stokId:2,stokName:'Minyak Goreng',tipe:'keluar',jumlah:2,satuan:'liter',sblm:10,sesudah:8,ket:'Pemakaian dapur',ref:'',waktu:'09:30',tanggal:'19 Mar 2026',kasir:'Siti Rahayu'},
@@ -1969,6 +2092,29 @@ function setLapPreset(preset, btn) {
   renderLaporan();
 }
 
+function getLapDayCount() {
+  // Returns number of days in current filter range (min 1)
+  var now = new Date();
+  if (ST.lapPreset === 'hari') return 1;
+  if (ST.lapPreset === 'minggu') return 7;
+  if (ST.lapPreset === 'bulan') return 30;
+  if (ST.lapPreset === 'semua') {
+    if (!ST.transactions.length) return 1;
+    var dates = ST.transactions.map(function(t){ return parseTrxDate(t.date, t.time); });
+    var minD = new Date(Math.min.apply(null, dates));
+    var diff = Math.ceil((now - minD) / 86400000);
+    return Math.max(1, diff);
+  }
+  if (ST.lapPreset === 'custom') {
+    var dEl = $('lap-dari'), sEl = $('lap-sampai');
+    if (dEl && sEl && dEl.value && sEl.value) {
+      var diff = Math.ceil((new Date(sEl.value) - new Date(dEl.value)) / 86400000) + 1;
+      return Math.max(1, diff);
+    }
+  }
+  return 1;
+}
+
 function getLapRangeLabel() {
   var labels = {hari:'Hari ini', minggu:'7 hari terakhir', bulan:'30 hari terakhir', semua:'Semua data'};
   if (ST.lapPreset !== 'custom') return labels[ST.lapPreset] || '';
@@ -2029,22 +2175,277 @@ function renderOnlinePlatformList() {
   el.innerHTML = html;
 }
 
+
+// ═══════════════════════════════
+// LAPORAN PENGELUARAN
+// ═══════════════════════════════
+function switchLapTab(tab, btn) {
+  document.querySelectorAll('[id^="lap-sub-"]').forEach(function(b){b.classList.remove('active');});
+  if (btn) btn.classList.add('active');
+  var panels = ['jual','peng'];
+  panels.forEach(function(p) {
+    var el = $('lap-panel-'+p); if(el) el.style.display = p===tab?'block':'none';
+  });
+  if (tab === 'peng') renderLaporanPengeluaran();
+}
+
+function getAllPengeluaran() {
+  // Flatten all pengeluaran from all closed shifts, add tanggal from shift
+  var all = [];
+  ST.shifts.forEach(function(sh) {
+    if (!sh.pengeluaran) return;
+    sh.pengeluaran.forEach(function(p) {
+      all.push({
+        id: p.id, nama: p.nama, nominal: p.nominal,
+        kategori: p.kategori, ket: p.ket||'', ref: p.ref||'',
+        waktu: p.waktu, tanggal: sh.tanggal||'',
+        shiftId: sh.id, kasir: sh.kasir,
+      });
+    });
+  });
+  // Also include current open shift
+  if (ST.currentShift && ST.currentShift.pengeluaran) {
+    ST.currentShift.pengeluaran.forEach(function(p) {
+      all.push({
+        id: p.id, nama: p.nama, nominal: p.nominal,
+        kategori: p.kategori, ket: p.ket||'', ref: p.ref||'',
+        waktu: p.waktu, tanggal: ST.currentShift.tanggal||fmtDate(new Date()),
+        shiftId: ST.currentShift.id, kasir: ST.currentShift.kasir,
+      });
+    });
+  }
+  return all;
+}
+
+function getPengFilteredData() {
+  var all = getAllPengeluaran();
+  var now = new Date();
+  var dari, sampai;
+  if (ST.pengPreset === 'hari') {
+    dari = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    sampai = new Date(dari); sampai.setDate(sampai.getDate()+1);
+  } else if (ST.pengPreset === 'minggu') {
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-7);
+  } else if (ST.pengPreset === 'bulan') {
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-30);
+  } else if (ST.pengPreset === 'custom') {
+    var dEl = $('peng-lap-dari'), sEl = $('peng-lap-sampai');
+    dari = dEl && dEl.value ? new Date(dEl.value) : null;
+    sampai = sEl && sEl.value ? new Date(sEl.value+'T23:59:59') : null;
+  }
+  if (ST.pengPreset === 'semua' || (!dari && !sampai)) return all;
+  return all.filter(function(p) {
+    var d = parseTrxDate(p.tanggal, p.waktu);
+    if (dari && d < dari) return false;
+    if (sampai && d > sampai) return false;
+    return true;
+  });
+}
+
+function getPengDayCount() {
+  var now = new Date();
+  if (ST.pengPreset === 'hari') return 1;
+  if (ST.pengPreset === 'minggu') return 7;
+  if (ST.pengPreset === 'bulan') return 30;
+  if (ST.pengPreset === 'semua') {
+    var all = getAllPengeluaran();
+    if (!all.length) return 1;
+    var dates = all.map(function(p){ return parseTrxDate(p.tanggal, p.waktu); });
+    var minD = new Date(Math.min.apply(null, dates));
+    return Math.max(1, Math.ceil((now - minD) / 86400000));
+  }
+  if (ST.pengPreset === 'custom') {
+    var dEl = $('peng-lap-dari'), sEl = $('peng-lap-sampai');
+    if (dEl && sEl && dEl.value && sEl.value) {
+      return Math.max(1, Math.ceil((new Date(sEl.value) - new Date(dEl.value)) / 86400000) + 1);
+    }
+  }
+  return 1;
+}
+
+function setPengPreset(preset, btn) {
+  ST.pengPreset = preset;
+  document.querySelectorAll('#peng-preset-btns .cat-btn').forEach(function(b){b.classList.remove('active');});
+  if (btn) btn.classList.add('active');
+  var customEl = $('peng-custom-range');
+  if (customEl) customEl.style.display = preset==='custom' ? 'flex' : 'none';
+  renderLaporanPengeluaran();
+}
+
+function renderLaporanPengeluaran() {
+  var data = getPengFilteredData();
+  var nDays = getPengDayCount();
+  var search = ($('peng-lap-search')||{value:''}).value.toLowerCase();
+
+  // KPI
+  var total = data.reduce(function(a,p){return a+p.nominal;},0);
+  var avgPerItem = data.length ? Math.round(total/data.length) : 0;
+  var avgPerHari = nDays ? Math.round(total/nDays) : 0;
+  var dayLabel = nDays===1 ? '1 hari' : nDays+' hari';
+  var catCount = new Set(data.map(function(p){return p.kategori;})).size;
+
+  var kpiEl = $('peng-lap-kpi');
+  if (kpiEl) kpiEl.innerHTML =
+    '<div class="metric"><div class="metric-lbl">Total Pengeluaran</div>' +
+    '<div class="metric-val" style="color:var(--red)">' + fmt(total) + '</div>' +
+    '<div class="metric-sub">' + data.length + ' item</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Rata-rata / Hari</div>' +
+    '<div class="metric-val" style="color:var(--amber-dk)">' + fmt(avgPerHari) + '</div>' +
+    '<div class="metric-sub">dalam ' + dayLabel + '</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Rata-rata / Item</div>' +
+    '<div class="metric-val" style="color:var(--amber-dk)">' + fmt(avgPerItem) + '</div>' +
+    '<div class="metric-sub">per pengeluaran</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Kategori Aktif</div>' +
+    '<div class="metric-val" style="color:var(--accent)">' + catCount + '</div>' +
+    '<div class="metric-sub">dari ' + Object.keys(CAT_COLORS).length + ' kategori</div></div>';
+
+  // Bar chart per hari
+  var dayMap = {};
+  data.forEach(function(p) {
+    var d = p.tanggal || 'Unknown';
+    dayMap[d] = (dayMap[d]||0) + p.nominal;
+  });
+  var dayEntries = Object.entries(dayMap).slice(-10);
+  var barTitle = $('peng-bar-title');
+  if (barTitle) barTitle.textContent = 'Pengeluaran ' + (dayEntries.length>1?'per Hari':'Hari Ini');
+  var barEl = $('peng-bar-chart');
+  if (barEl) {
+    if (!dayEntries.length) {
+      barEl.innerHTML = '<div style="width:100%;text-align:center;color:var(--txt3);font-size:12px;padding:20px 0">Tidak ada data</div>';
+    } else {
+      var maxV = Math.max.apply(null, dayEntries.map(function(e){return e[1];}));
+      barEl.innerHTML = dayEntries.map(function(e) {
+        var parts = (e[0]||'').split(' ');
+        var lbl = parts.length>=2 ? parts[0]+' '+parts[1] : e[0];
+        return '<div class="bar-col">' +
+          '<div class="bar-val">' + (e[1]/1000).toFixed(0) + 'k</div>' +
+          '<div class="bar-fill" style="height:' + (maxV?Math.round((e[1]/maxV)*110):4) + 'px;background:var(--red)"></div>' +
+          '<div class="bar-lbl" style="font-size:8px">' + lbl + '</div></div>';
+      }).join('');
+    }
+  }
+
+  // Top pengeluaran
+  var topEl = $('peng-top-list');
+  if (topEl) {
+    var sorted = data.slice().sort(function(a,b){return b.nominal-a.nominal;}).slice(0,5);
+    var maxNom = sorted.length ? sorted[0].nominal : 1;
+    topEl.innerHTML = sorted.length ? sorted.map(function(p,i) {
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--brd)">' +
+        '<span style="font-size:12px;font-weight:700;min-width:16px;color:' + (i===0?'var(--red-dk)':'var(--txt2)') + '">#' + (i+1) + '</span>' +
+        '<div style="flex:1"><div style="font-size:12px;font-weight:600">' + p.nama + '</div>' +
+        '<div style="font-size:10px;color:var(--txt3)">' + p.kategori + ' · ' + p.tanggal + '</div>' +
+        '<div style="height:4px;background:var(--bg);border-radius:2px;margin-top:3px"><div style="height:100%;width:' + Math.round(p.nominal/maxNom*100) + '%;background:var(--red);border-radius:2px"></div></div></div>' +
+        '<span style="font-size:12px;font-weight:700;color:var(--red-dk)">' + fmt(p.nominal) + '</span></div>';
+    }).join('') : '<div style="color:var(--txt3);font-size:12px;text-align:center;padding:20px 0">Tidak ada data</div>';
+  }
+
+  // Per kategori table
+  var catMap = {};
+  data.forEach(function(p) {
+    if (!catMap[p.kategori]) catMap[p.kategori] = {total:0,count:0};
+    catMap[p.kategori].total += p.nominal;
+    catMap[p.kategori].count++;
+  });
+  var grandTotal = data.reduce(function(a,p){return a+p.nominal;},0);
+  var catEl = $('peng-cat-table');
+  if (catEl) {
+    catEl.innerHTML = Object.entries(catMap).sort(function(a,b){return b[1].total-a[1].total;}).map(function(e) {
+      var pct = grandTotal ? Math.round(e[1].total/grandTotal*100) : 0;
+      var avgDay = nDays ? Math.round(e[1].total/nDays) : 0;
+      var dotColor = CAT_COLORS[e[0]] || '#888';
+      return '<tr>' +
+        '<td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';display:inline-block;flex-shrink:0"></span>' + e[0] + '</span></td>' +
+        '<td>' + e[1].count + '×</td>' +
+        '<td style="font-weight:700;color:var(--red-dk)">' + fmt(e[1].total) + '</td>' +
+        '<td>' + pct + '%</td>' +
+        '<td style="color:var(--txt2)">' + fmt(avgDay) + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--txt3);padding:16px">Tidak ada data</td></tr>';
+  }
+
+  // Riwayat detail table with search
+  var filtered = data.filter(function(p) {
+    if (!search) return true;
+    return (p.nama+p.kategori+p.ket+p.shiftId).toLowerCase().includes(search);
+  });
+  var riwEl = $('peng-riwayat-table');
+  if (riwEl) {
+    riwEl.innerHTML = filtered.length ? filtered.map(function(p) {
+      var dotColor = CAT_COLORS[p.kategori] || '#888';
+      return '<tr>' +
+        '<td style="font-size:10px;color:var(--txt2)">' + p.tanggal + '<br>' + p.waktu + '</td>' +
+        '<td><b>' + p.nama + '</b>' + (p.ket?'<br><span style="font-size:10px;color:var(--txt3)">'+p.ket+'</span>':'') + '</td>' +
+        '<td><span style="display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;background:' + dotColor + '22;color:' + dotColor + '">' + p.kategori + '</span></td>' +
+        '<td style="font-weight:700;color:var(--red-dk)">' + fmt(p.nominal) + '</td>' +
+        '<td style="font-size:10px;color:var(--txt3)">' + p.shiftId + '</td></tr>';
+    }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--txt3);padding:16px">Tidak ada data</td></tr>';
+  }
+
+  // Update range label
+  var lbl = $('peng-range-label');
+  var labels = {hari:'(Hari ini)', minggu:'(7 hari terakhir)', bulan:'(30 hari terakhir)', semua:'(Semua data)'};
+  if (lbl) lbl.textContent = labels[ST.pengPreset] || '';
+}
+
 function renderLaporan() {
   var trxs = getLapFilteredTrx();
   var totalRev = trxs.reduce(function(a,t){return a+t.total;},0);
-  const avgOrder = trxs.length ? Math.round(totalRev/trxs.length) : 0;
   const totalItems = trxs.reduce((a,t)=>a+t.items.reduce((b,i)=>b+i.qty,0),0);
   // Online sales from closed shifts in range
   var onlineTotal = 0;
   ST.shifts.filter(s=>s.status==='closed').forEach(function(s) {
     if (s.onlinePlatforms) s.onlinePlatforms.forEach(function(p){ onlineTotal+=p.jumlah; });
   });
+  var nDays = getLapDayCount();
+  var nTrx = trxs.length;
+  // Rata-rata per transaksi
+  var avgPerTrx = nTrx ? Math.round(totalRev / nTrx) : 0;
+  // Rata-rata kasir per hari
+  var avgKasirPerHari = nDays ? Math.round(totalRev / nDays) : 0;
+  // Rata-rata transaksi per hari
+  var avgTrxPerHari = nDays ? (nTrx / nDays).toFixed(1) : 0;
+  // Rata-rata online per hari
+  var avgOnlinePerHari = nDays ? Math.round(onlineTotal / nDays) : 0;
+  var grandTotal = totalRev + onlineTotal;
+  var avgGrandPerHari = nDays ? Math.round(grandTotal / nDays) : 0;
+  var dayLabel = nDays === 1 ? '1 hari' : nDays + ' hari';
   $('lap-kpi').innerHTML =
-    '<div class="metric"><div class="metric-lbl">Total Transaksi Kasir</div><div class="metric-val" style="color:var(--accent)">' + trxs.length + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Penjualan Kasir</div><div class="metric-val" style="color:var(--green)">' + fmt(totalRev) + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Penjualan Online</div><div class="metric-val" style="color:var(--blue-dk)">' + fmt(onlineTotal) + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Total Gabungan</div><div class="metric-val" style="color:var(--accent)">' + fmt(totalRev+onlineTotal) + '</div></div>' +
-    '<div class="metric"><div class="metric-lbl">Rata-rata Order</div><div class="metric-val" style="color:var(--amber-dk)">' + fmt(avgOrder) + '</div></div>';
+    '<div class="metric"><div class="metric-lbl">Transaksi Kasir</div>' +
+    '<div class="metric-val" style="color:var(--accent)">' + nTrx + '</div>' +
+    '<div class="metric-sub">~' + avgTrxPerHari + ' trx/hari (' + dayLabel + ')</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Penjualan Kasir</div>' +
+    '<div class="metric-val" style="color:var(--green)">' + fmt(totalRev) + '</div>' +
+    '<div class="metric-sub">' + fmt(avgKasirPerHari) + '/hari</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Penjualan Online</div>' +
+    '<div class="metric-val" style="color:var(--blue-dk)">' + fmt(onlineTotal) + '</div>' +
+    '<div class="metric-sub">' + fmt(avgOnlinePerHari) + '/hari</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Total Gabungan</div>' +
+    '<div class="metric-val" style="color:var(--accent)">' + fmt(grandTotal) + '</div>' +
+    '<div class="metric-sub">' + fmt(avgGrandPerHari) + '/hari</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Rata-rata / Transaksi</div>' +
+    '<div class="metric-val" style="color:var(--amber-dk)">' + fmt(avgPerTrx) + '</div>' +
+    '<div class="metric-sub">per 1 transaksi kasir</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Rata-rata Kasir / Hari</div>' +
+    '<div class="metric-val" style="color:var(--amber-dk)">' + fmt(avgKasirPerHari) + '</div>' +
+    '<div class="metric-sub">dalam ' + dayLabel + '</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Rata-rata Online / Hari</div>' +
+    '<div class="metric-val" style="color:var(--blue-dk)">' + fmt(avgOnlinePerHari) + '</div>' +
+    '<div class="metric-sub">' + dayLabel + ' · total ' + fmt(onlineTotal) + '</div></div>' +
+
+    '<div class="metric"><div class="metric-lbl">Rata-rata Gabungan / Hari</div>' +
+    '<div class="metric-val" style="color:var(--accent)">' + fmt(avgGrandPerHari) + '</div>' +
+    '<div class="metric-sub">kasir + online / ' + dayLabel + '</div></div>';
   // Build daily chart from filtered transactions
   var dayMap = {};
   trxs.forEach(function(t) {
@@ -2121,27 +2522,91 @@ function renderLaporan() {
 // ═══════════════════════════════
 // RIWAYAT
 // ═══════════════════════════════
-function renderRiwayat() {
-  const search = ($('srch-trx').value||'').toLowerCase();
-  const payFilter = $('flt-pay').value;
-  const trxs = ST.transactions.filter(t => {
-    const ms = !search || (t.id.toLowerCase().includes(search)||t.table.toLowerCase().includes(search)||t.kasir.toLowerCase().includes(search));
-    return ms && (!payFilter||t.pay===payFilter);
+function resetRiwayatTrxFilter() {
+  ['srch-trx','trx-dari','trx-sampai','trx-jam-dari','trx-jam-sampai'].forEach(function(id){
+    var el = $(id); if(el) el.value = '';
   });
-  $('riwayat-body').innerHTML = trxs.map(t =>
-    '<tr>' +
+  var fp = $('flt-pay'); if(fp) fp.value = '';
+  renderRiwayat();
+}
+
+function renderRiwayat() {
+  var search = ($('srch-trx').value||'').toLowerCase();
+  var payFilter = ($('flt-pay').value||'');
+  var dari = ($('trx-dari').value||'');
+  var sampai = ($('trx-sampai').value||'');
+  var jamDari = ($('trx-jam-dari').value||'');
+  var jamSampai = ($('trx-jam-sampai').value||'');
+
+  var trxs = ST.transactions.filter(function(t) {
+    // search filter
+    if (search && !(
+      t.id.toLowerCase().includes(search) ||
+      (t.table||'').toLowerCase().includes(search) ||
+      (t.kasir||'').toLowerCase().includes(search) ||
+      (t.shiftId||'').toLowerCase().includes(search)
+    )) return false;
+    // pay method filter
+    if (payFilter && t.pay !== payFilter) return false;
+    // date filter
+    if (dari || sampai) {
+      var td = parseTrxDate(t.date, t.time);
+      if (dari) { var dFrom = new Date(dari); if (td < dFrom) return false; }
+      if (sampai) { var dTo = new Date(sampai+'T23:59:59'); if (td > dTo) return false; }
+    }
+    // time filter (within day — compare HH:MM string)
+    if (jamDari && t.time && t.time < jamDari) return false;
+    if (jamSampai && t.time && t.time > jamSampai) return false;
+    return true;
+  });
+
+  // Summary bar
+  var sumEl = $('trx-filter-summary');
+  var hasFilter = search||payFilter||dari||sampai||jamDari||jamSampai;
+  if (sumEl) {
+    if (hasFilter && trxs.length) {
+      var sumTotal = trxs.reduce(function(a,t){return a+t.total;},0);
+      var sumTunai = trxs.filter(function(t){return t.pay==='cash';}).reduce(function(a,t){return a+t.total;},0);
+      var sumQris = trxs.filter(function(t){return t.pay==='qris';}).reduce(function(a,t){return a+t.total;},0);
+      var sumTransfer = trxs.filter(function(t){return t.pay==='transfer';}).reduce(function(a,t){return a+t.total;},0);
+      sumEl.style.display = 'block';
+      sumEl.innerHTML =
+        '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">' +
+        '<span style="font-size:11px;font-weight:700">' + trxs.length + ' transaksi ditemukan</span>' +
+        '<span style="font-size:11px;color:var(--txt2)">|</span>' +
+        '<span style="font-size:11px">Total: <b style="color:var(--accent)">' + fmt(sumTotal) + '</b></span>' +
+        (sumTunai ? '<span class="badge b-green">💵 ' + fmt(sumTunai) + '</span>' : '') +
+        (sumQris ? '<span class="badge b-blue">📱 ' + fmt(sumQris) + '</span>' : '') +
+        (sumTransfer ? '<span class="badge b-amber">🏦 ' + fmt(sumTransfer) + '</span>' : '') +
+        '</div>';
+    } else {
+      sumEl.style.display = 'none';
+    }
+  }
+
+  // Count label
+  var lbl = $('trx-count-label');
+  if (lbl) lbl.textContent = hasFilter
+    ? trxs.length + ' dari ' + ST.transactions.length + ' transaksi'
+    : ST.transactions.length + ' transaksi';
+
+  $('riwayat-body').innerHTML = trxs.length ? trxs.map(function(t) {
+    return '<tr>' +
     '<td style="font-weight:700;color:var(--accent)">' + t.id + '</td>' +
-    '<td>' + t.time + '</td><td>' + t.table + '</td>' +
+    '<td style="font-size:11px;color:var(--txt2)">' + (t.date||'—') + '</td>' +
+    '<td>' + (t.time||'—') + '</td>' +
+    '<td>' + t.table + '</td>' +
     '<td style="font-weight:700">' + fmt(t.total) + '</td>' +
-    '<td><span class="badge ' + (t.pay==='cash'?'b-green':t.pay==='qris'?'b-blue':'b-amber') + '">' + (t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':'Transfer') + '</span></td>' +
+    '<td><span class="badge ' + (t.pay==='cash'?'b-green':t.pay==='qris'?'b-blue':'b-amber') + '">' +
+    (t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':'Transfer') + '</span></td>' +
     '<td>' + t.kasir + '</td>' +
     '<td><span class="badge b-gray" style="font-size:9px">' + (t.shiftId||'—') + '</span></td>' +
     '<td style="display:flex;gap:4px">' +
     '<button class="btn btn-sm" onclick="viewReceipt(\'' + t.id + '\')">Struk</button>' +
     '<button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;font-size:10px" onclick="openWAModal(\'' + t.id + '\')">WA</button>' +
     (can('void_trx') ? '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="showNotif(\'Void '+t.id+' diproses\',\'#E17055\')">Void</button>' : '') +
-    '</td></tr>'
-  ).join('');
+    '</td></tr>';
+  }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--txt3);padding:20px">Tidak ada transaksi yang sesuai filter</td></tr>';
 }
 
 // ═══════════════════════════════
@@ -2379,6 +2844,112 @@ function shiftTab(tab, btn) {
   if (tab==='lr') renderLabaRugi();
 }
 
+
+// ═══════════════════════════════
+// MANUAL PENGELUARAN (ADMIN)
+// ═══════════════════════════════
+function openManualPengModal(shiftId) {
+  // Populate shift selector
+  var sel = $('mpeng-shift-sel');
+  if (!sel) return;
+  var allShifts = ST.shifts.slice();
+  if (ST.currentShift) allShifts.unshift(ST.currentShift);
+  sel.innerHTML = allShifts.map(function(s) {
+    var label = s.id + ' · ' + (s.kasir||'') + ' · ' + (s.tanggal||'') +
+      (s.status==='open' ? ' [AKTIF]' : '');
+    return '<option value="' + s.id + '"' + (s.id===shiftId?' selected':'') + '>' + label + '</option>';
+  }).join('');
+  if (!allShifts.length) {
+    sel.innerHTML = '<option value="">Tidak ada shift tersedia</option>';
+  }
+
+  // Default tanggal = today, waktu = now
+  var now = new Date();
+  var pad = function(n){return String(n).padStart(2,'0');};
+  $('mpeng-tanggal').value = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate());
+  $('mpeng-waktu').value = pad(now.getHours()) + ':' + pad(now.getMinutes());
+
+  // If specific shift selected, auto-set date from shift
+  if (shiftId) {
+    var sh = allShifts.find(function(s){return s.id===shiftId;});
+    if (sh && sh.tanggal) {
+      var months = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',Mei:'05',Jun:'06',Jul:'07',Agu:'08',Sep:'09',Okt:'10',Nov:'11',Des:'12'};
+      var parts = sh.tanggal.split(' ');
+      if (parts.length===3) {
+        $('mpeng-tanggal').value = parts[2] + '-' + (months[parts[1]]||'01') + '-' + parts[0].padStart(2,'0');
+      }
+    }
+  }
+
+  // Clear fields
+  ['mpeng-nama','mpeng-nominal','mpeng-ket','mpeng-ref'].forEach(function(id){
+    var el=$(id); if(el) el.value='';
+  });
+
+  $('manual-peng-sub').textContent = shiftId
+    ? 'Tambah pengeluaran ke shift ' + shiftId
+    : 'Pilih shift dan isi detail pengeluaran';
+
+  $('manual-peng-modal').classList.add('open');
+}
+
+function simpanManualPengeluaran() {
+  var shiftSel = $('mpeng-shift-sel');
+  var shiftId = shiftSel ? shiftSel.value : '';
+  var nama = ($('mpeng-nama').value||'').trim();
+  var nominal = parseFloat($('mpeng-nominal').value)||0;
+  var tanggal = $('mpeng-tanggal').value;
+  var waktuVal = $('mpeng-waktu').value || '00:00';
+
+  if (!shiftId) { showNotif('Pilih shift terlebih dahulu','#E17055'); return; }
+  if (!nama) { showNotif('Nama pengeluaran wajib diisi','#E17055'); return; }
+  if (!nominal || nominal <= 0) { showNotif('Nominal harus lebih dari 0','#E17055'); return; }
+
+  // Find the shift
+  var sh = null;
+  if (ST.currentShift && ST.currentShift.id === shiftId) {
+    sh = ST.currentShift;
+  } else {
+    sh = ST.shifts.find(function(s){return s.id===shiftId;});
+  }
+  if (!sh) { showNotif('Shift tidak ditemukan','#E17055'); return; }
+
+  // Format tanggal to display format
+  var tglDisplay = tanggal;
+  if (tanggal) {
+    var parts = tanggal.split('-');
+    var monthNames = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    tglDisplay = parseInt(parts[2]) + ' ' + (monthNames[parseInt(parts[1])-1]||'') + ' ' + parts[0];
+  }
+
+  var entry = {
+    id: Date.now(),
+    nama: nama,
+    nominal: nominal,
+    kategori: ($('mpeng-kategori').value||'Operasional'),
+    ket: ($('mpeng-ket').value||'').trim(),
+    ref: ($('mpeng-ref').value||'').trim(),
+    waktu: waktuVal,
+    tanggalInput: tglDisplay,
+    inputManual: true,
+    inputBy: ST.cu ? ST.cu.name : 'Admin',
+  };
+
+  if (!sh.pengeluaran) sh.pengeluaran = [];
+  sh.pengeluaran.push(entry);
+
+  // Update shift totals if closed
+  if (sh.status === 'closed') {
+    sh.totalPengeluaran = sh.pengeluaran.reduce(function(a,p){return a+p.nominal;},0);
+    sh.labaBersih = (sh.totalPenjualan||0) - sh.totalPengeluaran;
+  }
+
+  closeModal('manual-peng-modal');
+  renderShiftPage();
+  renderLaporanPengeluaran();
+  showNotif('✅ Pengeluaran manual ditambahkan ke ' + shiftId, '#E17055');
+}
+
 function tambahPengeluaran() {
   const nama = $('pn').value.trim(), nominal = parseFloat($('pa').value)||0;
   if (!nama||!nominal) { showNotif('Nama & nominal wajib diisi','#E17055'); return; }
@@ -2502,7 +3073,10 @@ function renderShiftHist() {
           '<td style="font-weight:700;color:' + (s.labaBersih>=0?'var(--green-dk)':'var(--red-dk)') + '">' + (s.labaBersih>=0?'+':'') + fmt(s.labaBersih) + '</td>' +
           '<td><span class="badge ' + sc + '">' + st + '</span></td>' +
           '<td style="color:var(--blue-dk);font-weight:600">' + (s.totalOnline ? fmt(s.totalOnline) : '—') + '</td>' +
-          '<td><button class="btn btn-sm" onclick="lihatLaporanShift(\'' + s.id + '\')">Laporan</button></td></tr>';
+          '<td style="display:flex;gap:4px">' +
+          '<button class="btn btn-sm" onclick="lihatLaporanShift(\'' + s.id + '\')">Laporan</button>' +
+          (can('users') ? '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="openManualPengModal(\'' + s.id + '\')">+ Peng</button>' : '') +
+          '</td></tr>';
       }).join('')
     : '<tr><td colspan="9" style="text-align:center;color:var(--txt3);padding:16px">Belum ada riwayat shift</td></tr>';
 }
