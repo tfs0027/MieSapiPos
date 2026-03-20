@@ -196,6 +196,16 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .shift-warn{background:var(--amber-bg);border:1px solid var(--amber);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--amber-dk);font-weight:600}
 .notif{position:fixed;top:16px;right:16px;padding:10px 16px;border-radius:var(--radius);font-size:12px;font-weight:600;z-index:9999;opacity:0;transform:translateY(-8px);transition:all .3s;pointer-events:none;color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.2)}
 .notif.show{opacity:1;transform:translateY(0)}
+
+.var-group{margin-bottom:8px}
+.var-group-lbl{font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.var-chips{display:flex;gap:5px;flex-wrap:wrap}
+.var-chip{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1.5px solid var(--brd2);cursor:pointer;background:var(--bg);color:var(--txt2);transition:all .15s}
+.var-chip.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cart-vars{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.cart-var-badge{padding:2px 6px;border-radius:10px;font-size:9px;font-weight:600;background:var(--accent3);color:var(--accent)}
+.opt-group-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)}
+.opt-group-row:last-child{border-bottom:none}
 </style>
 </head>
 <body>
@@ -593,6 +603,14 @@ tr:hover td{background:rgba(108,92,231,.03)}
       <div class="form-group"><label class="form-lbl">Emoji</label><input class="fi" id="fm-emoji" placeholder="🍳" maxlength="2"></div>
     </div>
     <div class="form-group"><label class="form-lbl">Status</label><select class="fi" id="fm-status"><option value="available">Tersedia</option><option value="out">Habis</option></select></div>
+    <div class="form-group">
+      <label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">
+        Pilihan Tambahan (Varian / Request)
+        <button type="button" class="btn btn-sm" onclick="tambahOptGroup()" style="font-size:9px;padding:2px 8px">+ Tambah Grup</button>
+      </label>
+      <div style="font-size:10px;color:var(--txt3);margin-bottom:8px;margin-top:2px">Contoh: Tingkat Kepedasan, Suhu, Porsi, Topping, dll.</div>
+      <div id="fm-opts-list"></div>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('menu-modal')">Batal</button>
       <button class="btn btn-primary" onclick="saveMenu()">Simpan Menu</button>
@@ -652,6 +670,23 @@ tr:hover td{background:rgba(108,92,231,.03)}
   </div>
 </div>
 
+
+<div class="modal-wrap" id="var-modal">
+  <div class="modal">
+    <h3 id="var-modal-title">Pilih Varian</h3>
+    <div style="font-size:12px;color:var(--txt2);margin-bottom:12px">Harga dasar: <b id="var-modal-price" style="color:var(--accent)"></b></div>
+    <div id="var-opts-body" style="margin-bottom:14px"></div>
+    <div class="form-group">
+      <label class="form-lbl">Catatan Tambahan</label>
+      <input class="fi" id="var-note" placeholder="Contoh: tidak pakai bawang, ekstra saos...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('var-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="confirmVar()">+ Tambah ke Pesanan</button>
+    </div>
+  </div>
+</div>
+
 <div class="notif" id="notif"></div>
 
 <script>
@@ -678,7 +713,7 @@ const CAT_COLORS = {
 const ST = {
   cu: null, selId: null, pin: '',
   menus: [
-    {id:1,name:'Nasi Goreng Spesial',price:18000,cat:'Makanan',emoji:'🍳',status:'available',sold:47},
+    {id:1,name:'Nasi Goreng Spesial',price:18000,cat:'Makanan',emoji:'🍳',status:'available',sold:47,opts:[{id:1,label:'Kepedasan',required:0,choices:['Normal','Pedas','Extra Pedas']},{id:2,label:'Porsi',required:0,choices:['Reguler','Jumbo (+Rp 5.000)','Mini (-Rp 3.000)']}]},
     {id:2,name:'Mie Ayam Bakso',price:15000,cat:'Makanan',emoji:'🍜',status:'available',sold:38},
     {id:3,name:'Ayam Bakar',price:22000,cat:'Makanan',emoji:'🍗',status:'available',sold:31},
     {id:4,name:'Soto Ayam',price:14000,cat:'Makanan',emoji:'🥣',status:'available',sold:29},
@@ -934,15 +969,85 @@ function renderMenuGrid() {
   ).join('');
 }
 
+let _varMenu = null;
+
 function addToCart(id) {
   if (!isOpen()) { showNotif('⚠️ Buka kasir dahulu!', '#E17055'); return; }
   const menu = ST.menus.find(m => m.id===id);
   if (!menu || menu.status==='out') return;
-  const ex = ST.cart.find(c => c.id===id);
-  if (ex) ex.qty++;
-  else ST.cart.push({id, name:menu.name, price:menu.price, qty:1, note:''});
+  if (menu.opts && menu.opts.length > 0) {
+    openVarModal(menu);
+  } else {
+    pushToCart(menu, {}, '');
+  }
+}
+
+function openVarModal(menu) {
+  _varMenu = menu;
+  $('var-modal-title').textContent = menu.emoji + ' ' + menu.name;
+  $('var-modal-price').textContent = fmt(menu.price);
+  const el = $('var-opts-body');
+  el.innerHTML = menu.opts.map((g, gi) =>
+    '<div class="var-group">' +
+    '<div class="var-group-lbl">' + g.label + (g.required?' <span style="color:var(--red-dk)">*wajib</span>':'') + '</div>' +
+    '<div class="var-chips">' +
+    g.choices.map((ch, ci) =>
+      '<div class="var-chip" id="vc-' + gi + '-' + ci + '" onclick="selectVar(' + gi + ',' + ci + ',this)">' + ch + '</div>'
+    ).join('') +
+    '</div></div>'
+  ).join('');
+  $('var-note').value = '';
+  $('var-modal').classList.add('open');
+}
+
+function selectVar(gi, ci, el) {
+  const chips = el.parentElement.querySelectorAll('.var-chip');
+  chips.forEach(ch => ch.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function confirmVar() {
+  const menu = _varMenu; if(!menu) return;
+  const selections = {};
+  let valid = true;
+  let extraPrice = 0;
+  menu.opts.forEach((g, gi) => {
+    const sel = document.querySelector('#vc-' + gi + '-0');
+    const parent = sel ? sel.parentElement : null;
+    const chosen = parent ? parent.querySelector('.var-chip.sel') : null;
+    if (!chosen && g.required) { showNotif('Pilih ' + g.label + ' terlebih dahulu','#E17055'); valid=false; return; }
+    if (chosen) {
+      const txt = chosen.textContent;
+      selections[g.label] = txt;
+      const priceMatch = txt.match(/(\+|-)Rp\s?([\d.]+)/);
+      if (priceMatch) {
+        const sign = priceMatch[1]==='+' ? 1 : -1;
+        const val = parseInt(priceMatch[2].replace(/\./g,''));
+        extraPrice += sign * val;
+      }
+    }
+  });
+  if (!valid) return;
+  const note = $('var-note').value.trim();
+  pushToCart(menu, selections, note, extraPrice);
+  closeModal('var-modal');
+}
+
+function pushToCart(menu, selections, note, extraPrice) {
+  extraPrice = extraPrice || 0;
+  const finalPrice = menu.price + extraPrice;
+  const varKey = Object.values(selections).join('|');
+  const ex = ST.cart.find(c => c.menuId===menu.id && c.varKey===varKey && !c.note && !note);
+  if (ex && !Object.keys(selections).length && !note) {
+    ex.qty++;
+  } else {
+    const varLabel = Object.entries(selections).map(([k,v])=>v).join(', ');
+    ST.cart.push({id:Date.now(), menuId:menu.id, name:menu.name, price:finalPrice,
+      basePrice:menu.price, extraPrice, qty:1, note, selections, varKey,
+      varLabel: varLabel || ''});
+  }
   renderCart();
-  showNotif('+ ' + menu.name, '#6C5CE7');
+  showNotif('+ ' + menu.name + (Object.keys(selections).length?' ('+Object.values(selections).join(', ')+')':''), '#6C5CE7');
 }
 
 function renderCart() {
@@ -954,7 +1059,9 @@ function renderCart() {
     '<div class="cart-row">' +
     '<div class="cart-info">' +
     '<div class="cart-name">' + item.name + '</div>' +
-    '<input class="cart-note" placeholder="Catatan..." value="' + item.note + '" oninput="ST.cart[' + i + '].note=this.value">' +
+    (item.varLabel ? '<div class="cart-vars">' + item.varLabel.split(', ').map(v=>'<span class="cart-var-badge">' + v + '</span>').join('') + '</div>' : '') +
+    (item.extraPrice ? '<div style="font-size:9px;color:var(--txt3);margin-top:1px">Harga dasar ' + fmt(item.basePrice) + (item.extraPrice>0?' +':' ') + fmt(item.extraPrice) + '</div>' : '') +
+    '<input class="cart-note" placeholder="Catatan tambahan..." value="' + (item.note||'') + '" oninput="ST.cart[' + i + '].note=this.value">' +
     '</div>' +
     '<div class="qty-ctrl">' +
     '<div class="qty-btn" onclick="changeQty(' + i + ',-1)">−</div>' +
@@ -1101,7 +1208,7 @@ function processPayment() {
   const trx = {
     id, time:fmtTime(now), date:fmtDate(now),
     table: mejaVal==='takeaway' ? 'Takeaway' : 'Meja ' + mejaVal,
-    items: ST.cart.map(c => ({name:c.name, qty:c.qty, price:c.price, note:c.note})),
+    items: ST.cart.map(c => ({name:c.name, qty:c.qty, price:c.price, note:c.note||'', varLabel:c.varLabel||'', extraPrice:c.extraPrice||0})),
     subtotal:sub, disc, discAmt, tax, total:grand,
     pay:ST.payMethod, cashRec, change, kasir:ST.cu.name, shiftId:ST.currentShift.id
   };
@@ -1135,6 +1242,7 @@ function showReceipt(trx) {
   html += '<hr class="r-d">';
   trx.items.forEach(i => {
     html += '<div class="r-r"><span>' + i.name + '</span></div>';
+    if (i.varLabel) html += '<div style="padding-left:12px;color:var(--accent);font-size:9px">' + i.varLabel + '</div>';
     html += '<div class="r-r" style="padding-left:12px"><span>' + i.qty + ' × ' + fmt(i.price) + '</span><span>' + fmt(i.qty*i.price) + '</span></div>';
     if (i.note) html += '<div style="padding-left:12px;color:var(--txt2);font-size:9px">📝 ' + i.note + '</div>';
   });
@@ -1172,6 +1280,7 @@ function renderMenuTable() {
     '<td><span class="badge ' + (m.status==='available'?'b-green':'b-red') + '">' + (m.status==='available'?'Tersedia':'Habis') + '</span></td>' +
     '<td>' + m.sold + ' porsi</td>' +
     '<td style="display:flex;gap:5px">' +
+    (m.opts&&m.opts.length ? '<span class="badge b-purple" style="font-size:9px" title="' + m.opts.map(g=>g.label).join(', ') + '">' + m.opts.length + ' varian</span>' : '') +
     (can('edit_harga') ?
       '<button class="btn btn-sm" onclick="openMenuModal(' + m.id + ')">Edit</button>' +
       '<button class="btn btn-sm" style="color:' + (m.status==='available'?'var(--red-dk)':'var(--green-dk)') + '" onclick="toggleMenuStatus(' + m.id + ')">' + (m.status==='available'?'Nonaktifkan':'Aktifkan') + '</button>'
@@ -1192,6 +1301,53 @@ function renderFmCatSelect(selectedCat) {
   sel.innerHTML = MENU_CATS.map(c => '<option value="' + c + '"' + (c===selectedCat?' selected':'') + '>' + c + '</option>').join('');
 }
 
+let _fmOpts = [];
+
+function renderFmOpts() {
+  const el = $('fm-opts-list'); if(!el) return;
+  if (!_fmOpts.length) { el.innerHTML = '<div style="color:var(--txt3);font-size:11px;padding:8px 0">Belum ada pilihan tambahan. Klik "+ Tambah Grup" untuk menambahkan.</div>'; return; }
+  el.innerHTML = _fmOpts.map((g, gi) =>
+    '<div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+    '<input class="fi" value="' + g.label + '" placeholder="Nama grup (mis: Kepedasan)" style="flex:1;font-size:11px;font-weight:600" oninput="_fmOpts[' + gi + '].label=this.value">' +
+    '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;flex-shrink:0">' +
+    '<input type="checkbox" ' + (g.required?'checked':'') + ' onchange="_fmOpts[' + gi + '].required=this.checked?1:0"> Wajib dipilih</label>' +
+    '<button class="btn btn-sm" style="color:var(--red-dk);flex-shrink:0" onclick="hapusOptGroup(' + gi + ')">✕</button>' +
+    '</div>' +
+    '<div class="var-chips" id="chips-' + gi + '">' +
+    g.choices.map((ch, ci) =>
+      '<div style="display:flex;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--brd);border-radius:20px;padding:2px 6px 2px 10px">' +
+      '<input style="border:none;background:transparent;font-size:11px;width:' + Math.max(60,(ch.length*7)) + 'px;outline:none;color:var(--txt)" value="' + ch + '" oninput="_fmOpts[' + gi + '].choices[' + ci + ']=this.value;this.style.width=Math.max(60,(this.value.length*7))+\'px\'">' +
+      '<button style="border:none;background:none;cursor:pointer;color:var(--txt3);font-size:12px;padding:0 2px" onclick="hapusChoice(' + gi + ',' + ci + ')">×</button>' +
+      '</div>'
+    ).join('') +
+    '<button class="var-chip" onclick="tambahChoice(' + gi + ')" style="font-size:11px">+ Pilihan</button>' +
+    '</div>' +
+    '</div>'
+  ).join('');
+}
+
+function tambahOptGroup() {
+  _fmOpts.push({id:Date.now(),label:'',required:0,choices:['Pilihan 1','Pilihan 2']});
+  renderFmOpts();
+}
+
+function hapusOptGroup(gi) {
+  _fmOpts.splice(gi,1);
+  renderFmOpts();
+}
+
+function tambahChoice(gi) {
+  _fmOpts[gi].choices.push('Pilihan baru');
+  renderFmOpts();
+}
+
+function hapusChoice(gi, ci) {
+  if (_fmOpts[gi].choices.length <= 1) { showNotif('Minimal 1 pilihan','#E17055'); return; }
+  _fmOpts[gi].choices.splice(ci,1);
+  renderFmOpts();
+}
+
 function openMenuModal(id) {
   ST.editMenuId = id || null;
   $('menu-modal-title').textContent = id ? 'Edit Menu' : 'Tambah Menu';
@@ -1200,10 +1356,13 @@ function openMenuModal(id) {
     $('fm-name').value = m.name; $('fm-price').value = m.price;
     renderFmCatSelect(m.cat);
     $('fm-emoji').value = m.emoji; $('fm-status').value = m.status;
+    _fmOpts = JSON.parse(JSON.stringify(m.opts||[]));
   } else {
     ['fm-name','fm-price','fm-emoji'].forEach(x => $(x).value = '');
     renderFmCatSelect(MENU_CATS[0]);
+    _fmOpts = [];
   }
+  renderFmOpts();
   $('menu-modal').classList.add('open');
 }
 
@@ -1276,7 +1435,9 @@ function tambahKategori() {
 function saveMenu() {
   const name = $('fm-name').value.trim(), price = parseFloat($('fm-price').value)||0;
   if (!name||!price) { showNotif('Nama & harga wajib diisi','#E17055'); return; }
-  const data = {name,price,cat:$('fm-cat').value,emoji:$('fm-emoji').value||'🍽️',status:$('fm-status').value};
+  const validOpts = _fmOpts.filter(g => g.label.trim() && g.choices.filter(ch=>ch.trim()).length > 0)
+    .map(g => ({...g, label:g.label.trim(), choices:g.choices.map(ch=>ch.trim()).filter(ch=>ch)}));
+  const data = {name,price,cat:$('fm-cat').value,emoji:$('fm-emoji').value||'🍽️',status:$('fm-status').value,opts:validOpts};
   if (ST.editMenuId) Object.assign(ST.menus.find(m=>m.id===ST.editMenuId), data);
   else ST.menus.push({...data,id:Date.now(),sold:0});
   closeModal('menu-modal'); renderMenuTable(); renderMenuGrid(); buildCatTabs();
@@ -1849,6 +2010,7 @@ function renderWAPreview() {
   lines.push('📋 *Detail Pesanan:*');
   t.items.forEach(i => {
     lines.push('• ' + i.name + ' ×' + i.qty);
+    if (i.varLabel) lines.push('  _' + i.varLabel + '_');
     lines.push('  ' + fmt(i.price) + ' × ' + i.qty + ' = ' + fmt(i.price*i.qty));
     if (i.note) lines.push('  _📝 ' + i.note + '_');
   });
