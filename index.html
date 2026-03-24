@@ -218,10 +218,11 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .pending-item.active-order{border-color:var(--accent);background:var(--accent3)}
 
 .img-upload-box{width:100%;height:100px;border:2px dashed var(--brd2);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;background:var(--bg);position:relative;overflow:hidden}
+.img-upload-box>*{pointer-events:none}
 .img-upload-box:hover{border-color:var(--accent);background:var(--accent3)}
 .img-upload-box img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
-.img-upload-box .img-overlay{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
-.img-upload-box:hover .img-overlay{opacity:1}
+.img-upload-box .img-overlay{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;pointer-events:none}
+.img-upload-box:hover .img-overlay{opacity:1;pointer-events:auto}
 .menu-card-img{width:100%;height:70px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;margin:-12px -12px 6px;width:calc(100% + 24px)}
 .receipt-logo-img{max-width:80px;max-height:50px;display:block;margin:0 auto 4px}
 </style>
@@ -630,11 +631,11 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <div class="form-group">
                 <label class="form-lbl">Logo Toko (untuk Struk)</label>
                 <div style="display:flex;gap:12px;align-items:flex-start;margin-top:6px">
-                  <div class="img-upload-box" id="logo-img-box" onclick="triggerLogoUpload()" style="width:80px;height:80px;flex-shrink:0">
+                  <label for="logo-img-input" class="img-upload-box" id="logo-img-box" style="width:80px;height:80px;flex-shrink:0;cursor:pointer">
                     <span style="font-size:24px" id="logo-img-placeholder">🏪</span>
                     <span style="font-size:9px;color:var(--txt2);margin-top:2px">Upload logo</span>
                     <div class="img-overlay"><span style="color:#fff;font-size:10px">Ganti</span></div>
-                  </div>
+                  </label>
                   <div style="flex:1">
                     <div style="font-size:11px;color:var(--txt2);margin-bottom:8px;line-height:1.6">Logo ditampilkan di header struk digital. Format JPG/PNG, maks 1MB.</div>
                     <div style="display:flex;align-items:center;gap:8px">
@@ -825,11 +826,11 @@ tr:hover td{background:rgba(108,92,231,.03)}
         Foto Produk <span style="font-size:10px;color:var(--txt3);font-weight:400">opsional · maks 2MB</span>
       </label>
       <div style="display:flex;gap:12px;align-items:flex-start;margin-top:6px">
-        <div class="img-upload-box" id="fm-img-box" onclick="triggerMenuImgUpload()" style="width:100px;height:100px;flex-shrink:0">
+        <label for="fm-img-input" class="img-upload-box" id="fm-img-box" style="width:100px;height:100px;flex-shrink:0;cursor:pointer">
           <span style="font-size:24px" id="fm-img-placeholder">📷</span>
-          <span style="font-size:10px;color:var(--txt2);margin-top:4px" id="fm-img-hint">Klik untuk upload</span>
+          <span style="font-size:10px;color:var(--txt2);margin-top:4px" id="fm-img-hint">Klik upload</span>
           <div class="img-overlay"><span style="color:#fff;font-size:11px">Ganti foto</span></div>
-        </div>
+        </label>
         <div style="flex:1;font-size:11px;color:var(--txt2);line-height:1.7">
           Foto tampil di kartu menu kasir.<br>Tanpa foto, emoji digunakan sebagai pengganti.
           <div id="fm-img-name" style="margin-top:6px;font-size:10px;color:var(--green-dk)"></div>
@@ -1771,6 +1772,7 @@ function hapusChoice(gi, ci) {
 }
 
 function openMenuModal(id) {
+  try {
   ST.editMenuId = id || null;
   $('menu-modal-title').textContent = id ? 'Edit Menu' : 'Tambah Menu';
   if (id) {
@@ -1790,6 +1792,7 @@ function openMenuModal(id) {
   }
   renderFmOpts();
   $('menu-modal').classList.add('open');
+  } catch(e) { showNotif('Error: '+e.message,'#E17055'); console.error(e); }
 }
 
 function openKategoriModal() {
