@@ -1724,6 +1724,104 @@ function renderFmCatSelect(selectedCat) {
   sel.innerHTML = MENU_CATS.map(c => '<option value="' + c + '"' + (c===selectedCat?' selected':'') + '>' + c + '</option>').join('');
 }
 
+// ═══════════════════════════════
+// IMAGE HANDLING — MENU FOTO
+// ═══════════════════════════════
+var _fmImgData = null;
+
+function onMenuImgSelected(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { showNotif('Ukuran foto maks 2MB', '#E17055'); input.value = ''; return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    _fmImgData = e.target.result;
+    setMenuImgPreview(_fmImgData);
+  };
+  reader.readAsDataURL(file);
+}
+
+function setMenuImgPreview(src) {
+  var box = $('fm-img-box');
+  var ph = $('fm-img-placeholder');
+  var hint = $('fm-img-hint');
+  if (!box) return;
+  var existing = box.querySelector ? box.querySelector('img.fmpreview') : null;
+  if (existing) existing.parentNode && existing.parentNode.removeChild(existing);
+  if (src) {
+    var img = document.createElement('img');
+    img.src = src;
+    img.className = 'fmpreview';
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;pointer-events:none';
+    box.appendChild(img);
+    if (ph) ph.style.display = 'none';
+    if (hint) hint.style.display = 'none';
+    var nm = $('fm-img-name'); if (nm) nm.textContent = '✅ Foto dipilih';
+    var cl = $('fm-img-clear'); if (cl) cl.style.display = 'inline-flex';
+  } else {
+    if (ph) ph.style.display = '';
+    if (hint) hint.style.display = '';
+    var nm2 = $('fm-img-name'); if (nm2) nm2.textContent = '';
+    var cl2 = $('fm-img-clear'); if (cl2) cl2.style.display = 'none';
+  }
+}
+
+function clearMenuImg() {
+  _fmImgData = null;
+  setMenuImgPreview(null);
+  var inp = $('fm-img-input'); if (inp) inp.value = '';
+}
+
+// ═══════════════════════════════
+// IMAGE HANDLING — LOGO TOKO
+// ═══════════════════════════════
+function onLogoImgSelected(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 1 * 1024 * 1024) { showNotif('Ukuran logo maks 1MB', '#E17055'); input.value = ''; return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    CFG.logoImg = e.target.result;
+    saveCFG();
+    setLogoImgPreview(CFG.logoImg);
+    renderStrukPreview();
+    showNotif('✅ Logo toko disimpan', '#00B894');
+  };
+  reader.readAsDataURL(file);
+}
+
+function setLogoImgPreview(src) {
+  var box = $('logo-img-box');
+  var ph = $('logo-img-placeholder');
+  if (!box) return;
+  var existing = box.querySelector ? box.querySelector('img.logopreview') : null;
+  if (existing) existing.parentNode && existing.parentNode.removeChild(existing);
+  if (src) {
+    var img = document.createElement('img');
+    img.src = src;
+    img.className = 'logopreview';
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:4px;pointer-events:none';
+    box.appendChild(img);
+    if (ph) ph.style.display = 'none';
+    var nm = $('logo-img-name'); if (nm) nm.textContent = '✅ Logo terpasang';
+    var cl = $('logo-img-clear'); if (cl) cl.style.display = 'inline-flex';
+  } else {
+    if (ph) ph.style.display = '';
+    var nm2 = $('logo-img-name'); if (nm2) nm2.textContent = '';
+    var cl2 = $('logo-img-clear'); if (cl2) cl2.style.display = 'none';
+  }
+}
+
+function clearLogoImg() {
+  CFG.logoImg = null;
+  saveCFG();
+  setLogoImgPreview(null);
+  var inp = $('logo-img-input'); if (inp) inp.value = '';
+  renderStrukPreview();
+  showNotif('Logo dihapus', '#A8A5BE');
+}
+
+
 let _fmOpts = [];
 
 function renderFmOpts() {
@@ -3424,7 +3522,7 @@ function renderStrukPreview() {
   const lines = [];
   const pad = (t,w) => { const s=String(t); return s.length>=w?s:s+' '.repeat(w-s.length); };
   const center = (t,w=32) => { const p=Math.max(0,Math.floor((w-t.length)/2)); return ' '.repeat(p)+t; };
-  if (CFG.se.logo) lines.push(center(CFG.logo+' '+CFG.nama));
+  if (CFG.se.logo) lines.push(center((CFG.logoImg?'[LOGO] ':''+CFG.logo+' ')+CFG.nama));
   if (CFG.tagline) lines.push(center(CFG.tagline.substring(0,32)));
   if (CFG.se.alamat&&CFG.alamat) lines.push(center(CFG.alamat.substring(0,32)));
   if (CFG.se.telp&&CFG.telp) lines.push(center('Tel: '+CFG.telp));
