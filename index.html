@@ -375,7 +375,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
           <div id="stab-lr" style="display:none"><div id="lr-content"></div></div>
         </div>
         <div class="card">
-          <div class="card-hd"><span class="card-title">Riwayat Shift</span><button class="btn btn-danger btn-sm" onclick="openManualPengModal()" style="font-size:11px">📝 Input Pengeluaran Manual</button></div>
+          <div class="card-hd"><span class="card-title">Riwayat Shift</span></div>
           <div class="tbl-wrap"><table><thead><tr><th>Shift</th><th>Kasir</th><th>Buka</th><th>Tutup</th><th>Penjualan</th><th>Pengeluaran</th><th>Laba Bersih</th><th>Online</th><th>Selisih Kas</th><th>Aksi</th></tr></thead><tbody id="shift-hist"></tbody></table></div>
         </div>
       </div>
@@ -568,7 +568,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
       <div class="page" id="page-users">
         <div class="g3" id="user-kpi"></div>
         <div class="card">
-          <div class="card-hd"><span class="card-title">Manajemen Pengguna</span><button class="btn btn-primary btn-sm" onclick="openUserModal()">+ Tambah User</button></div>
+          <div class="card-hd"><span class="card-title">Manajemen Pengguna</span><div style="display:flex;gap:6px"><button class="btn btn-danger btn-sm" onclick="openManualPengModal()" style="font-size:11px">📝 Input Pengeluaran Manual</button><button class="btn btn-primary btn-sm" onclick="openUserModal()">+ Tambah User</button></div></div>
           <div id="user-list-el"></div>
         </div>
       </div>
@@ -1181,6 +1181,12 @@ function doLogin(u) {
 }
 
 function doLogout() {
+  if (isOpen()) {
+    var isOwner = !ST.currentShift.userId || ST.currentShift.userId===ST.cu.id || ST.cu.role==='admin';
+    if (isOwner) {
+      if (!confirm('⚠️ Kasir ' + ST.currentShift.id + ' masih buka!\n\nTutup kasir dahulu sebelum keluar, atau pilih OK untuk tetap keluar tanpa menutup shift.')) return;
+    }
+  }
   ST.cu = null; ST.selId = null; ST.pin = ''; ST.cart = [];
   $('app').style.display = 'none';
   $('login-screen').style.display = 'flex';
@@ -1269,7 +1275,7 @@ function renderMenuGrid() {
   const menus = ST.activeCat==='Semua' ? ST.menus : ST.menus.filter(m => m.cat===ST.activeCat);
   $('menu-grid').innerHTML = menus.map(m =>
     '<div class="menu-card' + (m.status==='out'?' out':'') + '" onclick="' + (m.status==='out'?'void(0)':'addToCart('+m.id+')') + '">' +
-    (m.img ? '<img src="' + m.img + '" style="width:calc(100% + 24px);height:70px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;margin:-12px -12px 6px;display:block">' : '<span class="mc-em">' + m.emoji + '</span>') +
+    (m.img ? '<img src="' + m.img + '" style="width:calc(100% + 24px);height:70px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;margin:-12px -12px 6px;display:block">' : '<div style="font-size:28px;margin-bottom:6px">' + m.emoji + '</div>') +
     '<div class="mc-nm">' + m.name + '</div>' +
     '<div class="mc-pr">' + fmt(m.price) + '</div>' +
     '</div>'
@@ -1697,7 +1703,14 @@ function viewReceipt(id) {
 function renderMenuTable() {
   $('menu-table').innerHTML = ST.menus.map(m =>
     '<tr>' +
-    '<td><span style="margin-right:6px">' + m.emoji + '</span><b>' + m.name + '</b></td>' +
+    '<td style="display:flex;align-items:center;gap:10px">' +
+    (m.img
+      ? '<img src="' + m.img + '" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0">'
+      : '<span style="font-size:22px;flex-shrink:0;width:40px;text-align:center">' + m.emoji + '</span>'
+    ) +
+    '<div><b>' + m.name + '</b>' +
+    (m.img ? '<div style="font-size:9px;color:var(--txt3);margin-top:1px">' + m.emoji + '</div>' : '') +
+    '</div></td>' +
     '<td><span class="badge ' + (m.cat==='Makanan'?'b-amber':m.cat==='Minuman'?'b-blue':m.cat==='Camilan'?'b-green':'b-purple') + '">' + m.cat + '</span></td>' +
     '<td style="font-weight:700">' + fmt(m.price) + '</td>' +
     '<td><span class="badge ' + (m.status==='available'?'b-green':'b-red') + '">' + (m.status==='available'?'Tersedia':'Habis') + '</span></td>' +
@@ -2869,7 +2882,9 @@ function updateShiftTopbar() {
   }
   $('topbar-right').innerHTML = open
     ? '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--green)"><div style="width:6px;height:6px;border-radius:50%;background:var(--green)"></div>' + ST.currentShift.id + ' · ' + ST.currentShift.waktuBuka + '</div>' +
-      '<button class="btn btn-danger btn-sm" onclick="showTutupModal()">🔒 Tutup Kasir</button>'
+      ((!ST.currentShift.userId || ST.currentShift.userId===ST.cu.id || ST.cu.role==='admin')
+        ? '<button class="btn btn-danger btn-sm" onclick="showTutupModal()">🔒 Tutup Kasir</button>'
+        : '<span style="font-size:11px;color:var(--amber-dk)">⚠️ Shift milik ' + ST.currentShift.kasir + '</span>')
     : '<button class="btn btn-success btn-sm" onclick="showBukaModal()">🔓 Buka Kasir</button>';
 }
 
@@ -2877,8 +2892,10 @@ function showBukaModal() {
   const now = new Date();
   $('buka-info').innerHTML =
     '<div class="sum-row"><span>Kasir</span><b>' + ST.cu.name + '</b></div>' +
+    '<div class="sum-row"><span>Role</span><b>' + (ST.cu.role==='admin'?'👑 Admin':'🧾 Kasir') + '</b></div>' +
     '<div class="sum-row"><span>Tanggal</span><b>' + fmtDate(now) + '</b></div>' +
-    '<div class="sum-row"><span>Jam Buka</span><b>' + fmtTime(now) + '</b></div>';
+    '<div class="sum-row"><span>Jam Buka</span><b>' + fmtTime(now) + '</b></div>' +
+    '<div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 10px;margin-top:8px;font-size:11px;color:var(--blue-dk)">ℹ️ Shift ini akan terkunci untuk kasir <b>' + ST.cu.name + '</b>. Hanya akun ini yang dapat menutup shift.</div>';
   $('buka-modal').classList.add('open');
 }
 
@@ -2888,7 +2905,7 @@ function prosesBukaKasir() {
   const now = new Date();
   const shiftId = 'SHF-' + String(ST.shiftCounter).padStart(3,'0'); ST.shiftCounter++;
   ST.currentShift = {
-    id:shiftId, kasir:ST.cu.name, modalAwal:modal,
+    id:shiftId, kasir:ST.cu.name, userId:ST.cu.id, modalAwal:modal,
     waktuBuka:fmtTime(now), waktuTutup:null, tanggal:fmtDate(now), status:'open',
     pengeluaran:[], transaksi:[], catatanBuka:$('buka-ket').value,
   };
@@ -2995,10 +3012,14 @@ function renderShiftPage() {
     const totalK = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
     const laba = totalP-totalK;
     const tunai = sh.transaksi.filter(t=>t.pay==='cash').reduce((a,t)=>a+t.total,0);
+    var isOwner = !sh.userId || sh.userId === ST.cu.id || ST.cu.role==='admin';
     bannerEl.innerHTML = '<div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius-lg);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
       '<div><div style="font-size:13px;font-weight:700;color:var(--green-dk)">🟢 Kasir Sedang Buka — ' + sh.id + '</div>' +
-      '<div style="font-size:11px;color:#3B7D5E;margin-top:3px">Kasir: ' + sh.kasir + ' · Buka: ' + sh.waktuBuka + ' · ' + sh.tanggal + ' · Modal: ' + fmt(sh.modalAwal) + '</div></div>' +
-      '<button class="btn btn-danger btn-sm" onclick="showTutupModal()">🔒 Tutup Kasir</button></div>';
+      '<div style="font-size:11px;color:#3B7D5E;margin-top:3px">Kasir: ' + sh.kasir + ' · Buka: ' + sh.waktuBuka + ' · ' + sh.tanggal + ' · Modal: ' + fmt(sh.modalAwal) + '</div>' +
+      (!isOwner ? '<div style="font-size:10px;color:var(--amber-dk);margin-top:4px">⚠️ Dibuka oleh ' + sh.kasir + ' — hanya mereka atau Admin yang dapat menutup</div>' : '') +
+      '</div>' +
+      (isOwner ? '<button class="btn btn-danger btn-sm" onclick="showTutupModal()">🔒 Tutup Kasir</button>' : '<button class="btn btn-sm" style="opacity:.4;cursor:not-allowed" title="Hanya ' + sh.kasir + ' atau Admin yang bisa tutup">🔒 Tutup Kasir</button>') +
+      '</div>';
     liveEl.style.display = 'block';
     $('shift-kpi').innerHTML =
       '<div class="metric"><div class="metric-lbl">Total Penjualan</div><div class="metric-val" style="color:var(--green)">' + fmt(totalP) + '</div><div class="metric-sub">' + sh.transaksi.length + ' transaksi</div></div>' +
@@ -3254,7 +3275,6 @@ function renderShiftHist() {
           '<td style="color:var(--blue-dk);font-weight:600">' + (s.totalOnline ? fmt(s.totalOnline) : '—') + '</td>' +
           '<td style="display:flex;gap:4px">' +
           '<button class="btn btn-sm" onclick="lihatLaporanShift(\'' + s.id + '\')">Laporan</button>' +
-          (can('users') ? '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="openManualPengModal(\'' + s.id + '\')">+ Peng</button>' : '') +
           '</td></tr>';
       }).join('')
     : '<tr><td colspan="9" style="text-align:center;color:var(--txt3);padding:16px">Belum ada riwayat shift</td></tr>';
@@ -3266,7 +3286,7 @@ function lihatLaporanShift(id) {
   const st = sh.selisih===0?'Pas ✓':sh.selisih>0?'+'+fmt(sh.selisih)+' (Lebih)':fmt(sh.selisih)+' (Kurang)';
   const catMap={};sh.pengeluaran.forEach(p=>{catMap[p.kategori]=(catMap[p.kategori]||0)+p.nominal;});
   let html = '<div class="receipt-block">';
-  html += '<div class="r-c r-b" style="font-size:13px">' + CFG.logo + ' ' + CFG.nama + '</div>';
+  html += '<div class="r-c r-b" style="font-size:13px">' + CFG.nama + '</div>';
   html += '<div class="r-c" style="color:var(--txt2)">LAPORAN SHIFT KASIR</div>';
   html += '<hr class="r-d">';
   html += '<div class="r-r"><span>Shift</span><b>' + sh.id + '</b></div>';
@@ -3522,7 +3542,7 @@ function renderStrukPreview() {
   const lines = [];
   const pad = (t,w) => { const s=String(t); return s.length>=w?s:s+' '.repeat(w-s.length); };
   const center = (t,w=32) => { const p=Math.max(0,Math.floor((w-t.length)/2)); return ' '.repeat(p)+t; };
-  if (CFG.se.logo) lines.push(center((CFG.logoImg?'[LOGO] ':''+CFG.logo+' ')+CFG.nama));
+  if (CFG.se.logo) lines.push(center(CFG.logoImg?'[ LOGO ]':CFG.nama));
   if (CFG.tagline) lines.push(center(CFG.tagline.substring(0,32)));
   if (CFG.se.alamat&&CFG.alamat) lines.push(center(CFG.alamat.substring(0,32)));
   if (CFG.se.telp&&CFG.telp) lines.push(center('Tel: '+CFG.telp));
