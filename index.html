@@ -325,6 +325,9 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--txt2)">
                 Meja: <select class="fi" id="cart-meja" style="width:auto;padding:3px 7px;font-size:11px"></select>
               </div>
+              <div style="margin-top:6px">
+                <input class="fi" id="order-note" placeholder="📋 Catatan meja / order (alergi, permintaan khusus...)" style="font-size:11px;width:100%" oninput="ST.orderNote=this.value">
+              </div>
               <div id="pending-panel" style="display:none;margin-top:8px;border-top:1px solid var(--brd);padding-top:8px">
                 <div style="font-size:10px;font-weight:600;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Pesanan Tertunda</div>
                 <div id="pending-list"></div>
@@ -339,6 +342,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
                 <span id="poin-earn-label" style="font-size:10px;color:var(--txt3)"></span>
               </div>
               <div class="tot-row"><span>Subtotal</span><span id="c-sub">Rp 0</span></div>
+              <div class="tot-row" id="cart-item-disc-row" style="display:none;color:var(--green-dk)"><span>Diskon Item</span><span id="c-item-disc">Rp 0</span></div>
               <div class="tot-row"><span>Diskon</span>
                 <div class="disc-row"><input class="disc-inp" type="number" id="disc-pct" min="0" max="100" value="0" oninput="updateTotals()">%</div>
               </div>
@@ -350,6 +354,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
                 <button class="btn btn-primary" onclick="openPay('qris')">📱 QRIS</button>
               </div>
               <button class="btn" style="width:100%;margin-top:7px" onclick="openPay('transfer')">🏦 Transfer Bank</button>
+              <button class="btn" style="width:100%;margin-top:6px;font-size:11px" onclick="openSplitModal()">💳 Split Payment (2 Metode)</button>
               <button class="btn" style="width:100%;margin-top:6px;font-size:11px" onclick="cetakBonSementara()">🖨️ Bon Sementara (Belum Lunas)</button>
               <button class="btn" style="width:100%;margin-top:6px;color:var(--txt2)" onclick="clearCart()">🗑️ Bersihkan</button>
             </div>
@@ -418,10 +423,28 @@ tr:hover td{background:rgba(108,92,231,.03)}
       </div>
 
       <div class="page" id="page-menu">
+        <div style="display:flex;gap:4px;margin-bottom:10px">
+          <button class="shift-tab active" id="menu-tab-daftar" onclick="switchMenuTab('daftar',this)">📋 Daftar Menu</button>
+          <button class="shift-tab" id="menu-tab-harga" onclick="switchMenuTab('harga',this)">📝 Riwayat Harga</button>
+        </div>
+        <div id="menu-panel-daftar">
         <div class="card">
           <div class="card-hd"><span class="card-title">Daftar Menu</span><button class="btn btn-primary btn-sm" onclick="openMenuModal()">+ Tambah Menu</button></div>
           <div class="tbl-wrap"><table><thead><tr><th>Menu</th><th>Kategori</th><th>Harga</th><th>Status</th><th>Terjual</th><th>Aksi</th></tr></thead><tbody id="menu-table"></tbody></table></div>
         </div>
+        </div><!-- end menu-panel-daftar -->
+        <div id="menu-panel-harga" style="display:none">
+          <div class="card">
+            <div class="card-hd"><span class="card-title">📝 Riwayat Perubahan Harga</span>
+              <button class="btn btn-sm" style="color:var(--red-dk);font-size:11px" onclick="if(confirm('Hapus semua riwayat harga?'))ST.priceLog=[];renderPriceLog()">Hapus Semua</button>
+            </div>
+            <div id="price-log-empty" style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">Belum ada perubahan harga</div>
+            <div class="tbl-wrap"><table id="price-log-table" style="display:none">
+              <thead><tr><th>Waktu</th><th>Menu</th><th>Harga Lama</th><th>Harga Baru</th><th>Diubah oleh</th></tr></thead>
+              <tbody id="price-log-body"></tbody>
+            </table></div>
+          </div>
+        </div><!-- end menu-panel-harga -->
       </div>
 
       <div class="page" id="page-stok">
@@ -790,6 +813,57 @@ tr:hover td{background:rgba(108,92,231,.03)}
 </div>
 
 <!-- MODALS -->
+
+<div class="modal-wrap" id="split-modal">
+  <div class="modal">
+    <h3>💳 Split Payment</h3>
+    <div class="modal-sub" id="split-sub">Bayar dengan dua metode berbeda</div>
+    <div style="background:var(--bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700">
+        <span>Total Tagihan</span><span id="split-grand" style="color:var(--accent)">Rp 0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);margin-top:4px">
+        <span>Sisa belum terbayar</span><span id="split-remaining" style="color:var(--red-dk);font-weight:600">Rp 0</span>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="form-group">
+        <label class="form-lbl">Metode 1</label>
+        <select class="fi" id="split-method1" onchange="calcSplitRemaining()">
+          <option value="cash">💵 Tunai</option>
+          <option value="qris">📱 QRIS</option>
+          <option value="transfer">🏦 Transfer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-lbl">Nominal (Rp)</label>
+        <input class="fi" type="number" id="split-amt1" placeholder="0" oninput="calcSplitRemaining()">
+      </div>
+    </div>
+    <div class="frow">
+      <div class="form-group">
+        <label class="form-lbl">Metode 2</label>
+        <select class="fi" id="split-method2" onchange="calcSplitRemaining()">
+          <option value="qris">📱 QRIS</option>
+          <option value="cash">💵 Tunai</option>
+          <option value="transfer">🏦 Transfer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-lbl">Nominal (Rp)</label>
+        <input class="fi" type="number" id="split-amt2" placeholder="0" oninput="calcSplitRemaining()">
+      </div>
+    </div>
+    <div id="split-cash-change" style="display:none" class="kembalian-box">
+      <span>💸 Kembalian Tunai</span><span id="split-change-val">Rp 0</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('split-modal')">Batal</button>
+      <button class="btn btn-success" onclick="processSplitPayment()">✅ Proses Split Bayar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-wrap" id="pay-modal">
   <div class="modal">
     <h3 id="pay-title">Konfirmasi Pembayaran</h3>
@@ -1228,6 +1302,7 @@ const ST = {
   activeCat: 'Semua', pengFilter: null,
   trxCounter: 3, shiftCounter: 2,
   pendingOrders: [], pendingCounter: 1,
+  priceLog: [], orderNote: '',
   members: [], memberCounter: 1,
   lapPreset: 'hari', lapDari: null, lapSampai: null,
   pengPreset: 'hari',
@@ -1655,13 +1730,15 @@ function changeQty(i, d) {
 
 function updateTotals() {
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
+  const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
   const disc = parseFloat($('disc-pct').value) || 0;
-  const discAmt = sub * disc / 100;
+  const discAmt = (sub - itemDiscTotal) * disc / 100;
   const taxable = sub - discAmt;
   const tax = CFG.enablePajak ? taxable * (CFG.pajak/100) : 0;
   const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem * (CFG.poinNilaiTukar||1000) : 0;
   const grand = Math.max(0, Math.round(taxable + tax - poinDiskon));
-  $('c-sub').textContent = fmt(sub);
+  $('c-sub').textContent = fmt(sub - itemDiscTotal);
+  var itemDiscRow = $('cart-item-disc-row'); if(itemDiscRow){itemDiscRow.style.display=itemDiscTotal>0?'':'none'; var ide=$('c-item-disc');if(ide)ide.textContent='-'+fmt(itemDiscTotal);}
   $('c-tax').textContent = fmt(tax);
   $('c-grand').textContent = fmt(grand);
   var poinRow = $('cart-poin-row');
@@ -1947,7 +2024,8 @@ function processPayment() {
   const trx = {
     id, time:fmtTime(now), date:fmtDate(now),
     table: mejaVal==='takeaway' ? 'Takeaway' : 'Meja ' + mejaVal,
-    items: ST.cart.map(c => ({name:c.name, qty:c.qty, price:c.price, note:c.note||'', varLabel:c.varLabel||'', extraPrice:c.extraPrice||0})),
+    items: ST.cart.map(c => ({name:c.name, qty:c.qty, price:c.price, note:c.note||'', varLabel:c.varLabel||'', extraPrice:c.extraPrice||0, discPct:c.discPct||0, discAmt:c.discAmt||0})),
+    orderNote:ST.orderNote||'',
     subtotal:sub, disc, discAmt, tax, total:grand,
     pay:ST.payMethod, cashRec, change, kasir:ST.cu.name, shiftId:ST.currentShift.id,
     memberId: _cartMemberId || null,
@@ -1964,7 +2042,9 @@ function processPayment() {
     if (t) { t.status='occupied'; t.order=id; }
   }
   closeModal('pay-modal');
-  ST.cart = []; $('disc-pct').value = 0; renderCart();
+  ST.cart = []; $('disc-pct').value = 0;
+  if ($('order-note')) { $('order-note').value = ''; ST.orderNote = ''; }
+  renderCart();
   addPoinAfterTrx(grand, _cartMemberId);
   clearCartMember();
   showNotif('✅ ' + id + ' berhasil!', '#00B894');
@@ -1997,10 +2077,12 @@ function showReceipt(trx) {
   if (CFG.se.meja) html += '<div class="r-r"><span>Meja</span><span>' + trx.table + '</span></div>';
   html += '<div class="r-r"><span>Waktu</span><span>' + trx.time + ' · ' + trx.date + '</span></div>';
   html += '<hr class="r-d">';
+  if (trx.orderNote) html += '<div style="background:var(--amber-bg);border-radius:4px;padding:5px 8px;font-size:10px;margin-bottom:6px">📋 ' + trx.orderNote + '</div>';
   trx.items.forEach(i => {
-    html += '<div class="r-r"><span>' + i.name + '</span></div>';
+    var iPrice = i.discPct ? i.price - (i.discAmt||Math.round(i.price*i.discPct/100)) : i.price;
+    html += '<div class="r-r"><span>' + i.name + (i.discPct?' <span style="font-size:9px;color:var(--green-dk);">-'+i.discPct+'%</span>':'') + '</span></div>';
     if (i.varLabel) html += '<div style="padding-left:12px;color:var(--accent);font-size:9px">' + i.varLabel + '</div>';
-    html += '<div class="r-r" style="padding-left:12px"><span>' + i.qty + ' × ' + fmt(i.price) + '</span><span>' + fmt(i.qty*i.price) + '</span></div>';
+    html += '<div class="r-r" style="padding-left:12px"><span>' + i.qty + ' × ' + fmt(iPrice) + '</span><span>' + fmt(i.qty*iPrice) + '</span></div>';
     if (i.note) html += '<div style="padding-left:12px;color:var(--txt2);font-size:9px">📝 ' + i.note + '</div>';
   });
   html += '<hr class="r-d">';
@@ -2324,6 +2406,15 @@ function saveMenu() {
   const validOpts = _fmOpts.filter(g => g.label.trim() && g.choices.filter(ch=>ch.trim()).length > 0)
     .map(g => ({...g, label:g.label.trim(), choices:g.choices.map(ch=>ch.trim()).filter(ch=>ch)}));
   const data = {name,price,cat:$('fm-cat').value,emoji:$('fm-emoji').value||'🍽️',status:$('fm-status').value,opts:validOpts,img:_fmImgData||null};
+  // Log price change
+  if (ST.editMenuId) {
+    var existing = ST.menus.find(function(m){return m.id===ST.editMenuId;});
+    if (existing && existing.price !== price) {
+      if (!ST.priceLog) ST.priceLog = [];
+      var now2 = new Date();
+      ST.priceLog.push({menuId:ST.editMenuId,menuName:name,oldPrice:existing.price,newPrice:price,changedBy:ST.cu?ST.cu.name:'Admin',date:fmtDate(now2),time:fmtTime(now2)});
+    }
+  }
   if (ST.editMenuId) Object.assign(ST.menus.find(m=>m.id===ST.editMenuId), data);
   else ST.menus.push({...data,id:Date.now(),sold:0});
   closeModal('menu-modal'); renderMenuTable(); renderMenuGrid(); buildCatTabs();
@@ -2716,6 +2807,212 @@ function parseTrxDate(dateStr, timeStr) {
     return d;
   }
   return new Date(dateStr);
+}
+
+
+// ═══════════════════════════════
+// 2. DISKON PER ITEM
+// ═══════════════════════════════
+function setItemDisc(idx, val) {
+  var pct = parseFloat(val) || 0;
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  ST.cart[idx].discPct = pct;
+  ST.cart[idx].discAmt = Math.round(ST.cart[idx].price * pct / 100);
+  updateTotals();
+}
+
+// ═══════════════════════════════
+// 1. SPLIT PAYMENT
+// ═══════════════════════════════
+function openSplitModal() {
+  if (!ST.cart.length) { showNotif('Keranjang kosong','#E17055'); return; }
+  if (!isOpen()) { showNotif('Buka kasir dahulu','#E17055'); return; }
+  closeModal('receipt-modal');
+  var sub = ST.cart.reduce(function(a,c){return a+c.price*c.qty;},0);
+  var itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
+  var disc = parseFloat($('disc-pct').value)||0;
+  var discAmt = (sub-itemDiscTotal)*disc/100;
+  var taxable = sub - itemDiscTotal - discAmt;
+  var poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000):0;
+  var tax = CFG.enablePajak ? taxable*(CFG.pajak/100):0;
+  var grand = Math.max(0, Math.round(taxable+tax-poinDiskon));
+  $('split-grand').textContent = fmt(grand);
+  $('split-sub').textContent = 'Total: ' + fmt(grand);
+  $('split-amt1').value = '';
+  $('split-amt2').value = '';
+  $('split-remaining').textContent = fmt(grand);
+  $('split-cash-change').style.display = 'none';
+  $('split-modal')._grand = grand;
+  $('split-modal').classList.add('open');
+}
+
+function calcSplitRemaining() {
+  var grand = $('split-modal')._grand || 0;
+  var a1 = parseFloat($('split-amt1').value)||0;
+  var a2 = parseFloat($('split-amt2').value)||0;
+  var remaining = grand - a1 - a2;
+  $('split-remaining').textContent = fmt(Math.max(0, remaining));
+  // Show change if cash overpaid
+  var m1 = $('split-method1').value, m2 = $('split-method2').value;
+  var cashAmt = (m1==='cash'?a1:0) + (m2==='cash'?a2:0);
+  var nonCash = (m1!=='cash'?a1:0) + (m2!=='cash'?a2:0);
+  var change = Math.max(0, cashAmt - Math.max(0, grand - nonCash));
+  var changeRow = $('split-cash-change');
+  if (changeRow) {
+    changeRow.style.display = change > 0 ? 'flex' : 'none';
+    $('split-change-val').textContent = fmt(change);
+  }
+}
+
+function processSplitPayment() {
+  var grand = $('split-modal')._grand || 0;
+  var a1 = parseFloat($('split-amt1').value)||0;
+  var a2 = parseFloat($('split-amt2').value)||0;
+  var m1 = $('split-method1').value, m2 = $('split-method2').value;
+  if (a1 <= 0) { showNotif('Isi nominal metode 1','#E17055'); return; }
+  if (a2 <= 0) { showNotif('Isi nominal metode 2','#E17055'); return; }
+  if (a1 + a2 < grand) { showNotif('Total pembayaran kurang: ' + fmt(grand - a1 - a2),'#E17055'); return; }
+  if (m1 === m2) { showNotif('Metode 1 dan 2 tidak boleh sama','#E17055'); return; }
+  closeModal('split-modal');
+  // Save split info and process
+  ST.splitPay = {m1, a1, m2, a2, grand};
+  ST.payMethod = m1; // primary method
+  processPaymentSplit();
+}
+
+function processPaymentSplit() {
+  var sp = ST.splitPay;
+  var sub = ST.cart.reduce(function(a,c){return a+c.price*c.qty;},0);
+  var itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
+  var disc = parseFloat($('disc-pct').value)||0;
+  var discAmt = (sub-itemDiscTotal)*disc/100;
+  var taxable = sub - itemDiscTotal - discAmt;
+  var poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000):0;
+  var tax = CFG.enablePajak ? taxable*(CFG.pajak/100):0;
+  var grand = Math.max(0, Math.round(taxable+tax-poinDiskon));
+  var mejaVal = $('cart-meja').value;
+  var id = 'TRX-'+String(ST.trxCounter).padStart(3,'0'); ST.trxCounter++;
+  var now = new Date();
+  var labelPay = function(m){return m==='cash'?'Tunai':m==='qris'?'QRIS':'Transfer';};
+  var trx = {
+    id, time:fmtTime(now), date:fmtDate(now),
+    table: mejaVal==='takeaway'?'Takeaway':'Meja '+mejaVal,
+    items: ST.cart.map(function(c){return {name:c.name,qty:c.qty,price:c.price,note:c.note||'',varLabel:c.varLabel||'',extraPrice:c.extraPrice||0,discPct:c.discPct||0,discAmt:c.discAmt||0};}),
+    subtotal:sub, disc, discAmt:Math.round(discAmt), tax:Math.round(tax), total:grand,
+    pay:'split', splitPay:sp,
+    payLabel: labelPay(sp.m1)+' '+fmt(sp.a1)+' + '+labelPay(sp.m2)+' '+fmt(sp.a2),
+    cashRec: sp.m1==='cash'?sp.a1:(sp.m2==='cash'?sp.a2:grand),
+    change: sp.m1==='cash'?Math.max(0,sp.a1-(grand-(sp.m2!=='cash'?sp.a2:0))):(sp.m2==='cash'?Math.max(0,sp.a2-(grand-(sp.m1!=='cash'?sp.a1:0))):0),
+    kasir:ST.cu.name, shiftId:ST.currentShift.id,
+    memberId:_cartMemberId||null, memberNama:_cartMemberId?(ST.members.find(function(x){return x.id===_cartMemberId;})||{}).nama||'':'',
+    poinEarned:_cartMemberId?Math.floor(grand/1000)*(CFG.poinPerRibu||1):0,
+    poinRedeemed:_cartPoinRedeem||0,
+    orderNote:ST.orderNote||'',
+  };
+  ST.transactions.push(trx);
+  ST.currentShift.transaksi = ST.currentShift.transaksi||[];
+  ST.currentShift.transaksi.push({id,total:grand,pay:'split',time:fmtTime(now)});
+  ST.currentShift.totalPenjualan = (ST.currentShift.totalPenjualan||0)+grand;
+  var addPay = function(m,amt){
+    if(m==='cash') ST.currentShift.tunai=(ST.currentShift.tunai||0)+Math.min(amt,grand);
+    else if(m==='qris') ST.currentShift.qris=(ST.currentShift.qris||0)+Math.min(amt,grand);
+    else ST.currentShift.transfer=(ST.currentShift.transfer||0)+Math.min(amt,grand);
+  };
+  addPay(sp.m1,sp.a1); addPay(sp.m2,sp.a2);
+  ST.cart=[]; $('disc-pct').value=0;
+  if($('order-note')) { $('order-note').value=''; ST.orderNote=''; }
+  renderCart();
+  addPoinAfterTrx(grand,_cartMemberId);
+  clearCartMember();
+  renderShiftPage();
+  showNotif('✅ Split '+id+' berhasil!','#00B894');
+  showReceipt(trx);
+  ST.splitPay = null;
+}
+
+// ═══════════════════════════════
+// 3. STRUK DAPUR
+// ═══════════════════════════════
+function cetakStrukDapur() {
+  if (!ST.cart.length) { showNotif('Keranjang kosong','#E17055'); return; }
+  var meja = $('cart-meja').value;
+  var orderNote = ($('order-note')||{}).value||'';
+  var now = new Date();
+  var html = '<div class="receipt-block" style="font-size:12px">';
+  html += '<div class="r-c r-b" style="font-size:14px;letter-spacing:.05em">[ STRUK DAPUR ]</div>';
+  html += '<div class="r-c" style="color:var(--txt2);font-size:11px">Bukan untuk pelanggan</div>';
+  html += '<hr class="r-d">';
+  html += '<div class="r-r"><span>Meja</span><b>' + (meja==='takeaway'?'TAKEAWAY':'Meja '+meja) + '</b></div>';
+  html += '<div class="r-r"><span>Waktu</span><span>' + fmtTime(now) + '</span></div>';
+  html += '<div class="r-r"><span>Kasir</span><span>' + ST.cu.name + '</span></div>';
+  if (orderNote) html += '<div style="background:var(--amber-bg);border-radius:4px;padding:5px 8px;font-size:11px;margin:4px 0"><b>📋 Catatan Meja:</b> ' + orderNote + '</div>';
+  html += '<hr class="r-d">';
+  html += '<div style="font-size:11px;font-weight:700;margin-bottom:6px">PESANAN:</div>';
+  ST.cart.forEach(function(item, i) {
+    html += '<div style="padding:5px 0;border-bottom:1px dashed var(--brd)">';
+    html += '<div style="font-size:13px;font-weight:700">' + item.qty + '× ' + item.name + '</div>';
+    if (item.varLabel) html += '<div style="font-size:11px;color:var(--accent);margin-left:16px">' + item.varLabel + '</div>';
+    if (item.note) html += '<div style="font-size:11px;color:var(--amber-dk);margin-left:16px;margin-top:2px">📝 ' + item.note + '</div>';
+    html += '</div>';
+  });
+  html += '<hr class="r-d">';
+  html += '<div style="font-size:11px;color:var(--txt2);text-align:center">Total ' + ST.cart.reduce(function(a,c){return a+c.qty;},0) + ' item</div>';
+  html += '</div>';
+  $('receipt-sub').textContent = 'Struk Dapur · ' + (meja==='takeaway'?'Takeaway':'Meja '+meja) + ' · ' + fmtTime(now);
+  $('receipt-body').innerHTML = html;
+  var waBtn = document.querySelector('#receipt-modal .modal-actions button[onclick="openWAModal(null)"]');
+  if (waBtn) waBtn.style.display = 'none';
+  $('receipt-modal').classList.remove('open');
+  setTimeout(function(){$('receipt-modal').classList.add('open');},10);
+}
+
+// ═══════════════════════════════
+// 4. CATATAN ORDER/MEJA
+// ═══════════════════════════════
+// Restore note when rendering cart
+var _origRenderCart = null;
+
+function clearOrderNote() {
+  ST.orderNote = '';
+  var el = $('order-note'); if(el) el.value='';
+}
+
+// ═══════════════════════════════
+// 5. RIWAYAT EDIT HARGA
+// ═══════════════════════════════
+function switchMenuTab(tab, btn) {
+  document.querySelectorAll('[id^="menu-tab-"]').forEach(function(b){b.classList.remove('active');});
+  if(btn) btn.classList.add('active');
+  var panels = ['daftar','harga'];
+  panels.forEach(function(p){
+    var el=$('menu-panel-'+p); if(el) el.style.display=p===tab?'block':'none';
+  });
+  if(tab==='harga') renderPriceLog();
+}
+
+function renderPriceLog() {
+  var log = ST.priceLog||[];
+  var empty = $('price-log-empty');
+  var tbl = $('price-log-table');
+  var tbody = $('price-log-body');
+  if (!log.length) {
+    if(empty) empty.style.display='block';
+    if(tbl) tbl.style.display='none';
+    return;
+  }
+  if(empty) empty.style.display='none';
+  if(tbl) tbl.style.display='';
+  if(tbody) tbody.innerHTML = log.slice().reverse().map(function(l) {
+    var diff = l.newPrice - l.oldPrice;
+    var diffColor = diff>0?'var(--green-dk)':diff<0?'var(--red-dk)':'var(--txt2)';
+    return '<tr>' +
+      '<td style="font-size:10px;color:var(--txt2)">' + l.date + '<br>' + l.time + '</td>' +
+      '<td><b>' + l.menuName + '</b></td>' +
+      '<td style="color:var(--txt2)">' + fmt(l.oldPrice) + '</td>' +
+      '<td style="font-weight:700">' + fmt(l.newPrice) + ' <span style="font-size:10px;color:'+diffColor+'">' + (diff>0?'+':'')+fmt(diff) + '</span></td>' +
+      '<td style="font-size:11px">' + l.changedBy + '</td></tr>';
+  }).join('');
 }
 
 function setLapPreset(preset, btn) {
