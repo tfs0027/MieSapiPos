@@ -1832,6 +1832,8 @@ function updateMejaSelect() {
 function openPay(method) {
   if (!ST.cart.length) { showNotif('Tambahkan menu terlebih dahulu', '#E17055'); return; }
   if (!isOpen()) { showNotif('⚠️ Buka kasir dahulu!', '#E17055'); return; }
+  // Close any open receipt modal (e.g. bon sementara) before payment
+  closeModal('receipt-modal');
   ST.payMethod = method;
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
   const disc = parseFloat($('disc-pct').value) || 0;
@@ -1917,7 +1919,6 @@ function processPayment() {
 }
 
 function showReceipt(trx) {
-  $('receipt-sub').textContent = trx.id + ' · ' + trx.time + ' · ' + trx.kasir;
   let html = '<div class="receipt-block">';
   if (CFG.se.logo) {
     if (CFG.logoImg) {
@@ -1962,17 +1963,14 @@ function showReceipt(trx) {
   if (CFG.se.footer && CFG.f1) html += '<div class="r-c" style="color:var(--txt2);font-size:9px">' + CFG.f1 + '</div>';
   if (CFG.se.footer && CFG.f2) html += '<div class="r-c" style="color:var(--txt2);font-size:9px">' + CFG.f2 + '</div>';
   html += '</div>';
-  // Show void warning if applicable
-  if (trx.voided) {
-    var voidBanner = '<div style="background:#FEE2E2;border:2px dashed #E24B4A;border-radius:8px;padding:10px 14px;margin-bottom:10px;text-align:center">' +
-      '<div style="font-size:13px;font-weight:700;color:#991B1B">⛔ TRANSAKSI VOID</div>' +
-      '<div style="font-size:11px;color:#7F1D1D;margin-top:4px">Dibatalkan oleh: ' + (trx.voidBy||'—') + '</div>' +
-      '<div style="font-size:11px;color:#7F1D1D">Waktu: ' + (trx.voidTime||'—') + '</div>' +
-      '<div style="font-size:12px;font-weight:600;color:#991B1B;margin-top:5px;padding-top:5px;border-top:1px dashed #FCA5A5">Alasan: ' + (trx.voidAlasan||'—') + '</div>' +
-      '</div>';
-    $('receipt-body').innerHTML = voidBanner + $('receipt-body').innerHTML;
-  }
-  $('receipt-modal').classList.add('open');
+  $('receipt-sub').textContent = trx.id + ' · ' + trx.time + ' · ' + trx.kasir;
+  $('receipt-body').innerHTML = html;
+  // Restore WA button visibility (may have been hidden by bon sementara)
+  var waBtn = document.querySelector('#receipt-modal .modal-actions button[onclick="openWAModal(null)"]');
+  if (waBtn) waBtn.style.display = '';
+  // Force close then open to ensure fresh modal render
+  $('receipt-modal').classList.remove('open');
+  setTimeout(function(){ $('receipt-modal').classList.add('open'); }, 10);
 }
 
 function viewReceipt(id) {
