@@ -4637,9 +4637,10 @@ async function testSbConnection() {
   if (!initSupabase()) { sbStatusBar('❌ Supabase belum dikonfigurasi', 'err'); return; }
   sbStatusBar('⏳ Menghubungkan...', 'loading');
   try {
-    var res = await _sb.from('restaurants').select('id,nama').eq('id', CFG.restaurantId).single();
+    var res = await _sb.from('restaurants').select('id,nama').eq('id', CFG.restaurantId);
     if (res.error) throw res.error;
-    sbStatusBar('✅ Terhubung! Restoran: ' + (res.data.nama||'—'), 'ok');
+    var nama = res.data && res.data.length ? res.data[0].nama : '(tidak ditemukan)';
+    sbStatusBar('✅ Terhubung! Restoran: ' + nama, 'ok');
     showNotif('✅ Koneksi Supabase berhasil!', '#00B894');
   } catch(e) {
     sbStatusBar('❌ Gagal: ' + (e.message||e), 'err');
