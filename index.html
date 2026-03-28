@@ -4682,7 +4682,7 @@ async function pushAllToSupabase() {
     var h2 = 0;
     for (var i=0; i<seed.length; i++) { h2 = Math.imul(37,h2)+seed.charCodeAt(i)|0; }
     var hex2 = (h2>>>0).toString(16).padStart(8,'0');
-    return hex.substr(0,8)+'-'+hex2.substr(0,4)+'-4'+hex.substr(4,3)+'-a'+hex2.substr(4,3)+'-'+hex+hex2;
+    return hex.substr(0,8)+'-'+hex2.substr(0,4)+'-4'+hex.substr(4,3)+'-a'+hex2.substr(4,3)+'-'+hex.substr(0,4)+hex2;
   }
   var errors = [];
   var ok = 0;
@@ -4858,7 +4858,7 @@ async function sbSyncTransaction(trx) {
   var rid = CFG.restaurantId;
   try {
     await _sb.from('transactions').upsert({
-      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x+x2;})(rid+'trx'+trx.id), restaurant_id: rid,
+      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'trx'+trx.id), restaurant_id: rid,
       trx_code: trx.id, subtotal: trx.subtotal||0,
       disc_pct: trx.disc||0, disc_amt: trx.discAmt||0,
       tax: trx.tax||0, total: trx.total||0,
@@ -4875,7 +4875,7 @@ async function sbSyncShift(sh) {
   var rid = CFG.restaurantId;
   try {
     await _sb.from('shifts').upsert({
-      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x+x2;})(rid+'shift'+sh.id), restaurant_id: rid,
+      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'shift'+sh.id), restaurant_id: rid,
       shift_code: sh.id, modal_awal: sh.modalAwal||0,
       status: sh.status, tanggal: sh.tanggal||'',
       waktu_tutup: sh.status==='closed' ? new Date().toISOString() : null,
@@ -4888,7 +4888,7 @@ async function sbSyncMenu(m) {
   var rid = CFG.restaurantId;
   try {
     await _sb.from('menus').upsert({
-      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x+x2;})(rid+'menu'+m.id+m.name), restaurant_id: rid,
+      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'menu'+m.id+m.name), restaurant_id: rid,
       nama: m.name, harga: m.price, emoji: m.emoji||'🍽️',
       status: m.status, opts: m.opts||[], terjual: m.sold||0,
     }, {onConflict:'id'});
@@ -4900,7 +4900,7 @@ async function sbSyncMember(m) {
   var rid = CFG.restaurantId;
   try {
     await _sb.from('members').upsert({
-      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x+x2;})(rid+'mbr'+m.hp), restaurant_id: rid,
+      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'mbr'+m.hp), restaurant_id: rid,
       nama: m.nama, hp: m.hp, catatan: m.catatan||'',
       poin: m.poin||0, total_trx: m.totalTrx||0, total_belanja: m.totalBelanja||0,
     }, {onConflict:'id'});
