@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WarungKu POS</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -689,7 +690,29 @@ tr:hover td{background:rgba(108,92,231,.03)}
             </div>
 
               <div class="card">
-              <div class="card-hd"><span class="card-title">💾 Backup &amp; Restore Data</span></div>
+              <div class="card-hd"><span class="card-title">☁️ Koneksi Database (Supabase)</span></div>
+              <div id="sb-status-bar" style="display:none;border-radius:var(--radius);padding:7px 10px;margin-bottom:10px;font-size:11px"></div>
+              <div class="form-group"><label class="form-lbl">Project URL</label>
+                <input class="fi" id="cfg-sb-url" placeholder="https://xxxxxxxxxx.supabase.co" oninput="CFG.sbUrl=this.value.trim()">
+              </div>
+              <div class="form-group"><label class="form-lbl">Anon Public Key</label>
+                <input class="fi" id="cfg-sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." oninput="CFG.sbKey=this.value.trim()">
+              </div>
+              <div class="form-group"><label class="form-lbl">Restaurant ID (UUID dari tabel restaurants)</label>
+                <input class="fi" id="cfg-sb-rid" placeholder="a1b2c3d4-e5f6-7890-abcd-ef1234567890" oninput="CFG.restaurantId=this.value.trim()">
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-primary" style="flex:1" onclick="saveSbConfig()">💾 Simpan & Sambungkan</button>
+                <button class="btn" style="flex:1" onclick="testSbConnection()">🔌 Test Koneksi</button>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                <button class="btn btn-primary" style="flex:1" onclick="pushAllToSupabase()">⬆️ Upload Semua Data ke DB</button>
+                <button class="btn" style="flex:1" onclick="pullAllFromSupabase()">⬇️ Load Data dari DB</button>
+              </div>
+              <div style="font-size:10px;color:var(--txt2);margin-top:8px;line-height:1.6">Upload: kirim semua data (menu, transaksi, shift, dll) ke Supabase. Load: ambil data dari Supabase ke aplikasi.</div>
+            </div>
+              <div class="card">
+              <div class="card-hd"><span class="card-title">💾 Backup &amp; Restore Data Lokal</span></div>
               <div style="font-size:11px;color:var(--txt2);line-height:1.7;margin-bottom:12px">
                 Export semua data (transaksi, shift, menu, stok, user, pengaturan) ke file JSON. 
                 Simpan file ini sebagai cadangan. Gunakan Restore untuk memulihkan data dari backup.
@@ -1326,6 +1349,7 @@ let CFG = {
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
   poinPerRibu:1, poinNilaiTukar:1000, poinMinRedeem:100,
+  sbUrl:'', sbKey:'', restaurantId:'',
   banks:[
     {nama:'Bank BCA', norek:'1234-5678-90', an:''},
     {nama:'Bank BNI', norek:'0987-6543-21', an:''},
@@ -2054,6 +2078,7 @@ function processPayment() {
   addPoinAfterTrx(grand, _cartMemberId);
   clearCartMember();
   showNotif('✅ ' + id + ' berhasil!', '#00B894');
+  sbSyncTransaction(trx);
   showReceipt(trx);
 }
 
@@ -2432,6 +2457,8 @@ function saveMenu() {
   if (ST.editMenuId) Object.assign(ST.menus.find(m=>m.id===ST.editMenuId), data);
   else ST.menus.push({...data,id:Date.now(),sold:0});
   closeModal('menu-modal'); renderMenuTable(); renderMenuGrid(); buildCatTabs();
+  var savedMenu = ST.editMenuId ? ST.menus.find(function(m){return m.id===ST.editMenuId;}) : ST.menus[ST.menus.length-1];
+  if (savedMenu) sbSyncMenu(savedMenu);
   showNotif('Menu disimpan');
 }
 
@@ -2941,6 +2968,7 @@ function processPaymentSplit() {
   clearCartMember();
   renderShiftPage();
   showNotif('✅ Split '+id+' berhasil!','#00B894');
+  sbSyncTransaction(trx);
   showReceipt(trx);
   ST.splitPay = null;
 }
@@ -4417,6 +4445,7 @@ function daftarMember() {
     bergabung: fmtDate(new Date()),
   };
   ST.members.push(newMember);
+  sbSyncMember(newMember);
   $('daftar-member-form').style.display = 'none';
   searchMember();
   showNotif('✅ Member ' + nama + ' terdaftar','#00B894');
@@ -4559,6 +4588,313 @@ function prosesRedeemPoin() {
   showNotif('🎁 ' + jumlah + ' poin ditukar = potongan Rp ' + diskon.toLocaleString('id-ID'), '#6C5CE7');
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// SUPABASE INTEGRATION
+// ═══════════════════════════════════════════════════════════
+var _sb = null; // Supabase client instance
+
+function initSupabase() {
+  if (!CFG.sbUrl || !CFG.sbKey) return false;
+  try {
+    _sb = window.supabase.createClient(CFG.sbUrl, CFG.sbKey);
+    return true;
+  } catch(e) {
+    console.error('Supabase init error:', e);
+    return false;
+  }
+}
+
+function sbStatusBar(msg, type) {
+  var el = $('sb-status-bar');
+  if (!el) return;
+  var colors = {
+    ok: 'background:var(--green-bg);color:var(--green-dk);border:1px solid #A7EDD3',
+    err: 'background:var(--red-bg);color:var(--red-dk);border:1px solid #F09595',
+    info: 'background:var(--blue-bg);color:var(--blue-dk);border:1px solid #85B7EB',
+    loading: 'background:var(--bg);color:var(--txt2);border:1px solid var(--brd)',
+  };
+  el.style.cssText = (colors[type]||colors.info) + ';display:block';
+  el.textContent = msg;
+}
+
+function saveSbConfig() {
+  var url = ($('cfg-sb-url').value||'').trim();
+  var key = ($('cfg-sb-key').value||'').trim();
+  var rid = ($('cfg-sb-rid').value||'').trim();
+  if (!url || !key || !rid) { showNotif('Isi URL, Key, dan Restaurant ID', '#E17055'); return; }
+  CFG.sbUrl = url; CFG.sbKey = key; CFG.restaurantId = rid;
+  saveCFG();
+  if (initSupabase()) {
+    sbStatusBar('✅ Konfigurasi disimpan. Klik Test Koneksi untuk verifikasi.', 'ok');
+    showNotif('✅ Konfigurasi Supabase disimpan', '#00B894');
+  } else {
+    sbStatusBar('❌ Gagal inisialisasi. Cek URL dan Key.', 'err');
+  }
+}
+
+async function testSbConnection() {
+  if (!initSupabase()) { sbStatusBar('❌ Supabase belum dikonfigurasi', 'err'); return; }
+  sbStatusBar('⏳ Menghubungkan...', 'loading');
+  try {
+    var res = await _sb.from('restaurants').select('id,nama').eq('id', CFG.restaurantId).single();
+    if (res.error) throw res.error;
+    sbStatusBar('✅ Terhubung! Restoran: ' + (res.data.nama||'—'), 'ok');
+    showNotif('✅ Koneksi Supabase berhasil!', '#00B894');
+  } catch(e) {
+    sbStatusBar('❌ Gagal: ' + (e.message||e), 'err');
+    showNotif('Koneksi gagal: ' + (e.message||''), '#E17055');
+  }
+}
+
+// ── PUSH (upload POS data → Supabase) ────────────────────────────────────────
+async function pushAllToSupabase() {
+  if (!initSupabase()) { showNotif('Konfigurasi Supabase dulu', '#E17055'); return; }
+  sbStatusBar('⏳ Mengupload data...', 'loading');
+  var rid = CFG.restaurantId;
+  var errors = [];
+  var ok = 0;
+
+  // Helper: upsert batch
+  async function upsert(table, rows, label) {
+    if (!rows || !rows.length) return;
+    try {
+      var res = await _sb.from(table).upsert(rows, {onConflict: 'id'});
+      if (res.error) errors.push(label + ': ' + res.error.message);
+      else ok++;
+    } catch(e) { errors.push(label + ': ' + (e.message||e)); }
+  }
+
+  // 1. Menu categories
+  var cats = MENU_CATS.map(function(nama, i) {
+    return {id: rid + '_cat_' + i, restaurant_id: rid, nama: nama, urutan: i};
+  });
+  await upsert('menu_categories', cats, 'Kategori Menu');
+
+  // 2. Menus
+  var menus = ST.menus.map(function(m) {
+    return {
+      id: rid + '_menu_' + m.id, restaurant_id: rid,
+      nama: m.name, harga: m.price, emoji: m.emoji||'🍽️',
+      status: m.status, opts: m.opts||[], terjual: m.sold||0,
+    };
+  });
+  await upsert('menus', menus, 'Menu');
+
+  // 3. Members
+  var members = ST.members.map(function(m) {
+    return {
+      id: rid + '_mbr_' + m.id, restaurant_id: rid,
+      nama: m.nama, hp: m.hp, catatan: m.catatan||'',
+      poin: m.poin||0, total_trx: m.totalTrx||0, total_belanja: m.totalBelanja||0,
+    };
+  });
+  await upsert('members', members, 'Member');
+
+  // 4. Users
+  var users = USERS.map(function(u) {
+    return {
+      id: rid + '_usr_' + u.id, restaurant_id: rid,
+      nama: u.name, pin_hash: u.pin, role: u.role, perms: u.perms||{},
+    };
+  });
+  await upsert('users', users, 'User');
+
+  // 5. Shifts (closed only)
+  var shifts = ST.shifts.map(function(sh) {
+    return {
+      id: rid + '_sh_' + sh.id, restaurant_id: rid,
+      shift_code: sh.id, modal_awal: sh.modalAwal||0,
+      status: sh.status, tanggal: sh.tanggal||'',
+      waktu_tutup: sh.status==='closed' ? new Date().toISOString() : null,
+    };
+  });
+  await upsert('shifts', shifts, 'Shift');
+
+  // 6. Transactions
+  var trxs = ST.transactions.map(function(t) {
+    return {
+      id: rid + '_trx_' + t.id, restaurant_id: rid,
+      trx_code: t.id, subtotal: t.subtotal||0,
+      disc_pct: t.disc||0, disc_amt: t.discAmt||0,
+      tax: t.tax||0, total: t.total||0,
+      pay_method: t.pay==='split'?'split':t.pay,
+      split_pay: t.splitPay||null,
+      meja: t.table||'', order_note: t.orderNote||'',
+      kasir_nama: t.kasir||'',
+      voided: t.voided||false, void_alasan: t.voidAlasan||'',
+      created_at: new Date().toISOString(),
+    };
+  });
+  await upsert('transactions', trxs, 'Transaksi');
+
+  // 7. Expenses
+  var exps = [];
+  ST.shifts.forEach(function(sh) {
+    (sh.pengeluaran||[]).forEach(function(p) {
+      exps.push({
+        id: rid + '_exp_' + p.id, restaurant_id: rid,
+        shift_id: rid + '_sh_' + sh.id,
+        nama: p.nama, nominal: p.nominal, kategori: p.kategori||'',
+        ket: p.ket||'', input_manual: p.inputManual||false,
+        input_by: p.inputBy||'',
+      });
+    });
+  });
+  await upsert('expenses', exps, 'Pengeluaran');
+
+  if (errors.length) {
+    sbStatusBar('⚠️ Selesai dengan ' + errors.length + ' error: ' + errors[0], 'err');
+    showNotif('Upload selesai, ada ' + errors.length + ' error', '#E17055');
+  } else {
+    sbStatusBar('✅ Upload selesai! ' + ok + ' tabel berhasil disinkronkan.', 'ok');
+    showNotif('✅ Semua data berhasil diupload ke Supabase!', '#00B894');
+  }
+}
+
+// ── PULL (load Supabase → POS) ────────────────────────────────────────────────
+async function pullAllFromSupabase() {
+  if (!initSupabase()) { showNotif('Konfigurasi Supabase dulu', '#E17055'); return; }
+  var rid = CFG.restaurantId;
+  if (!confirm('Load data dari Supabase? Data lokal saat ini akan diganti.')) return;
+  sbStatusBar('⏳ Mengambil data dari Supabase...', 'loading');
+
+  try {
+    // Load menus
+    var { data: menus, error: e1 } = await _sb.from('menus')
+      .select('*').eq('restaurant_id', rid).eq('status', 'available');
+    if (!e1 && menus && menus.length) {
+      ST.menus = menus.map(function(m, i) {
+        return {id: i+1, name: m.nama, price: m.harga, cat: m.kategori||'Makanan',
+          emoji: m.emoji||'🍽️', status: m.status, sold: m.terjual||0, opts: m.opts||[]};
+      });
+      buildCatTabs(); renderMenuGrid(); renderMenuTable();
+    }
+
+    // Load members
+    var { data: members, error: e2 } = await _sb.from('members')
+      .select('*').eq('restaurant_id', rid);
+    if (!e2 && members && members.length) {
+      ST.members = members.map(function(m) {
+        return {id: m.id, nama: m.nama, hp: m.hp, catatan: m.catatan||'',
+          poin: m.poin||0, totalTrx: m.total_trx||0, totalBelanja: m.total_belanja||0,
+          bergabung: m.bergabung||fmtDate(new Date())};
+      });
+    }
+
+    // Load transactions (last 30 days)
+    var d30 = new Date(); d30.setDate(d30.getDate()-30);
+    var { data: trxs, error: e3 } = await _sb.from('transactions')
+      .select('*').eq('restaurant_id', rid)
+      .gte('created_at', d30.toISOString()).order('created_at');
+    if (!e3 && trxs && trxs.length) {
+      ST.transactions = trxs.map(function(t) {
+        return {id: t.trx_code, time: t.created_at ? t.created_at.substr(11,5) : '',
+          date: t.created_at ? t.created_at.substr(0,10) : '',
+          table: t.meja||'', items: [], subtotal: t.subtotal||0,
+          disc: t.disc_pct||0, discAmt: t.disc_amt||0, tax: t.tax||0, total: t.total||0,
+          pay: t.pay_method, splitPay: t.split_pay, kasir: t.kasir_nama||'',
+          voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''};
+      });
+    }
+
+    // Load users
+    var { data: users, error: e4 } = await _sb.from('users')
+      .select('*').eq('restaurant_id', rid);
+    if (!e4 && users && users.length) {
+      USERS.length = 0;
+      users.forEach(function(u, i) {
+        USERS.push({id: i+1, name: u.nama, role: u.role, pin: u.pin_hash,
+          avatar: u.nama.split(' ').map(function(w){return w[0];}).join('').substr(0,2).toUpperCase(),
+          bg:'#A29BFE', tc:'#3C3489', perms: u.perms||{}});
+      });
+    }
+
+    renderRiwayat();
+    renderUsers();
+    sbStatusBar('✅ Data berhasil dimuat dari Supabase!', 'ok');
+    showNotif('✅ Data dari Supabase berhasil dimuat!', '#00B894');
+  } catch(e) {
+    sbStatusBar('❌ Gagal load: ' + (e.message||e), 'err');
+    showNotif('Gagal load dari Supabase', '#E17055');
+  }
+}
+
+// ── AUTO-SYNC after key operations ───────────────────────────────────────────
+async function sbSyncTransaction(trx) {
+  if (!_sb || !CFG.restaurantId) return;
+  var rid = CFG.restaurantId;
+  try {
+    await _sb.from('transactions').upsert({
+      id: rid + '_trx_' + trx.id, restaurant_id: rid,
+      trx_code: trx.id, subtotal: trx.subtotal||0,
+      disc_pct: trx.disc||0, disc_amt: trx.discAmt||0,
+      tax: trx.tax||0, total: trx.total||0,
+      pay_method: trx.pay==='split'?'split':trx.pay,
+      split_pay: trx.splitPay||null, meja: trx.table||'',
+      order_note: trx.orderNote||'', kasir_nama: trx.kasir||'',
+      voided: trx.voided||false, created_at: new Date().toISOString(),
+    }, {onConflict:'id'});
+  } catch(e) { console.warn('sbSyncTransaction:', e.message); }
+}
+
+async function sbSyncShift(sh) {
+  if (!_sb || !CFG.restaurantId) return;
+  var rid = CFG.restaurantId;
+  try {
+    await _sb.from('shifts').upsert({
+      id: rid + '_sh_' + sh.id, restaurant_id: rid,
+      shift_code: sh.id, modal_awal: sh.modalAwal||0,
+      status: sh.status, tanggal: sh.tanggal||'',
+      waktu_tutup: sh.status==='closed' ? new Date().toISOString() : null,
+    }, {onConflict:'id'});
+  } catch(e) { console.warn('sbSyncShift:', e.message); }
+}
+
+async function sbSyncMenu(m) {
+  if (!_sb || !CFG.restaurantId) return;
+  var rid = CFG.restaurantId;
+  try {
+    await _sb.from('menus').upsert({
+      id: rid + '_menu_' + m.id, restaurant_id: rid,
+      nama: m.name, harga: m.price, emoji: m.emoji||'🍽️',
+      status: m.status, opts: m.opts||[], terjual: m.sold||0,
+    }, {onConflict:'id'});
+  } catch(e) { console.warn('sbSyncMenu:', e.message); }
+}
+
+async function sbSyncMember(m) {
+  if (!_sb || !CFG.restaurantId) return;
+  var rid = CFG.restaurantId;
+  try {
+    await _sb.from('members').upsert({
+      id: rid + '_mbr_' + m.id, restaurant_id: rid,
+      nama: m.nama, hp: m.hp, catatan: m.catatan||'',
+      poin: m.poin||0, total_trx: m.totalTrx||0, total_belanja: m.totalBelanja||0,
+    }, {onConflict:'id'});
+  } catch(e) { console.warn('sbSyncMember:', e.message); }
+}
+
+// ── REALTIME subscription for online orders ───────────────────────────────────
+var _sbRealtimeSub = null;
+function startRealtimeOrders() {
+  if (!_sb || !CFG.restaurantId) return;
+  if (_sbRealtimeSub) return; // already subscribed
+  _sbRealtimeSub = _sb
+    .channel('online_orders_channel')
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'online_orders',
+      filter: 'restaurant_id=eq.' + CFG.restaurantId
+    }, function(payload) {
+      var order = payload.new;
+      showNotif('🔔 Pesanan baru masuk! ' + order.order_code + ' — ' + order.nama_pemesan, '#6C5CE7');
+      // Add to ST for display
+      if (!ST.onlineOrders) ST.onlineOrders = [];
+      ST.onlineOrders.unshift(order);
+    })
+    .subscribe();
+}
+
 function renderBankListCfg() {
   var el = $('bank-list-cfg'); if (!el) return;
   var banks = CFG.banks || [];
@@ -4632,6 +4968,10 @@ function renderSettings() {
   updatePrinterUI();
   renderStrukPreview();
   setLogoImgPreview(CFG.logoImg||null);
+  var sbUrl=$('cfg-sb-url'); if(sbUrl) sbUrl.value=CFG.sbUrl||'';
+  var sbKey=$('cfg-sb-key'); if(sbKey) sbKey.value=CFG.sbKey||'';
+  var sbRid=$('cfg-sb-rid'); if(sbRid) sbRid.value=CFG.restaurantId||'';
+  if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
 }
 
 function saveCfgToko() {
@@ -4894,6 +5234,7 @@ const doprint = () => {
 // ═══════════════════════════════
 // INIT
 // ═══════════════════════════════
+if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
 renderLogin();
 </script>
 </body>
