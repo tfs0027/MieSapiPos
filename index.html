@@ -4983,14 +4983,30 @@ function startRealtimeOrders() {
 // PESANAN ONLINE (POS side)
 // ═══════════════════════════════
 function renderRestoStatusUI(){
-  var isOpen=CFG.isOpen!==false;
+  var shiftOpen = isOpen(); // kasir sedang buka?
+  var warungOpen = CFG.isOpen!==false;
   var lbl=$('resto-status-label'), btn=$('toggle-open-btn');
-  if(lbl){ lbl.textContent=isOpen?'Warung Sedang Buka':'Warung Sedang Tutup'; lbl.style.color=isOpen?'var(--green-dk)':'var(--red-dk)'; }
-  if(btn){ btn.textContent=isOpen?'Tutup Warung':'Buka Warung'; btn.style.color=isOpen?'var(--red-dk)':'var(--green-dk)'; }
   var noteInp=$('closed-note-inp'); if(noteInp) noteInp.value=CFG.closedNote||'';
+  if(!shiftOpen){
+    // Kasir belum/sudah tutup — warung harus tutup, tidak bisa buka manual
+    if(lbl){ lbl.textContent='Kasir belum dibuka — Warung Tutup Otomatis'; lbl.style.color='var(--red-dk)'; }
+    if(btn){ btn.textContent='Kasir Harus Buka Dulu'; btn.disabled=true; btn.style.opacity='0.5'; btn.style.cursor='not-allowed'; }
+    // Force tutup jika shift belum buka
+    if(CFG.isOpen!==false){ CFG.isOpen=false; saveCFG(); syncRestoStatusToSupabase(); }
+    return;
+  }
+  // Kasir buka — bisa toggle manual
+  if(btn){ btn.disabled=false; btn.style.opacity=''; btn.style.cursor=''; }
+  if(lbl){ lbl.textContent=warungOpen?'Warung Sedang Buka':'Warung Sedang Tutup'; lbl.style.color=warungOpen?'var(--green-dk)':'var(--red-dk)'; }
+  if(btn){ btn.textContent=warungOpen?'Tutup Warung':'Buka Warung'; btn.style.color=warungOpen?'var(--red-dk)':'var(--green-dk)'; }
 }
 
 function toggleRestoOpen(){
+  if(!isOpen()){
+    showNotif('Buka kasir dahulu sebelum mengubah status warung','#E17055');
+    renderRestoStatusUI();
+    return;
+  }
   CFG.isOpen=CFG.isOpen===false?true:false;
   saveCFG();
   renderRestoStatusUI();
@@ -4999,6 +5015,10 @@ function toggleRestoOpen(){
 }
 
 function saveRestoStatus(){
+  if(!isOpen() && CFG.isOpen!==false){
+    showNotif('Tidak bisa simpan status — kasir belum dibuka','#E17055');
+    return;
+  }
   CFG.closedNote=($('closed-note-inp').value||'').trim()||'Maaf, warung sedang tutup.';
   saveCFG();
   syncRestoStatusToSupabase();
