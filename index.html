@@ -5020,15 +5020,14 @@ async function syncRestoStatusToSupabase(){
   }catch(e){ console.warn('syncRestoStatus:', e.message); }
 }
 
-async 
-function setOrderTab(tab, btn) {
+async function setOrderTab(tab, btn) {
   window._orderTab = tab;
   document.querySelectorAll('[id^="otab-"]').forEach(function(b){b.classList.remove('active');});
   if(btn) btn.classList.add('active');
   loadOnlineOrders();
 }
 
-function loadOnlineOrders(){
+async function loadOnlineOrders(){
   if(!_sb||!CFG.restaurantId){ showNotif('Sambungkan Supabase dulu','#E17055'); return; }
   var el=$('online-orders-list');
   if(el) el.innerHTML='<div style="text-align:center;padding:20px;color:var(--txt2);font-size:12px">⏳ Memuat...</div>';
@@ -5074,7 +5073,7 @@ function loadOnlineOrders(){
         // Proof of payment
         (o.bukti_bayar_url && o.pay_method!=='cod'?
           '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--txt2);margin-bottom:4px">BUKTI BAYAR:</div>'+
-          '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:pointer" onclick="var w=window.open();w.document.write('<img src=\''+this.src+'\' style=\'max-width:100%\'>')" style="cursor:zoom-in"></div>':'')+ 
+          '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:pointer" onclick="var w=window.open(this.src)" style="cursor:zoom-in"></div>':'')+ 
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (o.status==='pending'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="confirmed" data-ket="Pesanan dikonfirmasi">✅ Terima</button>'+
           '<button class="btn btn-sm" style="color:var(--red-dk)" data-oid="'+o.id+'" data-action="cancelled" data-ket="Pesanan ditolak">❌ Tolak</button>':'')+
