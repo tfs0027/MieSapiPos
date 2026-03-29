@@ -1277,7 +1277,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
 // ═══════════════════════════════
 const USERS = [
   {id:1,name:'Budi Santoso',role:'admin',pin:'1234',avatar:'BS',bg:'#A29BFE',tc:'#3C3489',
-   perms:{order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1}},
+   perms:{order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1}},
   {id:2,name:'Siti Rahayu',role:'kasir',pin:'5678',avatar:'SR',bg:'#00B894',tc:'#007A63',
    perms:{order:1,meja:1,shift:1,menu:0,stok:0,laporan:0,riwayat:1,users:0,settings:0,diskon:1,void_trx:0,edit_harga:0}},
   {id:3,name:'Andi Wijaya',role:'kasir',pin:'9012',avatar:'AW',bg:'#FDCB6E',tc:'#9A7D1A',
@@ -1501,13 +1501,14 @@ const NAV_ITEMS = [
   {id:'stok',label:'Stok Bahan Baku',icon:'📦',perm:'stok',sec:null},
   {id:'laporan',label:'Laporan Penjualan',icon:'📊',perm:'laporan',sec:'Laporan'},
   {id:'riwayat',label:'Riwayat Transaksi',icon:'📋',perm:'riwayat',sec:null},
+  {id:'online-order',label:'Pesanan Online',icon:'🛵',perm:'shift',sec:'Operasional Online'},
   {id:'users',label:'Manajemen User',icon:'👥',perm:'users',sec:'Pengaturan'},
   {id:'settings',label:'Pengaturan Toko',icon:'⚙️',perm:'settings',sec:null},
 ];
 const PAGE_TITLES = {
   order:'Kasir & Order',meja:'Manajemen Meja',shift:'Buka / Tutup Kasir',
   menu:'Menu & Harga',stok:'Stok Bahan Baku',laporan:'Laporan Penjualan',
-  riwayat:'Riwayat Transaksi',users:'Manajemen User',settings:'Pengaturan Toko',locked:'Akses Ditolak'
+  riwayat:'Riwayat Transaksi','online-order':'Pesanan Online',users:'Manajemen User',settings:'Pengaturan Toko',locked:'Akses Ditolak'
 };
 
 function buildSidebar() {
@@ -1521,6 +1522,7 @@ function buildSidebar() {
     const locked = !ST.cu.perms[item.perm];
     html += '<div class="nav-item' + (locked?' locked':'') + '" onclick="nav(\'' + (locked?'locked':item.id) + '\')" data-p="' + item.id + '">' +
             '<span class="nav-icon">' + item.icon + '</span>' + item.label +
+            (item.id==='online-order'?'<span id="online-order-badge" style="display:none;background:#E24B4A;color:#fff;border-radius:10px;font-size:9px;padding:1px 6px;margin-left:auto">0</span>':'')+
             (locked ? '<span style="margin-left:auto;font-size:10px;opacity:.5">🔒</span>' : '') +
             '</div>';
   });
