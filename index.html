@@ -2235,9 +2235,8 @@ function renderMenuTable() {
       : '<span style="font-size:11px;color:var(--txt3)">Hanya lihat</span>') +
     '</td></tr>'
   ).join('');
-}
-
   setTimeout(initMenuDrag, 50);
+}
 
 function toggleMenuStatus(id) {
   const m = ST.menus.find(x => x.id===id);
