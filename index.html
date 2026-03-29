@@ -659,6 +659,32 @@ tr:hover td{background:rgba(108,92,231,.03)}
         </div>
       </div>
 
+      <div class="page" id="page-online-order">
+        <!-- Open/Close toggle card -->
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-hd"><span class="card-title">🛵 Status Warung Online</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0">
+            <div>
+              <div style="font-size:13px;font-weight:700" id="resto-status-label">Warung Buka</div>
+              <div style="font-size:11px;color:var(--txt2);margin-top:2px">Pelanggan bisa melakukan pemesanan online</div>
+            </div>
+            <button class="btn btn-sm" id="toggle-open-btn" onclick="toggleRestoOpen()" style="min-width:80px">Tutup Warung</button>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-lbl">Pesan saat tutup</label>
+            <input class="fi" id="closed-note-inp" value="Maaf, warung sedang tutup. Silakan coba lagi nanti." style="font-size:11px">
+          </div>
+          <button class="btn btn-primary" style="width:100%" onclick="saveRestoStatus()">💾 Simpan Status</button>
+        </div>
+        <!-- Online orders list -->
+        <div class="card">
+          <div class="card-hd"><span class="card-title">📋 Pesanan Masuk</span>
+            <button class="btn btn-sm" onclick="loadOnlineOrders()">🔄 Refresh</button>
+          </div>
+          <div id="online-orders-list"><div style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">Klik Refresh untuk memuat pesanan</div></div>
+        </div>
+      </div>
+
       <div class="page" id="page-settings">
         <div class="g2">
           <div>
@@ -1349,6 +1375,8 @@ let CFG = {
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
   poinPerRibu:1, poinNilaiTukar:1000, poinMinRedeem:100,
+  isOpen:true, closedNote:'Maaf, warung sedang tutup. Silakan coba lagi nanti.',
+  qrisImg:null,
   sbUrl:'https://lztdvlrunspmcoewfjcg.supabase.co', sbKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4', restaurantId:'49ce0232-ce6d-4b67-bcb6-4e8df70844de',
   banks:[
     {nama:'Bank BCA', norek:'1234-5678-90', an:''},
@@ -1509,6 +1537,7 @@ function nav(p) {
   if (p === 'stok') renderStok();
   if (p === 'laporan') renderLaporan();
   if (p === 'riwayat') renderRiwayat();
+  if (p === 'online-order') { renderRestoStatusUI(); loadOnlineOrders(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
   if (p === 'settings') renderSettings();
@@ -4925,6 +4954,114 @@ function startRealtimeOrders() {
       ST.onlineOrders.unshift(order);
     })
     .subscribe();
+}
+
+
+// ═══════════════════════════════
+// PESANAN ONLINE (POS side)
+// ═══════════════════════════════
+function renderRestoStatusUI(){
+  var isOpen=CFG.isOpen!==false;
+  var lbl=$('resto-status-label'), btn=$('toggle-open-btn');
+  if(lbl){ lbl.textContent=isOpen?'Warung Sedang Buka':'Warung Sedang Tutup'; lbl.style.color=isOpen?'var(--green-dk)':'var(--red-dk)'; }
+  if(btn){ btn.textContent=isOpen?'Tutup Warung':'Buka Warung'; btn.style.color=isOpen?'var(--red-dk)':'var(--green-dk)'; }
+  var noteInp=$('closed-note-inp'); if(noteInp) noteInp.value=CFG.closedNote||'';
+}
+
+function toggleRestoOpen(){
+  CFG.isOpen=CFG.isOpen===false?true:false;
+  saveCFG();
+  renderRestoStatusUI();
+  syncRestoStatusToSupabase();
+  showNotif(CFG.isOpen?'✅ Warung sekarang BUKA':'🔒 Warung sekarang TUTUP', CFG.isOpen?'#00B894':'#E17055');
+}
+
+function saveRestoStatus(){
+  CFG.closedNote=($('closed-note-inp').value||'').trim()||'Maaf, warung sedang tutup.';
+  saveCFG();
+  syncRestoStatusToSupabase();
+  showNotif('✅ Status warung disimpan','#00B894');
+}
+
+async function syncRestoStatusToSupabase(){
+  if(!_sb||!CFG.restaurantId) return;
+  try{
+    await _sb.from('restaurants').update({
+      cfg: Object.assign({}, CFG, {isOpen:CFG.isOpen!==false, closedNote:CFG.closedNote||'', sbUrl:undefined, sbKey:undefined})
+    }).eq('id',CFG.restaurantId);
+  }catch(e){ console.warn('syncRestoStatus:', e.message); }
+}
+
+async function loadOnlineOrders(){
+  if(!_sb||!CFG.restaurantId){ showNotif('Sambungkan Supabase dulu','#E17055'); return; }
+  var el=$('online-orders-list');
+  if(el) el.innerHTML='<div style="text-align:center;padding:20px;color:var(--txt2);font-size:12px">⏳ Memuat...</div>';
+  try{
+    var res=await _sb.from('online_orders').select('*,delivery_addresses(*)').eq('restaurant_id',CFG.restaurantId).not('status','in','(delivered,cancelled)').order('created_at',{ascending:false});
+    if(res.error) throw res.error;
+    if(!el) return;
+    if(!res.data||!res.data.length){ el.innerHTML='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">Tidak ada pesanan aktif saat ini</div>'; return; }
+    // Update badge
+    var badge=$('online-order-badge');
+    if(badge){ badge.textContent=res.data.length; badge.style.display=res.data.length>0?'inline':'none'; }
+    el.innerHTML='';
+    res.data.forEach(function(o){
+      var addr=o.delivery_addresses||{};
+      var items=o.items_snapshot||[];
+      var payBadge={cod:'b-green',qris:'b-blue',transfer:'b-amber'}[o.pay_method]||'b-gray';
+      var payLabel={cod:'COD',qris:'QRIS',transfer:'Transfer'}[o.pay_method]||o.pay_method;
+      var statusColor={pending:'var(--amber-dk)',confirmed:'var(--blue-dk)',preparing:'var(--green-dk)',on_delivery:'#7C3AED',delivered:'var(--green-dk)',cancelled:'var(--red-dk)'}[o.status]||'var(--txt2)';
+      var statusLabel={pending:'Menunggu',confirmed:'Dikonfirmasi',preparing:'Dimasak',on_delivery:'Diantar',delivered:'Selesai',cancelled:'Dibatalkan'}[o.status]||o.status;
+      var now=new Date(o.created_at);
+      var timeStr=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+' · '+now.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
+      var card=document.createElement('div');
+      card.className='card'; card.style.marginBottom='8px'; card.style.padding='12px 14px';
+      card.innerHTML=
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">'+
+          '<div><div style="font-size:13px;font-weight:700">'+o.order_code+'</div>'+
+          '<div style="font-size:11px;color:var(--txt2)">'+o.nama_pemesan+' · '+o.hp_pemesan+' · '+timeStr+'</div></div>'+
+          '<span style="font-size:11px;font-weight:700;color:'+statusColor+';white-space:nowrap">'+statusLabel+'</span>'+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px;line-height:1.6">'+
+          items.map(function(i){return '<b>'+i.qty+'×</b> '+i.nama+(i.note?' <span style="color:var(--amber-dk)">('+i.note+')</span>':'');}).join(' · ')+'</div>'+
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+
+          '<span class="badge '+payBadge+'">'+payLabel+'</span>'+
+          '<span style="font-size:12px;font-weight:700">'+fmt(o.total)+'</span>'+
+          (o.ongkir?'<span style="font-size:11px;color:var(--txt2)">(ongkir: '+fmt(o.ongkir)+')</span>':'')+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--txt2);margin-bottom:8px">📍 '+addr.alamat_lengkap+'</div>'+
+        // Proof of payment
+        (o.bukti_bayar_url && o.pay_method!=='cod'?
+          '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--txt2);margin-bottom:4px">BUKTI BAYAR:</div>'+
+          '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:pointer" onclick="window.open(this.src)"></div>':'')+ 
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          (o.status==='pending'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="confirmed" data-ket="Pesanan dikonfirmasi">✅ Terima</button>'+
+          '<button class="btn btn-sm" style="color:var(--red-dk)" data-oid="'+o.id+'" data-action="cancelled" data-ket="Pesanan ditolak">❌ Tolak</button>':'')+
+          (o.status==='confirmed'?'<button class="btn btn-sm" style="color:var(--blue-dk)" data-oid="'+o.id+'" data-action="preparing" data-ket="Sedang dimasak">👨‍🍳 Mulai Masak</button>':'')+
+          (o.status==='preparing'?'<button class="btn btn-sm" style="color:#7C3AED" data-oid="'+o.id+'" data-action="on_delivery" data-ket="Kurir sedang mengantar">🛵 Kirim</button>':'')+
+          (o.status==='on_delivery'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="delivered" data-ket="Pesanan telah diterima">🎉 Selesai</button>':'')+
+          '<a class="btn btn-sm" href="https://wa.me/'+o.hp_pemesan.replace(/[^0-9]/g,'')+'" target="_blank" style="color:#25D366;border-color:#25D366;text-decoration:none">💬 WA</a>'+
+        '</div>';
+      el.appendChild(card);
+    });
+  }catch(e){ if(el) el.innerHTML='<div style="color:var(--red-dk);font-size:12px;padding:12px">Gagal: '+e.message+'</div>'; }
+  // Event delegation for action buttons
+  if(el) el.addEventListener('click',function(e){
+    var btn=e.target.closest('[data-action]');
+    if(!btn) return;
+    updateOrderStatus(btn.dataset.oid, btn.dataset.action, btn.dataset.ket, btn);
+  });
+}
+
+async function updateOrderStatus(orderId, status, ket, btn){
+  if(!_sb) return;
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  try{
+    await _sb.from('online_orders').update({status:status}).eq('id',orderId);
+    await _sb.from('order_status_log').insert({order_id:orderId,status:status,keterangan:ket,by_role:'warung'});
+    showNotif('✅ Status diperbarui: '+status,'#00B894');
+    loadOnlineOrders();
+  }catch(e){ showNotif('Gagal: '+e.message,'#E17055'); if(btn){btn.disabled=false;btn.textContent='Retry';} }
 }
 
 function renderBankListCfg() {
