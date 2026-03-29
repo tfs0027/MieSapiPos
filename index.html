@@ -4988,9 +4988,15 @@ function saveRestoStatus(){
 async function syncRestoStatusToSupabase(){
   if(!_sb||!CFG.restaurantId) return;
   try{
-    await _sb.from('restaurants').update({
-      cfg: Object.assign({}, CFG, {isOpen:CFG.isOpen!==false, closedNote:CFG.closedNote||'', sbUrl:undefined, sbKey:undefined})
-    }).eq('id',CFG.restaurantId);
+    var cfgToSync = {
+      isOpen: CFG.isOpen!==false,
+      closedNote: CFG.closedNote||'',
+      banks: CFG.banks||[],
+      qrisImg: CFG.qrisImg||null,
+      qrisNama: CFG.qrisNama||'',
+      qrisId: CFG.qrisId||'',
+    };
+    await _sb.from('restaurants').update({cfg: cfgToSync}).eq('id',CFG.restaurantId);
   }catch(e){ console.warn('syncRestoStatus:', e.message); }
 }
 
@@ -5169,6 +5175,7 @@ function saveCfgToko() {
   $('login-title').textContent = CFG.nama + ' POS';
   renderStrukPreview();
   showNotif('✅ Informasi toko disimpan','#00B894');
+  syncRestoStatusToSupabase();
 }
 
 function saveCfgPajak() {
