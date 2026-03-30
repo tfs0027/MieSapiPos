@@ -5344,12 +5344,19 @@ function closeBuktiOverlay() {
 // ── Alasan tolak modal ────────────────────────────────────────
 var _alasanOrderId = null;
 function openAlasanModal(orderId, orderCode) {
-  _alasanOrderId = orderId;
+  // Guard: reject null/undefined/empty orderId
+  if (!orderId || orderId === 'null' || orderId === 'undefined') {
+    showNotif('Error internal: ID pesanan kosong (' + orderId + '). Coba refresh halaman.', '#E17055');
+    console.error('openAlasanModal: invalid orderId =', orderId, '| orderCode =', orderCode);
+    return;
+  }
+  _alasanOrderId = String(orderId);
   var ov = $('alasan-overlay'), inp = $('alasan-input'), cd = $('alasan-order-code');
-  if (!ov) return;
+  if (!ov) { showNotif('Error: elemen modal tidak ditemukan', '#E17055'); return; }
   if (inp) { inp.value = ''; }
-  if (cd) cd.textContent = 'Pesanan: ' + (orderCode||'');
+  if (cd) cd.textContent = 'Pesanan: ' + (orderCode||orderId);
   ov.style.display = 'flex';
+  var dbg=$('alasan-debug-id'); if(dbg) dbg.textContent='ID: '+_alasanOrderId;
   if (inp) setTimeout(function(){ inp.focus(); }, 100);
 }
 
@@ -5369,10 +5376,14 @@ function submitAlasan() {
   var inp = $('alasan-input');
   var alasan = inp ? inp.value.trim() : '';
   if (!alasan) { showNotif('Alasan penolakan wajib diisi', '#E17055'); if(inp) inp.focus(); return; }
-  if (!_alasanOrderId) return;
+  if (!_alasanOrderId || _alasanOrderId === 'null' || _alasanOrderId === 'undefined') {
+    showNotif('Gagal: ID pesanan tidak valid. Tutup dan coba lagi.', '#E17055');
+    console.error('submitAlasan: _alasanOrderId invalid =', _alasanOrderId);
+    return;
+  }
+  var finalId = String(_alasanOrderId).trim();
   closeAlasanModal();
-  // Find the button that triggered this (use null — event delegation handles it)
-  updateOrderStatus(_alasanOrderId, 'cancelled', 'Ditolak: ' + alasan, null);
+  updateOrderStatus(finalId, 'cancelled', 'Ditolak: ' + alasan, null);
 }
 
 // ── WA number format ─────────────────────────────────────────
@@ -5752,6 +5763,7 @@ renderLogin();
   <div class="alasan-card">
     <div class="alasan-title">❌ Alasan Penolakan Pesanan</div>
     <div style="font-size:11px;color:var(--txt2);margin-bottom:10px" id="alasan-order-code"></div>
+    <div style="font-size:9px;color:var(--txt3);word-break:break-all" id="alasan-debug-id"></div>
     <textarea class="alasan-input" id="alasan-input" placeholder="Tulis alasan penolakan (wajib diisi)..."></textarea>
     <div class="alasan-btns">
       <button class="btn btn-danger" style="flex:1" onclick="submitAlasan()">❌ Tolak Pesanan</button>
