@@ -5142,6 +5142,19 @@ async function loadOnlineOrders(){
           (o.status==='on_delivery'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="delivered" data-ket="Pesanan telah diterima">🎉 Selesai</button>':'')+
           '<a class="btn btn-sm" href="https://wa.me/'+waNum(o.hp_pemesan)+'" target="_blank" style="color:#25D366;border-color:#25D366;text-decoration:none">💬 WA</a>'+
         '</div>';
+      // Direct onclick for all action buttons - avoids delegation issues
+      var tolakBtn = card.querySelector('[data-action="cancelled-prompt"]');
+      if (tolakBtn) {
+        (function(oid, code){
+          tolakBtn.removeAttribute('data-action');
+          tolakBtn.onclick = function(e){ e.stopPropagation(); openAlasanModal(oid, code); };
+        })(o.id, o.order_code);
+      }
+      card.querySelectorAll('[data-action]').forEach(function(btn){
+        (function(oid, action, ket){
+          btn.onclick = function(e){ e.stopPropagation(); updateOrderStatus(oid, action, ket, btn); };
+        })(o.id, btn.getAttribute('data-action'), btn.getAttribute('data-ket')||'');
+      });
       el.appendChild(card);
     });
   }catch(e){ if(el) el.innerHTML='<div style="color:var(--red-dk);font-size:12px;padding:12px">Gagal: '+e.message+'</div>'; }
