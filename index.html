@@ -5356,7 +5356,7 @@ function openAlasanModal(orderId, orderCode) {
   if (inp) { inp.value = ''; }
   if (cd) cd.textContent = 'Pesanan: ' + (orderCode||orderId);
   ov.style.display = 'flex';
-  var dbg=$('alasan-debug-id'); if(dbg) dbg.textContent='ID: '+_alasanOrderId;
+
   if (inp) setTimeout(function(){ inp.focus(); }, 100);
 }
 
@@ -5763,7 +5763,6 @@ renderLogin();
   <div class="alasan-card">
     <div class="alasan-title">❌ Alasan Penolakan Pesanan</div>
     <div style="font-size:11px;color:var(--txt2);margin-bottom:10px" id="alasan-order-code"></div>
-    <div style="font-size:9px;color:var(--txt3);word-break:break-all" id="alasan-debug-id"></div>
     <textarea class="alasan-input" id="alasan-input" placeholder="Tulis alasan penolakan (wajib diisi)..."></textarea>
     <div class="alasan-btns">
       <button class="btn btn-danger" style="flex:1" onclick="submitAlasan()">❌ Tolak Pesanan</button>
