@@ -1555,7 +1555,7 @@ function nav(p) {
   if (p === 'stok') renderStok();
   if (p === 'laporan') renderLaporan();
   if (p === 'riwayat') renderRiwayat();
-  if (p === 'online-order') { renderRestoStatusUI(); loadOnlineOrders(); }
+  if (p === 'online-order') { renderRestoStatusUI(); loadOnlineOrders(); window._initOrderDelegation && window._initOrderDelegation(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
   if (p === 'settings') renderSettings();
@@ -5127,21 +5127,35 @@ async function loadOnlineOrders(){
       el.appendChild(card);
     });
   }catch(e){ if(el) el.innerHTML='<div style="color:var(--red-dk);font-size:12px;padding:12px">Gagal: '+e.message+'</div>'; }
-  // Event delegation for action buttons
-  if(el) el.addEventListener('click',function(e){
-    var btn=e.target.closest('[data-action]');
-    if(!btn) return;
-    if(btn.dataset.action==='cancelled-prompt'){
-      // Find order code for display
-      var card=btn.closest('.card');
-      var codeEl=card?card.querySelector('[style*="font-weight:700"]'):null;
-      var code=codeEl?codeEl.textContent.trim():btn.dataset.oid;
-      openAlasanModal(btn.dataset.oid, code);
-    } else {
-      updateOrderStatus(btn.dataset.oid, btn.dataset.action, btn.dataset.ket, btn);
-    }
-  });
 }
+
+
+// ── Pesanan Online: event delegation (sekali saja) ────────────────────────
+(function() {
+  var _delegated = false;
+  var _origRender = renderRestoStatusUI;
+  // We'll attach when online-order page is first shown
+  window._initOrderDelegation = function() {
+    if (_delegated) return;
+    var el = $('online-orders-list');
+    if (!el) return;
+    _delegated = true;
+    document.addEventListener('click', function(e) {
+      // Only handle clicks inside online-orders-list
+      if (!e.target.closest('#online-orders-list')) return;
+      var btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      if (btn.dataset.action === 'cancelled-prompt') {
+        var card = btn.closest('.card');
+        var codeEl = card ? card.querySelector('[style*="font-size:13px"]') : null;
+        var code = codeEl ? codeEl.textContent.trim() : (btn.dataset.oid || '');
+        openAlasanModal(btn.dataset.oid, code);
+      } else {
+        updateOrderStatus(btn.dataset.oid, btn.dataset.action, btn.dataset.ket, btn);
+      }
+    });
+  };
+})();
 
 async function updateOrderStatus(orderId, status, ket, btn){
   if(!_sb) return;
@@ -5160,6 +5174,18 @@ async function updateOrderStatus(orderId, status, ket, btn){
       }
     }
     showNotif('✅ Status diperbarui: '+status,'#00B894');
+    // Auto-switch tab after terminal status
+    if (status === 'cancelled') {
+      window._orderTab = 'cancelled';
+      var cancelTab = $('otab-cancelled');
+      document.querySelectorAll('[id^="otab-"]').forEach(function(b){b.classList.remove('active');});
+      if (cancelTab) cancelTab.classList.add('active');
+    } else if (status === 'delivered') {
+      window._orderTab = 'done';
+      var doneTab = $('otab-done');
+      document.querySelectorAll('[id^="otab-"]').forEach(function(b){b.classList.remove('active');});
+      if (doneTab) doneTab.classList.add('active');
+    }
     loadOnlineOrders();
   }catch(e){ showNotif('Gagal: '+e.message,'#E17055'); if(btn){btn.disabled=false;btn.textContent='Retry';} }
 }
