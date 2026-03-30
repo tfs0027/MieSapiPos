@@ -5143,7 +5143,7 @@ async function loadOnlineOrders(){
   });
 }
 
-async async function updateOrderStatus(orderId, status, ket, btn){
+async function updateOrderStatus(orderId, status, ket, btn){
   if(!_sb) return;
   if(btn){btn.disabled=true;btn.textContent='⏳';}
   try{
