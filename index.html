@@ -247,6 +247,15 @@ tr:hover td{background:rgba(108,92,231,.03)}
   .receipt-block img { max-width: 60mm !important; }
   .modal-actions, .btn, button { display: none !important; }
 }
+
+/* Lightbox & alasan modal */
+.overlay-dark{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.lightbox-img{max-width:100%;max-height:90vh;border-radius:12px;display:block;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.alasan-card{background:var(--bg);border-radius:var(--radius-lg);padding:20px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(0,0,0,.3)}
+.alasan-title{font-size:14px;font-weight:700;color:var(--txt);margin-bottom:12px}
+.alasan-input{width:100%;padding:10px 12px;border:1.5px solid var(--brd2);border-radius:var(--radius);font-size:12px;font-family:inherit;color:var(--txt);background:var(--bg);outline:none;resize:vertical;min-height:80px}
+.alasan-input:focus{border-color:var(--red-dk)}
+.alasan-btns{display:flex;gap:8px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -5106,14 +5115,14 @@ async function loadOnlineOrders(){
         // Proof of payment
         (o.bukti_bayar_url && o.pay_method!=='cod'?
           '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--txt2);margin-bottom:4px">BUKTI BAYAR:</div>'+
-          '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:pointer" onclick="var w=window.open(this.src)" style="cursor:zoom-in"></div>':'')+ 
+          '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:pointer" onclick="openBuktiOverlay(this.src)" style="cursor:zoom-in"></div>':'')+ 
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (o.status==='pending'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="confirmed" data-ket="Pesanan dikonfirmasi">✅ Terima</button>'+
           '<button class="btn btn-sm" style="color:var(--red-dk)" data-oid="'+o.id+'" data-action="cancelled" data-ket="Pesanan ditolak">❌ Tolak</button>':'')+
           (o.status==='confirmed'?'<button class="btn btn-sm" style="color:var(--blue-dk)" data-oid="'+o.id+'" data-action="preparing" data-ket="Sedang dimasak">👨‍🍳 Mulai Masak</button>':'')+
           (o.status==='preparing'?'<button class="btn btn-sm" style="color:#7C3AED" data-oid="'+o.id+'" data-action="on_delivery" data-ket="Kurir sedang mengantar">🛵 Kirim</button>':'')+
           (o.status==='on_delivery'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="delivered" data-ket="Pesanan telah diterima">🎉 Selesai</button>':'')+
-          '<a class="btn btn-sm" href="https://wa.me/'+o.hp_pemesan.replace(/[^0-9]/g,'')+'" target="_blank" style="color:#25D366;border-color:#25D366;text-decoration:none">💬 WA</a>'+
+          '<a class="btn btn-sm" href="https://wa.me/'+waNum(o.hp_pemesan)+'" target="_blank" style="color:#25D366;border-color:#25D366;text-decoration:none">💬 WA</a>'+
         '</div>';
       el.appendChild(card);
     });
@@ -5123,10 +5132,11 @@ async function loadOnlineOrders(){
     var btn=e.target.closest('[data-action]');
     if(!btn) return;
     if(btn.dataset.action==='cancelled-prompt'){
-      var alasan=prompt('Alasan penolakan pesanan:','');
-      if(alasan===null) return;
-      if(!alasan.trim()){ showNotif('Alasan wajib diisi','#E17055'); return; }
-      updateOrderStatus(btn.dataset.oid,'cancelled','Ditolak: '+alasan.trim(),btn);
+      // Find order code for display
+      var card=btn.closest('.card');
+      var codeEl=card?card.querySelector('[style*="font-weight:700"]'):null;
+      var code=codeEl?codeEl.textContent.trim():btn.dataset.oid;
+      openAlasanModal(btn.dataset.oid, code);
     } else {
       updateOrderStatus(btn.dataset.oid, btn.dataset.action, btn.dataset.ket, btn);
     }
@@ -5231,6 +5241,55 @@ function initMenuDrag() {
       showNotif('✅ Urutan menu disimpan','#00B894');
     });
   });
+}
+
+
+// ── Lightbox bukti bayar ─────────────────────────────────────
+function openBuktiOverlay(src) {
+  var el = $('bukti-overlay'), img = $('bukti-img-el');
+  if (!el || !img) return;
+  img.src = src;
+  el.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeBuktiOverlay() {
+  var el = $('bukti-overlay');
+  if (el) el.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// ── Alasan tolak modal ────────────────────────────────────────
+var _alasanOrderId = null;
+function openAlasanModal(orderId, orderCode) {
+  _alasanOrderId = orderId;
+  var ov = $('alasan-overlay'), inp = $('alasan-input'), cd = $('alasan-order-code');
+  if (!ov) return;
+  if (inp) { inp.value = ''; }
+  if (cd) cd.textContent = 'Pesanan: ' + orderCode;
+  ov.style.display = 'flex';
+  if (inp) setTimeout(function(){ inp.focus(); }, 100);
+}
+function closeAlasanModal() {
+  var ov = $('alasan-overlay');
+  if (ov) ov.style.display = 'none';
+  _alasanOrderId = null;
+}
+function submitAlasan() {
+  var inp = $('alasan-input');
+  var alasan = inp ? inp.value.trim() : '';
+  if (!alasan) { showNotif('Alasan penolakan wajib diisi', '#E17055'); if(inp) inp.focus(); return; }
+  if (!_alasanOrderId) return;
+  closeAlasanModal();
+  // Find the button that triggered this (use null — event delegation handles it)
+  updateOrderStatus(_alasanOrderId, 'cancelled', 'Ditolak: ' + alasan, null);
+}
+
+// ── WA number format ─────────────────────────────────────────
+function waNum(hp) {
+  var n = (hp || '').replace(/[^0-9]/g, '');
+  if (n.startsWith('0')) n = '62' + n.slice(1);
+  else if (!n.startsWith('62')) n = '62' + n;
+  return n;
 }
 
 function renderBankListCfg() {
@@ -5587,5 +5646,29 @@ const doprint = () => {
 if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
 renderLogin();
 </script>
+
+<!-- Lightbox bukti bayar -->
+<div id="bukti-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:2000;align-items:center;justify-content:center;padding:20px" onclick="closeBuktiOverlay()">
+  <div style="position:relative;max-width:500px;width:100%" onclick="event.stopPropagation()">
+    <img id="bukti-img-el" src="" style="max-width:100%;max-height:85vh;border-radius:12px;display:block;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+    <button onclick="closeBuktiOverlay()" style="position:absolute;top:-12px;right:-12px;width:32px;height:32px;border-radius:50%;background:#fff;border:none;font-size:16px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)">✕</button>
+    <div style="text-align:center;margin-top:10px;font-size:11px;color:rgba(255,255,255,.6)">Klik di luar gambar untuk menutup</div>
+  </div>
+</div>
+
+<!-- Alasan tolak modal -->
+<div id="alasan-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center;padding:20px">
+  <div class="alasan-card">
+    <div class="alasan-title">❌ Alasan Penolakan Pesanan</div>
+    <div style="font-size:11px;color:var(--txt2);margin-bottom:10px" id="alasan-order-code"></div>
+    <textarea class="alasan-input" id="alasan-input" placeholder="Tulis alasan penolakan (wajib diisi)..."></textarea>
+    <div class="alasan-btns">
+      <button class="btn btn-danger" style="flex:1" onclick="submitAlasan()">❌ Tolak Pesanan</button>
+      <button class="btn" onclick="closeAlasanModal()">Batal</button>
+    </div>
+  </div>
+</div>
+
+
 </body>
 </html>
