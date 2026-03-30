@@ -5078,91 +5078,140 @@ async function loadOnlineOrders(){
     var selectFields = statusFilter==='cancelled'
       ? '*,delivery_addresses(*),order_status_log(status,keterangan,created_at)'
       : '*,delivery_addresses(*)';
-    var q=_sb.from('online_orders').select(selectFields).eq('restaurant_id',CFG.restaurantId).order('created_at',{ascending:false}).limit(50);
+    var q=_sb.from('online_orders').select(selectFields)
+      .eq('restaurant_id',CFG.restaurantId)
+      .order('created_at',{ascending:false}).limit(50);
     if(statusFilter==='active') q=q.not('status','in','(delivered,cancelled)');
     else if(statusFilter==='done') q=q.in('status',['delivered']);
     else if(statusFilter==='cancelled') q=q.in('status',['cancelled']);
     var res=await q;
     if(res.error) throw res.error;
     if(!el) return;
-    var orders = res.data||[];
-    // Client-side fallback filter for active tab
+    var orders=res.data||[];
     if(statusFilter==='active') orders=orders.filter(function(o){return o.status!=='cancelled'&&o.status!=='delivered';});
-    if(!orders.length){ el.innerHTML='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">Tidak ada pesanan aktif saat ini</div>'; return; }
-    // Update badge
+    if(!orders.length){
+      var emptyMsg={active:'Tidak ada pesanan aktif',done:'Tidak ada pesanan selesai',cancelled:'Tidak ada pesanan ditolak'}[statusFilter]||'Tidak ada pesanan';
+      el.innerHTML='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">'+emptyMsg+'</div>';
+      return;
+    }
     var badge=$('online-order-badge');
     if(badge){ badge.textContent=orders.length; badge.style.display=orders.length>0?'inline':'none'; }
     el.innerHTML='';
     orders.forEach(function(o){
       var addr=o.delivery_addresses||{};
       var items=o.items_snapshot||[];
-      var payBadge={cod:'b-green',qris:'b-blue',transfer:'b-amber'}[o.pay_method]||'b-gray';
       var payLabel={cod:'COD',qris:'QRIS',transfer:'Transfer'}[o.pay_method]||o.pay_method;
+      var payBadge={cod:'b-green',qris:'b-blue',transfer:'b-amber'}[o.pay_method]||'b-gray';
       var statusColor={pending:'var(--amber-dk)',confirmed:'var(--blue-dk)',preparing:'var(--green-dk)',on_delivery:'#7C3AED',delivered:'var(--green-dk)',cancelled:'var(--red-dk)'}[o.status]||'var(--txt2)';
       var statusLabel={pending:'Menunggu',confirmed:'Dikonfirmasi',preparing:'Dimasak',on_delivery:'Diantar',delivered:'Selesai',cancelled:'Dibatalkan'}[o.status]||o.status;
-      var now=new Date(o.created_at);
-      var timeStr=now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+' · '+now.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
+      var dt=new Date(o.created_at);
+      var timeStr=dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+' · '+dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
+
+      // Build alasan text for cancelled
+      var alasanHtml='';
+      if(o.status==='cancelled'){
+        var logs=o.order_status_log||[];
+        var cl=logs.find(function(l){return l.status==='cancelled';});
+        if(cl&&cl.keterangan){
+          alasanHtml='<div style="background:#FCEBEB;border:1px solid #F09595;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:11px">'+
+            '<div style="font-weight:700;color:#A32D2D;margin-bottom:2px">Alasan Penolakan:</div>'+
+            '<div style="color:#791F1F">'+cl.keterangan+'</div></div>';
+        }
+      }
+
       var card=document.createElement('div');
-      card.className='card'; card.style.marginBottom='8px'; card.style.padding='12px 14px';
+      card.className='card';
+      card.style.marginBottom='8px';
+      card.style.padding='12px 14px';
       card.innerHTML=
         '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">'+
-          '<div><div style="font-size:13px;font-weight:700">'+o.order_code+'</div>'+
-          '<div style="font-size:11px;color:var(--txt2)">'+o.nama_pemesan+' · '+o.hp_pemesan+' · '+timeStr+'</div></div>'+
+          '<div>'+
+            '<div style="font-size:13px;font-weight:700">'+o.order_code+'</div>'+
+            '<div style="font-size:11px;color:var(--txt2)">'+o.nama_pemesan+' · '+o.hp_pemesan+' · '+timeStr+'</div>'+
+          '</div>'+
           '<span style="font-size:11px;font-weight:700;color:'+statusColor+';white-space:nowrap">'+statusLabel+'</span>'+
         '</div>'+
         '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px;line-height:1.6">'+
-          items.map(function(i){return '<b>'+i.qty+'×</b> '+i.nama+(i.note?' <span style="color:var(--amber-dk)">('+i.note+')</span>':'');}).join(' · ')+'</div>'+
+          items.map(function(i){return '<b>'+i.qty+'×</b> '+i.nama+(i.note?' <span style="color:var(--amber-dk)">('+i.note+')</span>':'');}).join(' · ')+
+        '</div>'+
         '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+
           '<span class="badge '+payBadge+'">'+payLabel+'</span>'+
           '<span style="font-size:12px;font-weight:700">'+fmt(o.total)+'</span>'+
           (o.ongkir?'<span style="font-size:11px;color:var(--txt2)">(ongkir: '+fmt(o.ongkir)+')</span>':'')+
         '</div>'+
-        '<div style="font-size:11px;color:var(--txt2);margin-bottom:8px">📍 '+addr.alamat_lengkap+'</div>'+
-        (function(){
-          if(o.status!=='cancelled') return '';
-          var logs=o.order_status_log||[];
-          var cl=logs.find(function(l){return l.status==='cancelled';});
-          if(!cl||!cl.keterangan) return '';
-          return '<div style="background:#FCEBEB;border:1px solid #F09595;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:11px">'+
-            '<div style="font-weight:700;color:#A32D2D;margin-bottom:2px">Alasan Penolakan:</div>'+
-            '<div style="color:#791F1F">'+cl.keterangan+'</div></div>';
-        })()+
-        (function(){
-          if(o.status!=='cancelled') return '';
-          return '';
-        })()+
-        // Proof of payment
-        (o.bukti_bayar_url && o.pay_method!=='cod'?
-          '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--txt2);margin-bottom:4px">BUKTI BAYAR:</div>'+
-          '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:pointer" onclick="openBuktiOverlay(this.src)" style="cursor:zoom-in"></div>':'')+ 
-        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
-          (o.status==='pending'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="confirmed" data-ket="Pesanan dikonfirmasi">✅ Terima</button>'+'<button class="btn btn-sm" style="color:var(--red-dk)" onclick="_posOpenAlasan(this)" data-order-id="'+o.id+'" data-order-code="'+o.order_code+'">❌ Tolak</button>':'')+
-          (o.status==='confirmed'?'<button class="btn btn-sm" style="color:var(--blue-dk)" data-oid="'+o.id+'" data-action="preparing" data-ket="Sedang dimasak">👨‍🍳 Mulai Masak</button>':'')+
-          (o.status==='preparing'?'<button class="btn btn-sm" style="color:#7C3AED" data-oid="'+o.id+'" data-action="on_delivery" data-ket="Kurir sedang mengantar">🛵 Kirim</button>':'')+
-          (o.status==='on_delivery'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="delivered" data-ket="Pesanan telah diterima">🎉 Selesai</button>':'')+
-          '<a class="btn btn-sm" href="https://wa.me/'+waNum(o.hp_pemesan)+'" target="_blank" style="color:#25D366;border-color:#25D366;text-decoration:none">💬 WA</a>'+
-        '</div>';
-      // Direct onclick for all action buttons - avoids delegation issues
-      var tolakBtn = card.querySelector('[data-action="cancelled-prompt"]');
-      if (tolakBtn) {
-        (function(oid, code){
-          tolakBtn.removeAttribute('data-action');
-          tolakBtn.onclick = function(e){ e.stopPropagation(); openAlasanModal(oid, code); };
-        })(o.id, o.order_code);
+        '<div style="font-size:11px;color:var(--txt2);margin-bottom:8px">📍 '+(addr.alamat_lengkap||'—')+'</div>'+
+        alasanHtml+
+        (o.bukti_bayar_url&&o.pay_method!=='cod'?
+          '<div style="margin-bottom:8px">'+
+            '<div style="font-size:10px;font-weight:700;color:var(--txt2);margin-bottom:4px">BUKTI BAYAR:</div>'+
+            '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:zoom-in" id="bukti-'+o.id+'">'+
+          '</div>':'')+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap" id="actions-'+o.id+'"></div>';
+
+      // Wire bukti bayar click
+      if(o.bukti_bayar_url&&o.pay_method!=='cod'){
+        var buktiImg=card.querySelector('#bukti-'+o.id);
+        if(buktiImg)(function(src){buktiImg.onclick=function(){openBuktiOverlay(src);};})(o.bukti_bayar_url);
       }
-      card.querySelectorAll('[data-action]').forEach(function(btn){
-        (function(oid, action, ket){
-          btn.onclick = function(e){ e.stopPropagation(); updateOrderStatus(oid, action, ket, btn); };
-        })(o.id, btn.getAttribute('data-action'), btn.getAttribute('data-ket')||'');
-      });
+
+      // Wire action buttons using createElement - no string escaping
+      var actDiv=card.querySelector('#actions-'+o.id);
+      if(actDiv){
+        // WA button always shown
+        var waBtn=document.createElement('a');
+        waBtn.className='btn btn-sm';
+        waBtn.href='https://wa.me/'+waNum(o.hp_pemesan);
+        waBtn.target='_blank';
+        waBtn.style.color='#25D366';
+        waBtn.style.borderColor='#25D366';
+        waBtn.style.textDecoration='none';
+        waBtn.textContent='💬 WA';
+        actDiv.appendChild(waBtn);
+
+        if(o.status==='pending'){
+          var terimaBtn=document.createElement('button');
+          terimaBtn.className='btn btn-sm';
+          terimaBtn.style.color='var(--green-dk)';
+          terimaBtn.textContent='✅ Terima';
+          (function(oid){terimaBtn.onclick=function(){updateOrderStatus(oid,'confirmed','Pesanan dikonfirmasi',terimaBtn);};})(o.id);
+          actDiv.insertBefore(terimaBtn, waBtn);
+
+          var tolakBtn=document.createElement('button');
+          tolakBtn.className='btn btn-sm';
+          tolakBtn.style.color='var(--red-dk)';
+          tolakBtn.textContent='❌ Tolak';
+          (function(oid,code){tolakBtn.onclick=function(){openAlasanModal(oid,code);};})(o.id,o.order_code);
+          actDiv.insertBefore(tolakBtn, waBtn);
+        }
+        if(o.status==='confirmed'){
+          var masakBtn=document.createElement('button');
+          masakBtn.className='btn btn-sm';
+          masakBtn.style.color='var(--blue-dk)';
+          masakBtn.textContent='👨‍🍳 Mulai Masak';
+          (function(oid){masakBtn.onclick=function(){updateOrderStatus(oid,'preparing','Sedang dimasak',masakBtn);};})(o.id);
+          actDiv.insertBefore(masakBtn, waBtn);
+        }
+        if(o.status==='preparing'){
+          var kirimBtn=document.createElement('button');
+          kirimBtn.className='btn btn-sm';
+          kirimBtn.style.color='#7C3AED';
+          kirimBtn.textContent='🛵 Kirim';
+          (function(oid){kirimBtn.onclick=function(){updateOrderStatus(oid,'on_delivery','Kurir sedang mengantar',kirimBtn);};})(o.id);
+          actDiv.insertBefore(kirimBtn, waBtn);
+        }
+        if(o.status==='on_delivery'){
+          var selesaiBtn=document.createElement('button');
+          selesaiBtn.className='btn btn-sm';
+          selesaiBtn.style.color='var(--green-dk)';
+          selesaiBtn.textContent='🎉 Selesai';
+          (function(oid){selesaiBtn.onclick=function(){updateOrderStatus(oid,'delivered','Pesanan telah diterima',selesaiBtn);};})(o.id);
+          actDiv.insertBefore(selesaiBtn, waBtn);
+        }
+      }
       el.appendChild(card);
     });
   }catch(e){ if(el) el.innerHTML='<div style="color:var(--red-dk);font-size:12px;padding:12px">Gagal: '+e.message+'</div>'; }
 }
-
-
-// ── Pesanan Online: action buttons wired directly via card.querySelectorAll ──
-window._initOrderDelegation = function(){};
 
 async function updateOrderStatus(orderId, status, ket, btn){
   if(!_sb) return;
