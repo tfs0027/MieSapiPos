@@ -5075,19 +5075,25 @@ async function loadOnlineOrders(){
   if(el) el.innerHTML='<div style="text-align:center;padding:20px;color:var(--txt2);font-size:12px">⏳ Memuat...</div>';
   try{
     var statusFilter=window._orderTab||'active';
-    var q=_sb.from('online_orders').select('*,delivery_addresses(*)').eq('restaurant_id',CFG.restaurantId).order('created_at',{ascending:false}).limit(50);
+    var selectFields = statusFilter==='cancelled'
+      ? '*,delivery_addresses(*),order_status_log(status,keterangan,created_at)'
+      : '*,delivery_addresses(*)';
+    var q=_sb.from('online_orders').select(selectFields).eq('restaurant_id',CFG.restaurantId).order('created_at',{ascending:false}).limit(50);
     if(statusFilter==='active') q=q.not('status','in','(delivered,cancelled)');
     else if(statusFilter==='done') q=q.in('status',['delivered']);
     else if(statusFilter==='cancelled') q=q.in('status',['cancelled']);
     var res=await q;
     if(res.error) throw res.error;
     if(!el) return;
-    if(!res.data||!res.data.length){ el.innerHTML='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">Tidak ada pesanan aktif saat ini</div>'; return; }
+    var orders = res.data||[];
+    // Client-side fallback filter for active tab
+    if(statusFilter==='active') orders=orders.filter(function(o){return o.status!=='cancelled'&&o.status!=='delivered';});
+    if(!orders.length){ el.innerHTML='<div style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">Tidak ada pesanan aktif saat ini</div>'; return; }
     // Update badge
     var badge=$('online-order-badge');
-    if(badge){ badge.textContent=res.data.length; badge.style.display=res.data.length>0?'inline':'none'; }
+    if(badge){ badge.textContent=orders.length; badge.style.display=orders.length>0?'inline':'none'; }
     el.innerHTML='';
-    res.data.forEach(function(o){
+    orders.forEach(function(o){
       var addr=o.delivery_addresses||{};
       var items=o.items_snapshot||[];
       var payBadge={cod:'b-green',qris:'b-blue',transfer:'b-amber'}[o.pay_method]||'b-gray';
@@ -5112,6 +5118,19 @@ async function loadOnlineOrders(){
           (o.ongkir?'<span style="font-size:11px;color:var(--txt2)">(ongkir: '+fmt(o.ongkir)+')</span>':'')+
         '</div>'+
         '<div style="font-size:11px;color:var(--txt2);margin-bottom:8px">📍 '+addr.alamat_lengkap+'</div>'+
+        (function(){
+          if(o.status!=='cancelled') return '';
+          var logs=o.order_status_log||[];
+          var cl=logs.find(function(l){return l.status==='cancelled';});
+          if(!cl||!cl.keterangan) return '';
+          return '<div style="background:#FCEBEB;border:1px solid #F09595;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:11px">'+
+            '<div style="font-weight:700;color:#A32D2D;margin-bottom:2px">Alasan Penolakan:</div>'+
+            '<div style="color:#791F1F">'+cl.keterangan+'</div></div>';
+        })()+
+        (function(){
+          if(o.status!=='cancelled') return '';
+          return '';
+        })()+
         // Proof of payment
         (o.bukti_bayar_url && o.pay_method!=='cod'?
           '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--txt2);margin-bottom:4px">BUKTI BAYAR:</div>'+
@@ -5161,7 +5180,8 @@ async function updateOrderStatus(orderId, status, ket, btn){
   if(!_sb) return;
   if(btn){btn.disabled=true;btn.textContent='⏳';}
   try{
-    await _sb.from('online_orders').update({status:status}).eq('id',orderId);
+    var upRes = await _sb.from('online_orders').update({status:status}).eq('id',orderId).select('id');
+    if(upRes.error) throw upRes.error;
     await _sb.from('order_status_log').insert({order_id:orderId,status:status,keterangan:ket,by_role:'warung'});
     // If delivered, add to shift onlineOrders for reporting
     if(status==='delivered' && ST.currentShift){
