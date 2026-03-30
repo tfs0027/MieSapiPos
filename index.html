@@ -5247,6 +5247,21 @@ async function loadOnlineOrders(){
       var actDiv=card.querySelector('#actions-'+o.id);
       if(actDiv){
         // WA button always shown
+        // Print buttons
+        var printDapurBtn=document.createElement('button');
+        printDapurBtn.className='btn btn-sm';
+        printDapurBtn.style.color='var(--amber-dk)';
+        printDapurBtn.textContent='🖨️ Dapur';
+        (function(oid){printDapurBtn.onclick=function(){printOnlineStruk(oid,'dapur');};})(o.id);
+        actDiv.appendChild(printDapurBtn);
+
+        var printCustBtn=document.createElement('button');
+        printCustBtn.className='btn btn-sm';
+        printCustBtn.style.color='var(--accent)';
+        printCustBtn.textContent='🧾 Struk';
+        (function(oid){printCustBtn.onclick=function(){printOnlineStruk(oid,'pelanggan');};})(o.id);
+        actDiv.appendChild(printCustBtn);
+
         var waBtn=document.createElement('a');
         waBtn.className='btn btn-sm';
         waBtn.href='https://wa.me/'+waNum(o.hp_pemesan);
@@ -5475,6 +5490,95 @@ function submitAlasan() {
   updateOrderStatus(finalId, 'cancelled', 'Ditolak: ' + alasan, null);
 }
 
+
+// ── Cetak Struk Pesanan Online ──────────────────────────────────────────
+function printOnlineStruk(orderId, tipe) {
+  // tipe: 'pelanggan' or 'dapur'
+  if (!_sb) { showNotif('Perlu koneksi Supabase', '#E17055'); return; }
+  _sb.from('online_orders')
+    .select('*,delivery_addresses(*)')
+    .eq('id', orderId)
+    .single()
+    .then(function(res) {
+      if (res.error || !res.data) { showNotif('Gagal ambil data order', '#E17055'); return; }
+      var o = res.data;
+      var addr = o.delivery_addresses || {};
+      var items = o.items_snapshot || [];
+      var now = new Date(o.created_at);
+      var tStr = now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+      var dStr = now.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+      var payLabel = {cod:'COD (Bayar di Tempat)', qris:'QRIS', transfer:'Transfer Bank'}[o.pay_method] || o.pay_method;
+
+      var html = '<div class="receipt-block">';
+
+      if (tipe === 'dapur') {
+        // ── TIKET DAPUR ──────────────────────────────────────
+        html += '<div style="text-align:center;font-size:14px;font-weight:800;letter-spacing:.04em;margin-bottom:2px">PESANAN ONLINE</div>';
+        html += '<div style="text-align:center;font-size:11px;color:var(--txt2);margin-bottom:6px">'+tStr+' · '+dStr+'</div>';
+        html += '<hr class="r-d">';
+        html += '<div class="r-r"><span>No. Order</span><b style="color:var(--accent)">'+o.order_code+'</b></div>';
+        html += '<div class="r-r"><span>Pemesan</span><span>'+o.nama_pemesan+'</span></div>';
+        html += '<div class="r-r"><span>HP</span><span>'+o.hp_pemesan+'</span></div>';
+        html += '<hr class="r-d">';
+        html += '<div style="font-size:10px;font-weight:700;color:var(--txt2);margin-bottom:4px">PESANAN:</div>';
+        items.forEach(function(i) {
+          html += '<div style="font-size:12px;font-weight:700;margin-bottom:2px">'+i.qty+' × '+i.nama+'</div>';
+          if (i.varian) html += '<div style="font-size:10px;color:var(--accent);padding-left:10px">'+i.varian+'</div>';
+          if (i.note) html += '<div style="font-size:10px;color:var(--amber-dk);padding-left:10px">📝 '+i.note+'</div>';
+        });
+        if (o.catatan_order) {
+          html += '<hr class="r-d">';
+          html += '<div style="background:var(--amber-bg);border-radius:4px;padding:5px 8px;font-size:10px">📋 Catatan: '+o.catatan_order+'</div>';
+        }
+        html += '<hr class="r-d">';
+        html += '<div style="text-align:center;font-size:10px;color:var(--txt3)">Bayar: '+payLabel+'</div>';
+        html += '<div style="text-align:center;font-size:10px;color:var(--txt3);margin-top:2px">📍 '+(addr.alamat_lengkap||'Ambil di tempat')+'</div>';
+
+      } else {
+        // ── STRUK PELANGGAN ──────────────────────────────────
+        if (CFG.se.logo) {
+          if (CFG.logoImg) html += '<div style="text-align:center;margin-bottom:4px"><img src="'+CFG.logoImg+'" style="max-width:80px;max-height:50px;object-fit:contain"></div>';
+          html += '<div class="r-c r-b" style="font-size:13px">'+(CFG.logoImg?'':CFG.logo+' ')+CFG.nama+'</div>';
+        }
+        if (CFG.tagline) html += '<div class="r-c" style="color:var(--txt2)">'+CFG.tagline+'</div>';
+        if (CFG.se.alamat && CFG.alamat) html += '<div class="r-c" style="color:var(--txt2)">'+CFG.alamat+'</div>';
+        if (CFG.se.telp && CFG.telp) html += '<div class="r-c" style="color:var(--txt2)">Tel: '+CFG.telp+'</div>';
+        html += '<hr class="r-d">';
+        html += '<div style="text-align:center;font-size:10px;font-weight:700;background:var(--blue-bg);border-radius:4px;padding:3px;margin-bottom:6px;color:var(--blue-dk)">🛵 PESANAN ONLINE</div>';
+        html += '<div class="r-r"><span>No. Order</span><b style="color:var(--accent)">'+o.order_code+'</b></div>';
+        html += '<div class="r-r"><span>Waktu</span><span>'+tStr+' · '+dStr+'</span></div>';
+        html += '<div class="r-r"><span>Pemesan</span><span>'+o.nama_pemesan+'</span></div>';
+        html += '<div class="r-r"><span>HP</span><span>'+o.hp_pemesan+'</span></div>';
+        html += '<div class="r-r"><span>Alamat</span><span style="font-size:10px">'+(addr.alamat_lengkap||'—')+'</span></div>';
+        html += '<hr class="r-d">';
+        items.forEach(function(i) {
+          html += '<div class="r-r"><span>'+i.nama+'</span></div>';
+          if (i.varian) html += '<div style="padding-left:12px;color:var(--accent);font-size:9px">'+i.varian+'</div>';
+          html += '<div class="r-r" style="padding-left:12px"><span>'+i.qty+' × '+fmt(i.harga)+'</span><span>'+fmt(i.qty*i.harga)+'</span></div>';
+          if (i.note) html += '<div style="padding-left:12px;color:var(--txt2);font-size:9px">📝 '+i.note+'</div>';
+        });
+        html += '<hr class="r-d">';
+        html += '<div class="r-r"><span>Subtotal</span><span>'+fmt(o.subtotal)+'</span></div>';
+        html += '<div class="r-r"><span>Ongkos Kirim</span><span>'+fmt(o.ongkir||0)+'</span></div>';
+        if (o.service_fee) html += '<div class="r-r"><span>Biaya Layanan</span><span>'+fmt(o.service_fee)+'</span></div>';
+        html += '<div class="r-r r-b" style="font-size:12px;margin-top:3px"><span>TOTAL</span><span>'+fmt(o.total)+'</span></div>';
+        html += '<hr class="r-d">';
+        html += '<div class="r-r"><span>Pembayaran</span><b>'+payLabel+'</b></div>';
+        if (o.pay_method==='cod') html += '<div style="text-align:center;font-size:10px;color:var(--amber-dk);margin-top:4px;font-weight:700">⚠️ Siapkan uang pas: '+fmt(o.total)+'</div>';
+        html += '<hr class="r-d">';
+        if (CFG.se.footer && CFG.f1) html += '<div class="r-c" style="color:var(--txt2);font-size:9px">'+CFG.f1+'</div>';
+        if (CFG.se.footer && CFG.f2) html += '<div class="r-c" style="color:var(--txt2);font-size:9px">'+CFG.f2+'</div>';
+      }
+      html += '</div>';
+
+      // Show in receipt modal
+      var sub = tipe==='dapur' ? '🍳 Tiket Dapur — '+o.order_code : '🧾 Struk Pelanggan — '+o.order_code;
+      $('receipt-sub').textContent = sub;
+      $('receipt-body').innerHTML = html;
+      $('receipt-modal').classList.remove('open');
+      setTimeout(function(){ $('receipt-modal').classList.add('open'); }, 10);
+    });
+}
 // ── Open Google Maps ────────────────────────────────────────
 function openMaps(lat, lng, alamat) {
   var url;
