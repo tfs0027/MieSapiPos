@@ -5118,7 +5118,7 @@ async function loadOnlineOrders(){
           '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:pointer" onclick="openBuktiOverlay(this.src)" style="cursor:zoom-in"></div>':'')+ 
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
           (o.status==='pending'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="confirmed" data-ket="Pesanan dikonfirmasi">✅ Terima</button>'+
-          '<button class="btn btn-sm" style="color:var(--red-dk)" data-oid="'+o.id+'" data-action="cancelled" data-ket="Pesanan ditolak">❌ Tolak</button>':'')+
+          '<button class="btn btn-sm" style="color:var(--red-dk)" data-oid="'+o.id+'" data-action="cancelled-prompt">❌ Tolak</button>':'')+
           (o.status==='confirmed'?'<button class="btn btn-sm" style="color:var(--blue-dk)" data-oid="'+o.id+'" data-action="preparing" data-ket="Sedang dimasak">👨‍🍳 Mulai Masak</button>':'')+
           (o.status==='preparing'?'<button class="btn btn-sm" style="color:#7C3AED" data-oid="'+o.id+'" data-action="on_delivery" data-ket="Kurir sedang mengantar">🛵 Kirim</button>':'')+
           (o.status==='on_delivery'?'<button class="btn btn-sm" style="color:var(--green-dk)" data-oid="'+o.id+'" data-action="delivered" data-ket="Pesanan telah diterima">🎉 Selesai</button>':'')+
@@ -5143,7 +5143,7 @@ async function loadOnlineOrders(){
   });
 }
 
-async function updateOrderStatus(orderId, status, ket, btn){
+async async function updateOrderStatus(orderId, status, ket, btn){
   if(!_sb) return;
   if(btn){btn.disabled=true;btn.textContent='⏳';}
   try{
