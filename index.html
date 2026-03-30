@@ -798,7 +798,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <div id="backup-status" style="margin-top:8px;font-size:11px;color:var(--txt2)"></div>
             </div>
             <div class="card">
-              <div class="card-hd"><span class="card-title">💰 Pajak &amp; Diskon</span></div>
+              <div class="card-hd"><span class="card-title">💰 Pajak &amp; Diskon <span style="font-size:9px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Kasir</span></span></div>
               <div class="form-group">
                 <label class="form-lbl">Aktifkan Pajak di Penghitungan Total</label>
                 <div style="display:flex;gap:8px;margin-top:6px">
@@ -819,7 +819,65 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <div class="form-group" style="display:flex;align-items:flex-end"><div style="font-size:11px;color:var(--txt2);padding-bottom:8px">Batas diskon maks yang bisa diberikan kasir</div></div></div>
               <button class="btn btn-primary" style="width:100%" onclick="saveCfgPajak()">💾 Simpan Pengaturan Pajak</button>
             </div>
+
+            <!-- ═══ PENGATURAN PESANAN ONLINE ═══ -->
+            <div style="margin:12px 0 6px;padding:6px 12px;background:linear-gradient(90deg,var(--blue-bg),transparent);border-left:3px solid var(--blue-dk);border-radius:0 var(--radius) var(--radius) 0"><span style="font-size:11px;font-weight:700;color:var(--blue-dk)">🛵 Pengaturan Khusus Pesanan Online</span></div>
+            <div class="card">
+              <div class="card-hd"><span class="card-title">🛵 Biaya Layanan <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
+              <div class="form-group">
+                <label class="form-lbl">Status Biaya Layanan</label>
+                <div style="display:flex;gap:12px">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-svc-yes">
+                    <input type="radio" name="enableService" id="cfg-enable-service-1" value="1" onchange="toggleServiceFields()"> ✅ Aktif
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-svc-no">
+                    <input type="radio" name="enableService" id="cfg-enable-service-0" value="0" onchange="toggleServiceFields()" checked> ❌ Tidak Aktif
+                  </label>
+                </div>
+              </div>
+              <div id="service-fields" style="display:none">
+                <div class="frow">
+                  <div class="form-group">
+                    <label class="form-lbl">Nama Biaya</label>
+                    <input class="fi" id="cfg-service-nm" value="Biaya Layanan" placeholder="Biaya Layanan">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-lbl">Tipe Perhitungan</label>
+                    <select class="fi" id="cfg-service-tipe" onchange="toggleServiceTipe()">
+                      <option value="pct">Persentase (%)</option>
+                      <option value="flat">Nominal Tetap (Rp)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="frow">
+                  <div class="form-group" id="service-pct-group">
+                    <label class="form-lbl">Persentase (%)</label>
+                    <input class="fi" id="cfg-service-pct" type="number" value="5" min="0" max="100" placeholder="mis: 5">
+                  </div>
+                  <div class="form-group" id="service-flat-group" style="display:none">
+                    <label class="form-lbl">Nominal Tetap (Rp)</label>
+                    <input class="fi" id="cfg-service-flat" type="number" value="0" min="0" placeholder="mis: 5000">
+                  </div>
+                </div>
+                <div style="font-size:10px;color:var(--txt2);margin-bottom:10px">Dihitung dari subtotal pesanan, tampil di ringkasan order pelanggan.</div>
+              </div>
+              <button class="btn btn-primary" style="width:100%" onclick="saveServiceCfg()">💾 Simpan Biaya Layanan</button>
+            </div>
+
+            <div class="card" style="margin-top:10px">
+              <div class="card-hd"><span class="card-title">🎟️ Voucher & Kode Diskon <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
+              <div style="font-size:11px;color:var(--txt2);margin-bottom:10px;line-height:1.6">
+                Buat kode voucher yang bisa digunakan pelanggan saat checkout di halaman order online.
+              </div>
+
+              <!-- Voucher list -->
+              <div id="voucher-list-cfg" style="margin-bottom:10px"></div>
+
+              <button class="btn" style="width:100%;margin-bottom:8px" onclick="tambahVoucher()">➕ Tambah Voucher / Kode Diskon</button>
+              <button class="btn btn-primary" style="width:100%" onclick="saveVoucherCfg()">💾 Simpan Voucher</button>
+            </div>
           </div>
+
           <div>
             <div class="card">
               <div class="card-hd"><span class="card-title">🧾 Tampilan Struk</span></div>
@@ -1419,7 +1477,8 @@ let CFG = {
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
   poinPerRibu:1, poinNilaiTukar:1000, poinMinRedeem:100,
-  enableService:false, service:0, serviceNama:'Biaya Layanan', autoOpenWarung:true,
+  enableService:false, serviceTipe:'pct', service:0, serviceFlat:0, serviceMaks:0, serviceNama:'Biaya Layanan', autoOpenWarung:true,
+  vouchers:[],
   isOpen:true, closedNote:'Maaf, warung sedang tutup. Silakan coba lagi nanti.',
   qrisImg:null,
   sbUrl:'https://lztdvlrunspmcoewfjcg.supabase.co', sbKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4', restaurantId:'49ce0232-ce6d-4b67-bcb6-4e8df70844de',
@@ -1841,7 +1900,14 @@ function updateTotals() {
   const discAmt = (sub - itemDiscTotal) * disc / 100;
   const taxable = sub - discAmt;
   const tax = CFG.enablePajak ? taxable * (CFG.pajak/100) : 0;
-  const service = CFG.enableService ? Math.round(taxable * (CFG.service/100)) : 0;
+  var service = 0;
+  if (CFG.enableService) {
+    if (CFG.serviceTipe === 'flat') {
+      service = CFG.serviceFlat || 0;
+    } else {
+      service = Math.round(taxable * (CFG.service/100));
+    }
+  }
   const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem * (CFG.poinNilaiTukar||1000) : 0;
   const grand = Math.max(0, Math.round(taxable + tax + service - poinDiskon));
   $('c-sub').textContent = fmt(sub - itemDiscTotal);
@@ -5162,6 +5228,7 @@ async function syncRestoStatusToSupabase(){
       qrisImg: CFG.qrisImg||null,
       qrisNama: CFG.qrisNama||'',
       qrisId: CFG.qrisId||'',
+      vouchers: CFG.vouchers||[],
     };
     await _sb.from('restaurants').update({cfg: cfgToSync}).eq('id',CFG.restaurantId);
   }catch(e){ console.warn('syncRestoStatus:', e.message); }
@@ -5453,9 +5520,12 @@ function hapusQrisImg() {
 
 function saveServiceCfg() {
   CFG.enableService = $('cfg-enable-service-1') && $('cfg-enable-service-1').checked;
+  CFG.serviceTipe = ($('cfg-service-tipe')||{value:'pct'}).value || 'pct';
   CFG.service = parseFloat(($('cfg-service-pct')||{}).value)||0;
+  CFG.serviceFlat = parseFloat(($('cfg-service-flat')||{}).value)||0;
   CFG.serviceNama = (($('cfg-service-nm')||{}).value||'Biaya Layanan').trim();
   saveCFG();
+  syncRestoStatusToSupabase();
   updateTotals();
   showNotif('✅ Biaya Layanan disimpan','#00B894');
 }
@@ -5464,6 +5534,13 @@ function toggleServiceFields() {
   var enable = $('cfg-enable-service-1') && $('cfg-enable-service-1').checked;
   var fields = $('service-fields');
   if (fields) fields.style.display = enable ? 'block' : 'none';
+}
+
+function toggleServiceTipe() {
+  var tipe = ($('cfg-service-tipe')||{value:'pct'}).value;
+  var pctG = $('service-pct-group'), flatG = $('service-flat-group');
+  if (pctG) pctG.style.display = tipe === 'pct' ? '' : 'none';
+  if (flatG) flatG.style.display = tipe === 'flat' ? '' : 'none';
 }
 
 
@@ -5670,6 +5747,101 @@ function waNum(hp) {
   return n;
 }
 
+
+// ── Voucher / Diskon Online ────────────────────────────────────────────────
+function renderVoucherList() {
+  var el = $('voucher-list-cfg'); if (!el) return;
+  var vouchers = CFG.vouchers || [];
+  if (!vouchers.length) {
+    el.innerHTML = '<div style="color:var(--txt3);font-size:11px;padding:6px 0">Belum ada voucher. Klik "➕ Tambah Voucher".</div>';
+    return;
+  }
+  el.innerHTML = vouchers.map(function(v, i) {
+    var tipeLabel = v.tipe === 'pct' ? v.nilai + '%' : 'Rp ' + v.nilai.toLocaleString('id-ID');
+    var statusBadge = v.aktif
+      ? '<span style="font-size:9px;background:var(--green-bg);color:var(--green-dk);padding:1px 6px;border-radius:10px;font-weight:700">AKTIF</span>'
+      : '<span style="font-size:9px;background:var(--brd);color:var(--txt2);padding:1px 6px;border-radius:10px">NONAKTIF</span>';
+    return '<div class="voucher-row" style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<input class="fi voucher-kode" placeholder="KODE" value="' + (v.kode||'') + '" style="width:110px;font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase">' +
+          statusBadge +
+        '</div>' +
+        '<div style="display:flex;gap:6px;align-items:center">' +
+          '<label style="font-size:10px;cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" class="voucher-aktif" ' + (v.aktif?'checked':'') + '> Aktif</label>' +
+          '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusVoucher(' + i + ')">🗑️</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">' +
+        '<div style="flex:1;min-width:90px"><label style="font-size:10px;color:var(--txt2);display:block;margin-bottom:3px">Tipe</label>' +
+          '<select class="fi voucher-tipe" style="font-size:11px">' +
+            '<option value="pct"' + (v.tipe==='pct'?' selected':'') + '>Persentase (%)</option>' +
+            '<option value="flat"' + (v.tipe==='flat'?' selected':'') + '>Nominal Tetap (Rp)</option>' +
+          '</select>' +
+        '</div>' +
+        '<div style="flex:1;min-width:80px"><label style="font-size:10px;color:var(--txt2);display:block;margin-bottom:3px">Nilai Diskon</label>' +
+          '<input class="fi voucher-nilai" type="number" min="0" value="' + (v.nilai||0) + '" placeholder="10" style="font-size:12px">' +
+        '</div>' +
+        '<div style="flex:1;min-width:80px"><label style="font-size:10px;color:var(--txt2);display:block;margin-bottom:3px">Maks Nominal (Rp)</label>' +
+          '<input class="fi voucher-maks-nominal" type="number" min="0" value="' + (v.maksNominal||0) + '" placeholder="0 = bebas" style="font-size:11px" title="Batas max nominal diskon (untuk tipe %)">' +
+        '</div>' +
+        '<div style="flex:1;min-width:80px"><label style="font-size:10px;color:var(--txt2);display:block;margin-bottom:3px">Maks Penggunaan</label>' +
+          '<input class="fi voucher-maks" type="number" min="0" value="' + (v.maksUse||0) + '" placeholder="0 = bebas" style="font-size:11px">' +
+        '</div>' +
+      '</div>' +
+      '<div style="margin-top:6px"><label style="font-size:10px;color:var(--txt2);display:block;margin-bottom:3px">Keterangan (opsional)</label>' +
+        '<input class="fi voucher-ket" value="' + (v.ket||'') + '" placeholder="mis: Diskon pelanggan baru" style="font-size:11px">' +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--txt3);margin-top:5px">Digunakan: ' + (v.usedCount||0) + ' kali' + (v.maksUse?(' / ' + v.maksUse + ' maks'):' / bebas') + (v.maksNominal?' · maks Rp '+v.maksNominal.toLocaleString('id-ID'):'') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function tambahVoucher() {
+  if (!CFG.vouchers) CFG.vouchers = [];
+  CFG.vouchers.push({ kode:'', tipe:'pct', nilai:10, aktif:true, maksUse:0, usedCount:0, ket:'' });
+  renderVoucherList();
+  var rows = document.querySelectorAll('.voucher-row');
+  if (rows.length) { var inp = rows[rows.length-1].querySelector('.voucher-kode'); if(inp) inp.focus(); }
+}
+
+function hapusVoucher(i) {
+  if (!CFG.vouchers) return;
+  CFG.vouchers.splice(i, 1);
+  renderVoucherList();
+}
+
+function saveVoucherCfg() {
+  var rows = document.querySelectorAll('.voucher-row');
+  CFG.vouchers = [];
+  rows.forEach(function(row) {
+    var kode = row.querySelector('.voucher-kode');
+    var tipe = row.querySelector('.voucher-tipe');
+    var nilai = row.querySelector('.voucher-nilai');
+    var maks = row.querySelector('.voucher-maks');
+    var aktif = row.querySelector('.voucher-aktif');
+    var ket = row.querySelector('.voucher-ket');
+    if (kode && kode.value.trim()) {
+      var existing = (CFG.vouchers||[]).find(function(v){ return v.kode===kode.value.trim().toUpperCase(); });
+      var mn = row.querySelector('.voucher-maks-nominal');
+      CFG.vouchers.push({
+        kode: kode.value.trim().toUpperCase(),
+        tipe: tipe ? tipe.value : 'pct',
+        nilai: parseFloat(nilai ? nilai.value : 0) || 0,
+        maksNominal: parseFloat(mn ? mn.value : 0) || 0,
+        maksUse: parseInt(maks ? maks.value : 0) || 0,
+        aktif: aktif ? aktif.checked : true,
+        usedCount: existing ? (existing.usedCount||0) : 0,
+        ket: ket ? ket.value.trim() : ''
+      });
+    }
+  });
+  saveCFG();
+  syncRestoStatusToSupabase();
+  showNotif('✅ Voucher disimpan (' + CFG.vouchers.length + ' kode)', '#00B894');
+  renderVoucherList();
+}
+
 function renderBankListCfg() {
   var el = $('bank-list-cfg'); if (!el) return;
   var banks = CFG.banks || [];
@@ -5754,8 +5926,11 @@ function renderSettings() {
   var se1=$('cfg-enable-service-1'); if(se1) se1.checked=!!CFG.enableService;
   var se0=$('cfg-enable-service-0'); if(se0) se0.checked=!CFG.enableService;
   var spct=$('cfg-service-pct'); if(spct) spct.value=CFG.service||5;
+  var sflat=$('cfg-service-flat'); if(sflat) sflat.value=CFG.serviceFlat||0;
+  var stipe=$('cfg-service-tipe'); if(stipe){ stipe.value=CFG.serviceTipe||'pct'; toggleServiceTipe(); }
   var snm=$('cfg-service-nm'); if(snm) snm.value=CFG.serviceNama||'Biaya Layanan';
   var sf=$('service-fields'); if(sf) sf.style.display=CFG.enableService?'block':'none';
+  renderVoucherList();
 }
 
 function saveCfgToko() {
