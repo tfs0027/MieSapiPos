@@ -5139,7 +5139,7 @@ async function loadOnlineOrders(){
           '<span style="font-size:12px;font-weight:700">'+fmt(o.total)+'</span>'+
           (o.ongkir?'<span style="font-size:11px;color:var(--txt2)">(ongkir: '+fmt(o.ongkir)+')</span>':'')+
         '</div>'+
-        '<div style="font-size:11px;color:var(--txt2);margin-bottom:8px">📍 '+(addr.alamat_lengkap||'—')+'</div>'+
+        '<div data-maps="1" style="font-size:11px;color:var(--blue-dk);margin-bottom:8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;background:var(--blue-bg);border:1px solid #85B7EB;border-radius:8px">'+'📍 '+(addr.alamat_lengkap||'—')+' <span style="font-size:9px;font-weight:700;opacity:.7">→ Maps</span></div>'+
         alasanHtml+
         (o.bukti_bayar_url&&o.pay_method!=='cod'?
           '<div style="margin-bottom:8px">'+
@@ -5147,6 +5147,10 @@ async function loadOnlineOrders(){
             '<img src="'+o.bukti_bayar_url+'" style="max-width:120px;max-height:90px;border-radius:8px;border:1px solid var(--brd);object-fit:cover;cursor:zoom-in" id="bukti-'+o.id+'">'+
           '</div>':'')+
         '<div style="display:flex;gap:6px;flex-wrap:wrap" id="actions-'+o.id+'"></div>';
+
+      // Wire Maps link for delivery address
+      var addrDiv = card.querySelector('[data-maps]');
+      if(addrDiv)(function(lat,lng,al){addrDiv.onclick=function(){openMaps(lat,lng,al);};})(addr.lat,addr.lng,addr.alamat_lengkap);
 
       // Wire bukti bayar click
       if(o.bukti_bayar_url&&o.pay_method!=='cod'){
@@ -5384,6 +5388,17 @@ function submitAlasan() {
   var finalId = String(_alasanOrderId).trim();
   closeAlasanModal();
   updateOrderStatus(finalId, 'cancelled', 'Ditolak: ' + alasan, null);
+}
+
+// ── Open Google Maps ────────────────────────────────────────
+function openMaps(lat, lng, alamat) {
+  var url;
+  if (lat && lng) {
+    url = 'https://www.google.com/maps?q=' + lat + ',' + lng;
+  } else {
+    url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(alamat||'');
+  }
+  window.open(url, '_blank');
 }
 
 // ── WA number format ─────────────────────────────────────────
