@@ -5161,26 +5161,7 @@ async function loadOnlineOrders(){
 }
 
 
-// ── Pesanan Online: event delegation (dipasang sekali di document) ──────
-document.addEventListener('click', function(e) {
-  var list = document.getElementById('online-orders-list');
-  if (!list || !list.contains(e.target)) return;
-  var btn = e.target.closest('[data-action]');
-  if (!btn) return;
-  var action = btn.getAttribute('data-action');
-  var oid    = btn.getAttribute('data-oid');
-  var ket    = btn.getAttribute('data-ket') || '';
-  if (action === 'cancelled-prompt') {
-    var card = btn.closest('[style*="margin-bottom:8px"]') || btn.closest('.card');
-    var codeEl = card ? card.querySelector('[style*="font-weight:700"]') : null;
-    var code = codeEl ? codeEl.textContent.trim() : (oid || '');
-    openAlasanModal(oid, code);
-  } else if (action && oid) {
-    updateOrderStatus(oid, action, ket, btn);
-  }
-});
-
-// legacy stub so nav() call doesn't break
+// ── Pesanan Online: action buttons wired directly via card.querySelectorAll ──
 window._initOrderDelegation = function(){};
 
 async function updateOrderStatus(orderId, status, ket, btn){
