@@ -721,11 +721,20 @@ tr:hover td{background:rgba(108,92,231,.03)}
                 <div id="bank-list-cfg" style="margin-top:8px"></div>
               </div>
               <div class="form-group">
-                <label class="form-lbl">📱 QRIS — Nama & ID Merchant</label>
-                <div class="frow">
-                  <input class="fi" id="cfg-qris-nama" placeholder="Nama QRIS (mis: WarungKu Official)">
-                  <input class="fi" id="cfg-qris-id" placeholder="ID Merchant (opsional)">
+                <label class="form-lbl">📱 QRIS — Nama Merchant</label>
+                <input class="fi" id="cfg-qris-nama" placeholder="Nama QRIS (mis: WarungKu Official)">
+              </div>
+              <div class="form-group">
+                <label class="form-lbl">🖼️ Gambar QRIS Statis</label>
+                <div id="qris-img-preview" style="display:none;margin-bottom:10px;text-align:center">
+                  <img id="qris-img-prev-el" src="" style="max-width:200px;max-height:200px;border-radius:10px;border:1.5px solid var(--brd);display:block;margin:0 auto 8px">
+                  <button type="button" class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusQrisImg()">🗑️ Hapus Gambar</button>
                 </div>
+                <label class="btn" style="cursor:pointer;width:100%;justify-content:center;display:flex;align-items:center;gap:6px">
+                  📷 Upload Gambar QRIS
+                  <input type="file" id="qris-img-input" accept="image/*" style="display:none" onchange="uploadQrisImg(this)">
+                </label>
+                <div style="font-size:10px;color:var(--txt2);margin-top:6px;line-height:1.6">Format JPG/PNG, maks 2MB. Gambar ini akan tampil di halaman order pelanggan saat mereka memilih pembayaran QRIS.</div>
               </div>
               <button class="btn btn-primary" style="width:100%" onclick="saveCfgToko()">💾 Simpan Informasi Toko</button>
             </div>
