@@ -5229,6 +5229,11 @@ async function syncRestoStatusToSupabase(){
       qrisNama: CFG.qrisNama||'',
       qrisId: CFG.qrisId||'',
       vouchers: CFG.vouchers||[],
+      enableService: CFG.enableService||false,
+      serviceTipe: CFG.serviceTipe||'pct',
+      service: CFG.service||0,
+      serviceFlat: CFG.serviceFlat||0,
+      serviceNama: CFG.serviceNama||'Biaya Layanan',
     };
     await _sb.from('restaurants').update({cfg: cfgToSync}).eq('id',CFG.restaurantId);
   }catch(e){ console.warn('syncRestoStatus:', e.message); }
