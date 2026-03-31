@@ -5583,6 +5583,15 @@ function initMenuDrag() {
       ST.menus.forEach(function(m,i){m.urutan=i+1;});
       renderMenuTable();
       renderMenuGrid();
+      // Sync urutan ke Supabase
+      if (_sb && CFG.restaurantId) {
+        ST.menus.forEach(function(m) {
+          var rid = CFG.restaurantId;
+          var mid = (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'menu'+m.id+m.name);
+          _sb.from('menus').update({urutan: m.urutan}).eq('id', mid)
+            .then(function(res){ if(res.error) console.warn('urutan sync:', res.error.message); });
+        });
+      }
       showNotif('✅ Urutan menu disimpan','#00B894');
     });
   });
