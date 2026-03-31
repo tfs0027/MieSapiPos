@@ -1470,6 +1470,7 @@ const ST = {
 // CONFIG
 // ═══════════════════════════════
 const CFG_KEY = 'wkpos_cfg';
+const SESSION_KEY = 'wkpos_session';
 let CFG = {
   nama:'WarungKu', tagline:'Makan Enak, Harga Bersahabat',
   alamat:'Jl. Contoh No.1, Madiun, Jawa Timur',
@@ -1519,6 +1520,33 @@ function showNotif(msg, color) {
 // ═══════════════════════════════
 // LOGIN
 // ═══════════════════════════════
+
+// ── Session & Shift Persistence ──────────────────────────────────────────
+function saveShiftLocal() {
+  try {
+    localStorage.setItem('wkpos_shift', JSON.stringify({
+      currentShift: ST.currentShift,
+      shifts: ST.shifts,
+      trxCounter: ST.trxCounter,
+      shiftCounter: ST.shiftCounter,
+      transactions: ST.transactions,
+    }));
+  } catch(e) { console.warn('saveShiftLocal:', e.message); }
+}
+
+function loadShiftLocal() {
+  try {
+    var s = localStorage.getItem('wkpos_shift');
+    if (!s) return;
+    var d = JSON.parse(s);
+    if (d.currentShift) ST.currentShift = d.currentShift;
+    if (d.shifts) ST.shifts = d.shifts;
+    if (d.trxCounter) ST.trxCounter = d.trxCounter;
+    if (d.shiftCounter) ST.shiftCounter = d.shiftCounter;
+    if (d.transactions) ST.transactions = d.transactions;
+  } catch(e) { console.warn('loadShiftLocal:', e.message); }
+}
+
 function renderLogin() {
   $('user-pick').innerHTML = USERS.map(u =>
     '<div class="user-opt' + (ST.selId===u.id?' sel':'') + '" onclick="selectUser(' + u.id + ')">' +
@@ -1578,6 +1606,8 @@ function doLogin(u) {
   $('sb-name-el').textContent = CFG.nama + ' POS';
   buildSidebar(); buildCatTabs(); renderMenuGrid(); updateMejaSelect(); updateShiftTopbar();
   nav('order');
+  // Simpan session ke localStorage
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({userId: u.id, savedAt: Date.now()})); } catch(e){}
 }
 
 function doLogout() {
@@ -1588,6 +1618,7 @@ function doLogout() {
     }
   }
   ST.cu = null; ST.selId = null; ST.pin = ''; ST.cart = [];
+  try { localStorage.removeItem(SESSION_KEY); } catch(e){}
   $('app').style.display = 'none';
   $('login-screen').style.display = 'flex';
   $('pin-section').style.display = 'none';
@@ -3959,6 +3990,7 @@ function prosesBukaKasir() {
   };
   closeModal('buka-modal'); updateShiftTopbar(); renderShiftPage();
   showNotif('✅ Kasir dibuka — ' + shiftId, '#00B894');
+  saveShiftLocal();
   // Warung online otomatis BUKA saat kasir dibuka
   CFG.isOpen = true;
   saveCFG();
@@ -4099,6 +4131,7 @@ function prosesTutupKasir() {
   closeModal('tutup-modal'); updateShiftTopbar(); renderShiftPage();
   showNotif('🔒 Kasir ditutup — ' + closed.id, '#6C5CE7');
   lihatLaporanShift(closed.id);
+  saveShiftLocal();
   // Warung online otomatis TUTUP saat kasir ditutup
   CFG.isOpen = false;
   CFG.closedNote = 'Warung sedang tutup. Silakan coba lagi saat kami buka.';
@@ -6225,6 +6258,27 @@ const doprint = () => {
 // INIT
 // ═══════════════════════════════
 if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
+// ── Restore session on page load ──────────────────────────────────────────
+(function restoreSession() {
+  try {
+    var sess = localStorage.getItem(SESSION_KEY);
+    if (!sess) return;
+    var d = JSON.parse(sess);
+    // Session expires after 24 hours
+    if (!d.userId || (Date.now() - d.savedAt) > 86400000) {
+      localStorage.removeItem(SESSION_KEY);
+      return;
+    }
+    var u = USERS.find(function(x){ return x.id === d.userId; });
+    if (!u) return;
+    // Restore shift data
+    loadShiftLocal();
+    // Auto login
+    doLogin(u);
+  } catch(e) { console.warn('restoreSession:', e); }
+})();
+
+
 renderLogin();
 </script>
 
