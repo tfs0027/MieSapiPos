@@ -5043,9 +5043,12 @@ async function pullAllFromSupabase() {
       .select('*').eq('restaurant_id', rid).eq('status', 'available');
     if (!e1 && menus && menus.length) {
       ST.menus = menus.map(function(m, i) {
-        return {id: i+1, name: m.nama, price: m.harga, cat: m.kategori||'Makanan',
-          emoji: m.emoji||'🍽️', status: m.status, sold: m.terjual||0, opts: m.opts||[]};
+        return {id: i+1, sbId: m.id, name: m.nama, price: m.harga, cat: m.kategori||'Makanan',
+          emoji: m.emoji||'🍽️', img: m.foto_url||null, status: m.status,
+          sold: m.terjual||0, opts: m.opts||[], urutan: m.urutan||i+1};
       });
+      // Sort by urutan after pull
+      ST.menus.sort(function(a,b){return (a.urutan||0)-(b.urutan||0);});
       buildCatTabs(); renderMenuGrid(); renderMenuTable();
     }
 
@@ -5585,11 +5588,18 @@ function initMenuDrag() {
       renderMenuGrid();
       // Sync urutan ke Supabase
       if (_sb && CFG.restaurantId) {
+        // Batch update urutan - use restaurant_id+nama to match correctly
         ST.menus.forEach(function(m) {
-          var rid = CFG.restaurantId;
-          var mid = (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'menu'+m.id+m.name);
-          _sb.from('menus').update({urutan: m.urutan}).eq('id', mid)
-            .then(function(res){ if(res.error) console.warn('urutan sync:', res.error.message); });
+          var q;
+          if (m.sbId) {
+            // Have Supabase UUID - use directly
+            q = _sb.from('menus').update({urutan: m.urutan}).eq('id', m.sbId);
+          } else {
+            // Fall back to matching by restaurant_id + nama
+            q = _sb.from('menus').update({urutan: m.urutan})
+              .eq('restaurant_id', CFG.restaurantId).eq('nama', m.name);
+          }
+          q.then(function(res){ if(res.error) console.warn('urutan sync:', res.error.message); });
         });
       }
       showNotif('✅ Urutan menu disimpan','#00B894');
