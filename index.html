@@ -690,6 +690,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         <div class="card">
           <div class="card-hd"><span class="card-title">📋 Pesanan Online</span>
             <button class="btn btn-sm" onclick="loadOnlineOrders()">🔄 Refresh</button>
+            <span id="auto-refresh-label" style="font-size:10px;color:var(--txt3);margin-left:4px">Auto 30s</span>
           </div>
           <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
             <button class="shift-tab active" id="otab-active" onclick="setOrderTab('active',this)">🔔 Aktif</button>
@@ -1665,6 +1666,7 @@ function buildSidebar() {
 }
 
 function nav(p) {
+  window._currentPage = p;
   document.querySelectorAll('[data-p]').forEach(el => el.classList.toggle('active', el.dataset.p === p));
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
   $('page-' + p).classList.add('active');
@@ -1674,7 +1676,7 @@ function nav(p) {
   if (p === 'stok') renderStok();
   if (p === 'laporan') renderLaporan();
   if (p === 'riwayat') renderRiwayat();
-  if (p === 'online-order') { renderRestoStatusUI(); loadOnlineOrders(); window._initOrderDelegation && window._initOrderDelegation(); }
+  if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders(); window._initOrderDelegation && window._initOrderDelegation(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
   if (p === 'settings') renderSettings();
@@ -5193,22 +5195,89 @@ async function sbSyncMember(m) {
 
 // ── REALTIME subscription for online orders ───────────────────────────────────
 var _sbRealtimeSub = null;
+var _orderPollInterval = null;
+var _lastKnownOrderCount = 0;
+
 function startRealtimeOrders() {
   if (!_sb || !CFG.restaurantId) return;
-  if (_sbRealtimeSub) return; // already subscribed
-  _sbRealtimeSub = _sb
-    .channel('online_orders_channel')
-    .on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'online_orders',
-      filter: 'restaurant_id=eq.' + CFG.restaurantId
-    }, function(payload) {
-      var order = payload.new;
-      showNotif('🔔 Pesanan baru masuk! ' + order.order_code + ' — ' + order.nama_pemesan, '#6C5CE7');
-      // Add to ST for display
-      if (!ST.onlineOrders) ST.onlineOrders = [];
-      ST.onlineOrders.unshift(order);
-    })
-    .subscribe();
+  // Realtime subscription for instant notif on new order
+  if (!_sbRealtimeSub) {
+    _sbRealtimeSub = _sb
+      .channel('online_orders_channel')
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'online_orders',
+        filter: 'restaurant_id=eq.' + CFG.restaurantId
+      }, function(payload) {
+        var order = payload.new;
+        showNotif('🔔 Pesanan baru! ' + order.order_code + ' — ' + order.nama_pemesan, '#6C5CE7');
+        playOrderBeep();
+        updateOrderBadge();
+        // Auto-refresh jika sedang di halaman pesanan online
+        if (window._currentPage === 'online-order') loadOnlineOrders();
+      })
+      .subscribe();
+  }
+  // Polling backup: cek setiap 30 detik
+  if (_orderPollInterval) clearInterval(_orderPollInterval);
+  _orderPollInterval = setInterval(function() {
+    if (!_sb || !CFG.restaurantId) return;
+    if (window._currentPage === 'online-order') {
+      // Jika sedang di halaman pesanan, refresh otomatis
+      loadOnlineOrders();
+    } else {
+      // Background: cek jumlah pending orders untuk update badge
+      updateOrderBadge();
+    }
+  }, 30000);
+}
+
+async function updateOrderBadge() {
+  if (!_sb || !CFG.restaurantId) return;
+  try {
+    var res = await _sb.from('online_orders')
+      .select('id', {count:'exact',head:true})
+      .eq('restaurant_id', CFG.restaurantId)
+      .not('status','in','(delivered,cancelled)');
+    var count = res.count || 0;
+    var badge = $('online-order-badge');
+    if (badge) {
+      badge.textContent = count;
+      badge.style.display = count > 0 ? 'inline' : 'none';
+    }
+    // Notif jika ada pesanan baru yang belum diketahui
+    if (count > _lastKnownOrderCount && _lastKnownOrderCount > 0) {
+      showNotif('🔔 ' + (count - _lastKnownOrderCount) + ' pesanan baru menunggu konfirmasi!', '#6C5CE7');
+      playOrderBeep();
+    }
+    _lastKnownOrderCount = count;
+  } catch(e) { console.warn('updateOrderBadge:', e.message); }
+}
+
+function playOrderBeep() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToConstantValue(0.001, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+    // Second beep
+    setTimeout(function() {
+      var osc2 = ctx.createOscillator();
+      var gain2 = ctx.createGain();
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc2.frequency.value = 1100;
+      osc2.type = 'sine';
+      gain2.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain2.gain.exponentialRampToConstantValue(0.001, ctx.currentTime + 0.4);
+      osc2.start(ctx.currentTime);
+      osc2.stop(ctx.currentTime + 0.4);
+    }, 200);
+  } catch(e) {}
 }
 
 
