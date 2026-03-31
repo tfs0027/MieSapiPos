@@ -4952,6 +4952,8 @@ async function pushAllToSupabase() {
     return {
       id: seedUUID(rid+'menu'+m.id+m.name), restaurant_id: rid,
       nama: m.name, harga: m.price, emoji: m.emoji||'🍽️',
+      kategori: m.cat||'Menu', foto_url: m.img||null,
+      urutan: m.urutan||0,
       status: m.status, opts: m.opts||[], terjual: m.sold||0,
     };
   });
@@ -5134,6 +5136,8 @@ async function sbSyncMenu(m) {
     await _sb.from('menus').upsert({
       id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'menu'+m.id+m.name), restaurant_id: rid,
       nama: m.name, harga: m.price, emoji: m.emoji||'🍽️',
+      kategori: m.cat||'Menu', foto_url: m.img||null,
+      urutan: m.urutan||0,
       status: m.status, opts: m.opts||[], terjual: m.sold||0,
     }, {onConflict:'id'});
   } catch(e) { console.warn('sbSyncMenu:', e.message); }
