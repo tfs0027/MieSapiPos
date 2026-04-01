@@ -256,6 +256,34 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .alasan-input{width:100%;padding:10px 12px;border:1.5px solid var(--brd2);border-radius:var(--radius);font-size:12px;font-family:inherit;color:var(--txt);background:var(--bg);outline:none;resize:vertical;min-height:80px}
 .alasan-input:focus{border-color:var(--red-dk)}
 .alasan-btns{display:flex;gap:8px;margin-top:12px}
+
+/* ── Order Notification Popup Card ───────────────────────────── */
+#order-notif-overlay{position:fixed;inset:0;z-index:3000;pointer-events:none}
+.order-notif-card{
+  position:fixed;top:16px;right:16px;width:340px;max-width:calc(100vw - 32px);
+  background:var(--bg);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.25),0 0 0 2px #6C5CE7;
+  padding:0;overflow:hidden;pointer-events:all;
+  transform:translateX(calc(100% + 32px));opacity:0;
+  transition:transform .4s cubic-bezier(.34,1.56,.64,1),opacity .3s;
+  z-index:3001;
+}
+.order-notif-card.show{transform:translateX(0);opacity:1}
+.onc-header{background:linear-gradient(135deg,#6C5CE7,#A29BFE);padding:12px 14px;display:flex;align-items:center;gap:10px}
+.onc-icon{font-size:24px;animation:bell-shake .5s ease infinite}
+.onc-title{color:#fff;font-size:14px;font-weight:800;flex:1}
+.onc-close{background:rgba(255,255,255,.2);border:none;color:#fff;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+.onc-body{padding:12px 14px}
+.onc-code{font-size:13px;font-weight:800;color:var(--accent);margin-bottom:3px}
+.onc-name{font-size:12px;color:var(--txt2);margin-bottom:6px}
+.onc-items{font-size:11px;color:var(--txt);background:var(--bg2,#f7f7f7);border-radius:8px;padding:7px 10px;margin-bottom:10px;line-height:1.7;max-height:80px;overflow-y:auto}
+.onc-total{font-size:13px;font-weight:700;color:var(--green-dk);margin-bottom:10px}
+.onc-actions{display:flex;gap:8px}
+.onc-btn-terima{flex:1;background:var(--green-dk);color:#fff;border:none;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.onc-btn-tolak{flex:1;background:var(--red-bg,#FCEBEB);color:var(--red-dk);border:1.5px solid var(--red-dk);border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.onc-btn-lihat{background:var(--accent3,#EDE9FE);color:var(--accent);border:none;border-radius:10px;padding:9px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+.onc-ring{position:absolute;top:10px;right:10px;width:10px;height:10px;border-radius:50%;background:#E17055;animation:ping 1s cubic-bezier(0,0,.2,1) infinite}
+@keyframes bell-shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-15deg)}40%{transform:rotate(15deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(8deg)}}
+@keyframes ping{0%{transform:scale(1);opacity:1}75%,100%{transform:scale(2);opacity:0}}
 </style>
 </head>
 <body>
@@ -3012,7 +3040,7 @@ function exportLaporanHTML() {
     html += '<td>' + (t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':'Transfer') + '</td>';
     html += '<td>' + (t.kasir||'') + '</td></tr>';
   });
-  html += '</table></body></html>';
+    html += '</table></body></html>';
   var blob = new Blob([html], {type:'text/html;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var win = window.open(url, '_blank');
@@ -5234,8 +5262,8 @@ function startRealtimeOrders() {
         filter: 'restaurant_id=eq.' + CFG.restaurantId
       }, function(payload) {
         var order = payload.new;
-        showNotif('🔔 Pesanan baru! ' + order.order_code + ' — ' + order.nama_pemesan, '#6C5CE7');
         playOrderBeep();
+        showOrderNotifCard(order);
         sendBrowserNotif('🔔 Pesanan Baru Masuk!', order.order_code + ' — ' + order.nama_pemesan + ' sedang menunggu konfirmasi');
         startRepeatNotif(order.id, order.order_code, order.nama_pemesan);
         updateOrderBadge();
@@ -6076,6 +6104,52 @@ function saveVoucherCfg() {
   renderVoucherList();
 }
 
+
+// ── Order Notification Popup Card ─────────────────────────────────────────
+var _notifCurrentOrderId = null;
+var _notifAutoCloseTimer = null;
+
+function showOrderNotifCard(order) {
+  _notifCurrentOrderId = order.id;
+  var items = (order.items_snapshot||[]).map(function(i){ return i.qty + '× ' + i.nama; }).join(' · ');
+  var payLabel = {cod:'COD',qris:'QRIS',transfer:'Transfer'}[order.pay_method] || order.pay_method;
+  var el = document.getElementById('order-notif-card');
+  if (!el) return;
+  document.getElementById('onc-code').textContent = order.order_code;
+  document.getElementById('onc-name').textContent = (order.nama_pemesan || '—') + ' · ' + payLabel;
+  document.getElementById('onc-items').textContent = items || '—';
+  document.getElementById('onc-total').textContent = fmt(order.total);
+  var btn = document.getElementById('onc-btn-terima');
+  if (btn) { btn.disabled = false; btn.textContent = '✅ Terima'; }
+  el.classList.add('show');
+  // Auto-close after 60s if no action
+  if (_notifAutoCloseTimer) clearTimeout(_notifAutoCloseTimer);
+  _notifAutoCloseTimer = setTimeout(closeOrderNotif, 60000);
+}
+
+function closeOrderNotif() {
+  var el = document.getElementById('order-notif-card');
+  if (el) el.classList.remove('show');
+  if (_notifAutoCloseTimer) clearTimeout(_notifAutoCloseTimer);
+}
+
+function confirmFromNotif() {
+  if (!_notifCurrentOrderId) return;
+  var btn = document.getElementById('onc-btn-terima');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  updateOrderStatus(_notifCurrentOrderId, 'confirmed', 'Pesanan dikonfirmasi', null);
+  stopRepeatNotif(_notifCurrentOrderId);
+  setTimeout(closeOrderNotif, 1000);
+}
+
+function rejectFromNotif() {
+  if (!_notifCurrentOrderId) return;
+  closeOrderNotif();
+  stopRepeatNotif(_notifCurrentOrderId);
+  // Open alasan modal
+  openAlasanModal(_notifCurrentOrderId, document.getElementById('onc-code').textContent);
+}
+
 function renderBankListCfg() {
   var el = $('bank-list-cfg'); if (!el) return;
   var banks = CFG.banks || [];
@@ -6454,6 +6528,30 @@ if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
 
 renderLogin();
 </script>
+
+<!-- Order Notification Popup -->
+<div id="order-notif-overlay">
+  <div class="order-notif-card" id="order-notif-card">
+    <div class="onc-ring"></div>
+    <div class="onc-header">
+      <span class="onc-icon">🔔</span>
+      <span class="onc-title">Pesanan Baru Masuk!</span>
+      <button class="onc-close" onclick="closeOrderNotif()">✕</button>
+    </div>
+    <div class="onc-body">
+      <div class="onc-code" id="onc-code">ORD-XXX</div>
+      <div class="onc-name" id="onc-name">Nama Pemesan</div>
+      <div class="onc-items" id="onc-items">—</div>
+      <div class="onc-total" id="onc-total">Rp 0</div>
+      <div class="onc-actions">
+        <button class="onc-btn-terima" id="onc-btn-terima" onclick="confirmFromNotif()">✅ Terima</button>
+        <button class="onc-btn-tolak" onclick="rejectFromNotif()">❌ Tolak</button>
+        <button class="onc-btn-lihat" onclick="nav('online-order');closeOrderNotif()">👁️</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- Lightbox bukti bayar -->
 <div id="bukti-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:2000;align-items:center;justify-content:center;padding:20px" onclick="closeBuktiOverlay()">
