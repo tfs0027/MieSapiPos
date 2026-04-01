@@ -5743,7 +5743,10 @@ async function loadOnlineOrders(){
         waBtn.textContent='💬 WA';
         actDiv.appendChild(waBtn);
 
-        var isPickup = o.order_type === 'pickup';
+        var _addr = o.delivery_addresses || {};
+        var isPickup = o.order_type === 'pickup' || 
+          (o.catatan||'').indexOf('[PICKUP]') >= 0 ||
+          (_addr.alamat_lengkap||'').toLowerCase().indexOf('ambil sendiri') >= 0;
         if(o.status==='pending'){
           var terimaBtn=document.createElement('button');
           terimaBtn.className='btn btn-sm';
