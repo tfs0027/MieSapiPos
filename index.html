@@ -881,6 +881,30 @@ tr:hover td{background:rgba(108,92,231,.03)}
 
           <div>
             <div class="card">
+              <div class="card-hd"><span class="card-title">🔔 Notifikasi Pesanan Online <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
+              <div class="form-group">
+                <label class="form-lbl" style="margin-bottom:8px">Jenis Notifikasi</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-sound" onchange="saveNotifCfg()"> 🔊 Bunyi saat pesanan masuk</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-browser" onchange="saveNotifCfg()"> 💬 Push notifikasi browser</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="cfg-notif-repeat" onchange="toggleNotifRepeat();saveNotifCfg()"> 🔁 Bunyi berulang sampai dikonfirmasi</label>
+              </div>
+              <div id="notif-repeat-fields" style="display:none">
+                <div class="frow">
+                  <div class="form-group"><label class="form-lbl">Interval Pengulangan (detik)</label><input class="fi" id="cfg-notif-interval" type="number" value="30" min="10" max="300" placeholder="30"></div>
+                  <div class="form-group"><label class="form-lbl">Volume (0.1 – 1.0)</label><input class="fi" id="cfg-notif-volume" type="number" value="0.5" min="0.1" max="1" step="0.1" placeholder="0.5"></div>
+                </div>
+              </div>
+              <div class="form-group" style="margin-top:4px">
+                <label class="form-lbl">Izin Push Notifikasi Browser</label>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                  <button class="btn btn-sm" onclick="requestNotifPermission()">🔔 Minta Izin Notifikasi</button>
+                  <span id="notif-perm-status" style="font-size:11px;color:var(--txt2)">—</span>
+                </div>
+              </div>
+              <button class="btn" style="width:100%;margin-top:6px" onclick="playOrderBeep()">🔊 Test Bunyi</button>
+            </div>
+
+            <div class="card">
               <div class="card-hd"><span class="card-title">🧾 Tampilan Struk</span></div>
               <div class="form-group">
                 <label class="form-lbl">Logo Toko (untuk Struk)</label>
@@ -1479,7 +1503,8 @@ let CFG = {
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
   poinPerRibu:1, poinNilaiTukar:1000, poinMinRedeem:100,
-  enableService:false, serviceTipe:'pct', service:0, serviceFlat:0, serviceMaks:0, serviceNama:'Biaya Layanan', autoOpenWarung:true,
+  enableService:false, serviceTipe:'pct', service:0,
+  notifSound:true, notifBrowser:true, notifRepeat:true, notifInterval:30, notifVolume:0.5, serviceFlat:0, serviceMaks:0, serviceNama:'Biaya Layanan', autoOpenWarung:true,
   vouchers:[],
   isOpen:true, closedNote:'Maaf, warung sedang tutup. Silakan coba lagi nanti.',
   qrisImg:null,
@@ -5211,8 +5236,9 @@ function startRealtimeOrders() {
         var order = payload.new;
         showNotif('🔔 Pesanan baru! ' + order.order_code + ' — ' + order.nama_pemesan, '#6C5CE7');
         playOrderBeep();
+        sendBrowserNotif('🔔 Pesanan Baru Masuk!', order.order_code + ' — ' + order.nama_pemesan + ' sedang menunggu konfirmasi');
+        startRepeatNotif(order.id, order.order_code, order.nama_pemesan);
         updateOrderBadge();
-        // Auto-refresh jika sedang di halaman pesanan online
         if (window._currentPage === 'online-order') loadOnlineOrders();
       })
       .subscribe();
@@ -5253,31 +5279,97 @@ async function updateOrderBadge() {
   } catch(e) { console.warn('updateOrderBadge:', e.message); }
 }
 
-function playOrderBeep() {
+// ── Notifikasi Pesanan Online ─────────────────────────────────────────────
+var _notifRepeatTimer = null;
+var _pendingOrderIds = new Set();
+
+function playOrderBeep(repeat) {
+  if (!CFG.notifSound) return;
   try {
+    var vol = CFG.notifVolume || 0.5;
     var ctx = new (window.AudioContext || window.webkitAudioContext)();
-    var osc = ctx.createOscillator();
-    var gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToConstantValue(0.001, ctx.currentTime + 0.4);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.4);
-    // Second beep
-    setTimeout(function() {
-      var osc2 = ctx.createOscillator();
-      var gain2 = ctx.createGain();
-      osc2.connect(gain2); gain2.connect(ctx.destination);
-      osc2.frequency.value = 1100;
-      osc2.type = 'sine';
-      gain2.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain2.gain.exponentialRampToConstantValue(0.001, ctx.currentTime + 0.4);
-      osc2.start(ctx.currentTime);
-      osc2.stop(ctx.currentTime + 0.4);
-    }, 200);
+    function tone(freq, start, dur) {
+      var osc = ctx.createOscillator();
+      var g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      g.gain.setValueAtTime(vol, ctx.currentTime + start);
+      g.gain.exponentialRampToConstantValue(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur);
+    }
+    tone(880, 0, 0.35);
+    tone(1100, 0.2, 0.35);
+    tone(1320, 0.4, 0.5);
   } catch(e) {}
+}
+
+function sendBrowserNotif(title, body) {
+  if (!CFG.notifBrowser) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    var n = new Notification(title, {body: body, icon: '🍜', tag: 'warungku-order'});
+    n.onclick = function(){ window.focus(); nav('online-order'); };
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(function(perm){
+      if (perm === 'granted') sendBrowserNotif(title, body);
+    });
+  }
+}
+
+function startRepeatNotif(orderId, orderCode, namaPemesan) {
+  if (!CFG.notifRepeat) return;
+  _pendingOrderIds.add(orderId);
+  if (_notifRepeatTimer) return; // already running
+  var interval = (CFG.notifInterval || 30) * 1000;
+  _notifRepeatTimer = setInterval(function() {
+    if (_pendingOrderIds.size === 0) {
+      clearInterval(_notifRepeatTimer);
+      _notifRepeatTimer = null;
+      return;
+    }
+    var count = _pendingOrderIds.size;
+    showNotif('🔔 ' + count + ' pesanan menunggu konfirmasi!', '#6C5CE7');
+    playOrderBeep(true);
+    sendBrowserNotif('⚠️ Pesanan Belum Dikonfirmasi', count + ' pesanan menunggu konfirmasi di WarungKu POS');
+  }, interval);
+}
+
+function stopRepeatNotif(orderId) {
+  _pendingOrderIds.delete(orderId);
+  if (_pendingOrderIds.size === 0 && _notifRepeatTimer) {
+    clearInterval(_notifRepeatTimer);
+    _notifRepeatTimer = null;
+  }
+}
+
+function requestNotifPermission() {
+  if (!('Notification' in window)) { showNotif('Browser tidak mendukung notifikasi','#E17055'); return; }
+  Notification.requestPermission().then(function(perm) {
+    if (perm === 'granted') showNotif('✅ Notifikasi browser diizinkan','#00B894');
+    else showNotif('❌ Notifikasi browser ditolak','#E17055');
+    var el = $('notif-perm-status');
+    if (el) el.textContent = perm === 'granted' ? '✅ Diizinkan' : '❌ Ditolak';
+  });
+}
+
+function saveNotifCfg() {
+  CFG.notifSound   = !!($('cfg-notif-sound') && $('cfg-notif-sound').checked);
+  CFG.notifBrowser = !!($('cfg-notif-browser') && $('cfg-notif-browser').checked);
+  CFG.notifRepeat  = !!($('cfg-notif-repeat') && $('cfg-notif-repeat').checked);
+  CFG.notifInterval = parseInt(($('cfg-notif-interval')||{value:'30'}).value) || 30;
+  CFG.notifVolume  = parseFloat(($('cfg-notif-volume')||{value:'0.5'}).value) || 0.5;
+  saveCFG();
+  showNotif('✅ Pengaturan notifikasi disimpan','#00B894');
+  var repFields = $('notif-repeat-fields');
+  if (repFields) repFields.style.display = CFG.notifRepeat ? 'block' : 'none';
+}
+
+function toggleNotifRepeat() {
+  var el = $('notif-repeat-fields');
+  var cb = $('cfg-notif-repeat');
+  if (el && cb) el.style.display = cb.checked ? 'block' : 'none';
 }
 
 
@@ -5588,6 +5680,8 @@ async function updateOrderStatus(orderId, status, ket, btn){
       }
     }
     showNotif('✅ Status diperbarui: '+status,'#00B894');
+    // Stop repeat notif if order confirmed or cancelled
+    if (status === 'confirmed' || status === 'cancelled') stopRepeatNotif(orderId);
     // Auto-switch tab after terminal status
     if (status === 'cancelled') {
       window._orderTab = 'cancelled';
@@ -5939,6 +6033,16 @@ function hapusVoucher(i) {
   if (!CFG.vouchers) return;
   CFG.vouchers.splice(i, 1);
   renderVoucherList();
+  // Notif settings
+  var ns = $('cfg-notif-sound'); if(ns) ns.checked = CFG.notifSound !== false;
+  var nb = $('cfg-notif-browser'); if(nb) nb.checked = CFG.notifBrowser !== false;
+  var nr = $('cfg-notif-repeat'); if(nr) nr.checked = !!CFG.notifRepeat;
+  var ni = $('cfg-notif-interval'); if(ni) ni.value = CFG.notifInterval || 30;
+  var nv = $('cfg-notif-volume'); if(nv) nv.value = CFG.notifVolume || 0.5;
+  var rf = $('notif-repeat-fields'); if(rf) rf.style.display = CFG.notifRepeat ? 'block' : 'none';
+  // Notif permission status
+  var np = $('notif-perm-status');
+  if(np && 'Notification' in window) np.textContent = Notification.permission === 'granted' ? '✅ Diizinkan' : Notification.permission === 'denied' ? '❌ Ditolak' : '⏳ Belum diminta';
 }
 
 function saveVoucherCfg() {
