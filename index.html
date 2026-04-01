@@ -5655,8 +5655,8 @@ async function loadOnlineOrders(){
       var items=o.items_snapshot||[];
       var payLabel={cod:'COD',qris:'QRIS',transfer:'Transfer'}[o.pay_method]||o.pay_method;
       var payBadge={cod:'b-green',qris:'b-blue',transfer:'b-amber'}[o.pay_method]||'b-gray';
-      var statusColor={pending:'var(--amber-dk)',confirmed:'var(--blue-dk)',preparing:'var(--green-dk)',on_delivery:'#7C3AED',delivered:'var(--green-dk)',cancelled:'var(--red-dk)'}[o.status]||'var(--txt2)';
-      var statusLabel={pending:'Menunggu',confirmed:'Dikonfirmasi',preparing:'Dimasak',on_delivery:'Diantar',delivered:'Selesai',cancelled:'Dibatalkan'}[o.status]||o.status;
+      var statusColor={pending:'var(--amber-dk)',confirmed:'var(--blue-dk)',preparing:'var(--green-dk)',ready_pickup:'#7C3AED',on_delivery:'#7C3AED',delivered:'var(--green-dk)',cancelled:'var(--red-dk)'}[o.status]||'var(--txt2)';
+      var statusLabel={pending:'Menunggu',confirmed:'Dikonfirmasi',preparing:'Dimasak',ready_pickup:'Siap Diambil',on_delivery:'Diantar',delivered:'Selesai',cancelled:'Dibatalkan'}[o.status]||o.status;
       var dt=new Date(o.created_at);
       var timeStr=dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+' · '+dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
 
@@ -5682,7 +5682,10 @@ async function loadOnlineOrders(){
             '<div style="font-size:13px;font-weight:700">'+o.order_code+'</div>'+
             '<div style="font-size:11px;color:var(--txt2)">'+o.nama_pemesan+' · '+o.hp_pemesan+' · '+timeStr+'</div>'+
           '</div>'+
-          '<span style="font-size:11px;font-weight:700;color:'+statusColor+';white-space:nowrap">'+statusLabel+'</span>'+
+          '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">'+
+            '<span style="font-size:11px;font-weight:700;color:'+statusColor+';white-space:nowrap">'+statusLabel+'</span>'+
+            (o.order_type==='pickup'?'<span style="font-size:9px;background:#EDE9FE;color:#5B21B6;padding:1px 7px;border-radius:10px;font-weight:600">🏃 Ambil Sendiri</span>':'<span style="font-size:9px;background:#DBEAFE;color:#1D4ED8;padding:1px 7px;border-radius:10px;font-weight:600">🛵 Diantar</span>')+
+          '</div>'+
         '</div>'+
         '<div style="font-size:11px;color:var(--txt2);margin-bottom:6px;line-height:1.6">'+
           items.map(function(i){return '<b>'+i.qty+'×</b> '+i.nama+(i.note?' <span style="color:var(--amber-dk)">('+i.note+')</span>':'');}).join(' · ')+
@@ -5740,6 +5743,7 @@ async function loadOnlineOrders(){
         waBtn.textContent='💬 WA';
         actDiv.appendChild(waBtn);
 
+        var isPickup = o.order_type === 'pickup';
         if(o.status==='pending'){
           var terimaBtn=document.createElement('button');
           terimaBtn.className='btn btn-sm';
@@ -5764,12 +5768,30 @@ async function loadOnlineOrders(){
           actDiv.insertBefore(masakBtn, waBtn);
         }
         if(o.status==='preparing'){
-          var kirimBtn=document.createElement('button');
-          kirimBtn.className='btn btn-sm';
-          kirimBtn.style.color='#7C3AED';
-          kirimBtn.textContent='🛵 Kirim';
-          (function(oid){kirimBtn.onclick=function(){updateOrderStatus(oid,'on_delivery','Kurir sedang mengantar',kirimBtn);};})(o.id);
-          actDiv.insertBefore(kirimBtn, waBtn);
+          if(isPickup){
+            // Pickup: siap diambil (no delivery step)
+            var siapBtn=document.createElement('button');
+            siapBtn.className='btn btn-sm';
+            siapBtn.style.color='#7C3AED';
+            siapBtn.textContent='✅ Siap Diambil';
+            (function(oid){siapBtn.onclick=function(){updateOrderStatus(oid,'ready_pickup','Pesanan siap diambil',siapBtn);};})(o.id);
+            actDiv.insertBefore(siapBtn, waBtn);
+          } else {
+            var kirimBtn=document.createElement('button');
+            kirimBtn.className='btn btn-sm';
+            kirimBtn.style.color='#7C3AED';
+            kirimBtn.textContent='🛵 Kirim';
+            (function(oid){kirimBtn.onclick=function(){updateOrderStatus(oid,'on_delivery','Kurir sedang mengantar',kirimBtn);};})(o.id);
+            actDiv.insertBefore(kirimBtn, waBtn);
+          }
+        }
+        if(o.status==='ready_pickup'){
+          var ambilBtn=document.createElement('button');
+          ambilBtn.className='btn btn-sm';
+          ambilBtn.style.color='var(--green-dk)';
+          ambilBtn.textContent='🎉 Sudah Diambil';
+          (function(oid){ambilBtn.onclick=function(){updateOrderStatus(oid,'delivered','Pesanan sudah diambil pelanggan',ambilBtn);};})(o.id);
+          actDiv.insertBefore(ambilBtn, waBtn);
         }
         if(o.status==='on_delivery'){
           var selesaiBtn=document.createElement('button');
