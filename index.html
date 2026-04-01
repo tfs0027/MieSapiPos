@@ -937,7 +937,10 @@ tr:hover td{background:rgba(108,92,231,.03)}
                   <span id="notif-perm-status" style="font-size:11px;color:var(--txt2)">—</span>
                 </div>
               </div>
-              <button class="btn" style="width:100%;margin-top:6px" onclick="playOrderBeep()">🔊 Test Bunyi</button>
+              <div style="display:flex;gap:8px;margin-top:6px">
+                <button class="btn" style="flex:1" id="btn-test-beep" onclick="testBeepStart()">🔊 Test Bunyi</button>
+                <button class="btn btn-primary" style="flex:1;display:none" id="btn-stop-beep" onclick="testBeepStop()">⏹️ Selesai</button>
+              </div>
             </div>
 
             <div class="card">
@@ -5336,8 +5339,18 @@ document.addEventListener('click', function unlockAudio() {
   document.removeEventListener('click', unlockAudio);
 }, {once: true});
 
+var _activeAudio = null;  // track playing Audio element
+
+function stopAllAudio() {
+  if (_activeAudio) {
+    try { _activeAudio.pause(); _activeAudio.currentTime = 0; } catch(e) {}
+    _activeAudio = null;
+  }
+}
+
 function playOrderBeep() {
   if (CFG.notifSound === false) return;
+  stopAllAudio();
   var vol = CFG.notifVolume || 0.8;
 
   // If custom audio file set, use it
@@ -5345,12 +5358,13 @@ function playOrderBeep() {
     try {
       var audio = new Audio(CFG.notifAudioData);
       audio.volume = Math.min(1, vol);
-      audio.play().catch(function(){});
+      _activeAudio = audio;
+      audio.play().catch(function(){ _activeAudio = null; });
       return;
     } catch(e) {}
   }
 
-  // Fallback: Web Audio API beep
+  // Fallback: Web Audio API beep (3 tones)
   try {
     var ctx = getAudioCtx();
     if (!ctx) return;
@@ -5369,6 +5383,27 @@ function playOrderBeep() {
     tone(1100, 0.18, 0.3);
     tone(1320, 0.36, 0.45);
   } catch(e) { console.warn('playOrderBeep error:', e); }
+}
+
+function testBeepStart() {
+  // Play in loop for test
+  playOrderBeep();
+  if (CFG.notifAudioData && _activeAudio) {
+    _activeAudio.loop = true;
+  }
+  var testBtn = $('btn-test-beep');
+  var stopBtn = $('btn-stop-beep');
+  if (testBtn) testBtn.style.display = 'none';
+  if (stopBtn) stopBtn.style.display = 'block';
+}
+
+function testBeepStop() {
+  stopAllAudio();
+  var testBtn = $('btn-test-beep');
+  var stopBtn = $('btn-stop-beep');
+  if (testBtn) testBtn.style.display = 'block';
+  if (stopBtn) stopBtn.style.display = 'none';
+  showNotif('✅ Pengaturan suara dikonfirmasi', '#00B894');
 }
 
 function sendBrowserNotif(title, body) {
@@ -5404,9 +5439,9 @@ function startRepeatNotif(orderId, orderCode, namaPemesan) {
 
 function stopRepeatNotif(orderId) {
   _pendingOrderIds.delete(orderId);
-  if (_pendingOrderIds.size === 0 && _notifRepeatTimer) {
-    clearInterval(_notifRepeatTimer);
-    _notifRepeatTimer = null;
+  if (_pendingOrderIds.size === 0) {
+    if (_notifRepeatTimer) { clearInterval(_notifRepeatTimer); _notifRepeatTimer = null; }
+    stopAllAudio();
   }
 }
 
