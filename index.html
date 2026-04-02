@@ -6693,6 +6693,7 @@ function renderSettings() {
   var stipe=$('cfg-service-tipe'); if(stipe){ stipe.value=CFG.serviceTipe||'pct'; toggleServiceTipe(); }
   var snm=$('cfg-service-nm'); if(snm) snm.value=CFG.serviceNama||'Biaya Layanan';
   var sf=$('service-fields'); if(sf) sf.style.display=CFG.enableService?'block':'none';
+  var opu=$('cfg-order-page-url'); if(opu) opu.value=CFG.orderPageUrl||'';
   renderVoucherList();
   renderKurirList();
 }
@@ -6723,6 +6724,7 @@ function saveCfgToko() {
   $('login-title').textContent = CFG.nama + ' POS';
   renderStrukPreview();
   showNotif('✅ Informasi toko disimpan','#00B894');
+  var opu = $('cfg-order-page-url'); if(opu) CFG.orderPageUrl = opu.value.trim();
   syncRestoStatusToSupabase();
 }
 
