@@ -572,6 +572,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         <div style="display:flex;gap:4px;margin-bottom:12px">
           <button class="shift-tab active" id="lap-sub-jual" onclick="switchLapTab('jual',this)">📊 Laporan Penjualan</button>
           <button class="shift-tab" id="lap-sub-peng" onclick="switchLapTab('peng',this)">💸 Laporan Pengeluaran</button>
+          <button class="shift-tab" id="lap-sub-kurir" onclick="switchLapTab('kurir',this)">🛵 Rekap Kurir</button>
         </div>
 
         <!-- LAPORAN PENJUALAN -->
@@ -1043,6 +1044,51 @@ tr:hover td{background:rgba(108,92,231,.03)}
             </div>
           </div>
         </div>
+        <!-- REKAP KURIR -->
+        <div id="lap-panel-kurir" style="display:none">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end">
+            <div class="form-group" style="margin:0;flex:1;min-width:120px">
+              <label class="form-lbl">Filter Kurir</label>
+              <select class="fi" id="kurir-filter-nama" onchange="renderRekapKurir()">
+                <option value="">Semua Kurir</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:110px">
+              <label class="form-lbl">Dari Tanggal</label>
+              <input class="fi" type="date" id="kurir-filter-dari" onchange="renderRekapKurir()">
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:110px">
+              <label class="form-lbl">Sampai Tanggal</label>
+              <input class="fi" type="date" id="kurir-filter-sampai" onchange="renderRekapKurir()">
+            </div>
+            <button class="btn btn-sm" onclick="loadRekapKurir()">🔄 Refresh</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px" id="kurir-summary-cards"></div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="background:var(--bg2);text-align:left">
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd)">Tgl/Jam</th>
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd)">Kode Pesanan</th>
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd)">Kurir</th>
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd)">Penerima</th>
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd);text-align:right">Subtotal</th>
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd);text-align:right">Ongkir</th>
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd);text-align:right">Total</th>
+                  <th style="padding:8px 10px;border-bottom:2px solid var(--brd)">Bayar</th>
+                </tr>
+              </thead>
+              <tbody id="kurir-table-body">
+                <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--txt3)">Klik 🔄 Refresh untuk memuat data</td></tr>
+              </tbody>
+              <tfoot id="kurir-table-foot"></tfoot>
+            </table>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm" onclick="exportRekapKurir()">📥 Export CSV</button>
+          </div>
+        </div>
+
       </div>
 
       <div class="page" id="page-locked">
