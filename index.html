@@ -6353,6 +6353,46 @@ function closeSuccessPopup() {
 
 
 // ── Kurir Management ──────────────────────────────────────────────────────
+
+function showTambahKurirRow() {
+  var row = $('tambah-kurir-row');
+  if (row) row.style.display = 'block';
+  var nm = $('new-kurir-nama'); if (nm) { nm.value = ''; nm.focus(); }
+  var hp = $('new-kurir-hp'); if (hp) hp.value = '';
+}
+
+function batalTambahKurir() {
+  var row = $('tambah-kurir-row');
+  if (row) row.style.display = 'none';
+}
+
+function simpanKurirBaru() {
+  var nm = ($('new-kurir-nama')||{value:''}).value.trim();
+  var hp = ($('new-kurir-hp')||{value:''}).value.trim();
+  if (!nm) { showNotif('Isi nama kurir', '#E17055'); return; }
+  if (!CFG.kurirList) CFG.kurirList = [];
+  CFG.kurirList.push({nama: nm, hp: hp, aktif: true});
+  saveCFG();
+  batalTambahKurir();
+  // Refresh grid and select new kurir
+  var aktif = CFG.kurirList.filter(function(k){ return k.aktif !== false; });
+  var newIdx = aktif.length - 1;
+  var grid = $('assign-kurir-grid');
+  if (grid) {
+    grid.innerHTML = aktif.map(function(k, i) {
+      return '<div id="kurir-card-'+i+'" onclick="pilihKurirCard('+i+')" style="cursor:pointer;border:2px solid var(--brd);border-radius:12px;padding:12px 14px;text-align:center;transition:all .15s">' +
+        '<div style="font-size:22px;margin-bottom:4px">🛵</div>' +
+        '<div style="font-size:13px;font-weight:700">'+k.nama+'</div>' +
+        '<div style="font-size:11px;color:var(--txt2)">'+(k.hp||'&nbsp;')+'</div>' +
+      '</div>';
+    }).join('');
+  }
+  pilihKurirCard(newIdx);
+  showNotif('✅ Kurir ' + nm + ' ditambahkan', '#00B894');
+  // Also update settings kurir list in background
+  renderKurirList();
+}
+
 var _assignKurirOrderId = null;
 var _assignKurirOrderCode = null;
 
@@ -6579,6 +6619,7 @@ function renderSettings() {
   var snm=$('cfg-service-nm'); if(snm) snm.value=CFG.serviceNama||'Biaya Layanan';
   var sf=$('service-fields'); if(sf) sf.style.display=CFG.enableService?'block':'none';
   renderVoucherList();
+  renderKurirList();
 }
 
 function saveCfgToko() {
@@ -6877,8 +6918,23 @@ renderLogin();
     <div class="modal-sub" id="assign-order-info">Pilih kurir untuk pesanan ini</div>
     
     <!-- Kurir cards grid -->
-    <div id="assign-kurir-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 16px"></div>
-    
+    <div id="assign-kurir-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 8px"></div>
+
+    <!-- Tambah kurir baru -->
+    <div id="tambah-kurir-row" style="display:none;background:var(--bg2);border:1.5px dashed var(--brd2);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:8px;color:var(--accent)">➕ Tambah Kurir Baru</div>
+      <div class="frow">
+        <div class="form-group"><label class="form-lbl">Nama Kurir</label><input class="fi" id="new-kurir-nama" placeholder="Nama lengkap"></div>
+        <div class="form-group"><label class="form-lbl">No. HP</label><input class="fi" id="new-kurir-hp" placeholder="08xxxxxxxx" type="tel"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="batalTambahKurir()">Batal</button>
+        <button class="btn btn-sm btn-primary" onclick="simpanKurirBaru()">💾 Simpan & Pilih</button>
+      </div>
+    </div>
+
+    <button class="btn btn-sm" style="width:100%;margin-bottom:12px;border-style:dashed" onclick="showTambahKurirRow()">➕ Tambah Kurir Baru</button>
+
     <div class="frow">
       <div class="form-group">
         <label class="form-lbl">Waktu Keberangkatan</label>
