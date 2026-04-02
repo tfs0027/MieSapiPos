@@ -6513,13 +6513,16 @@ async function prosesAssignKurir() {
     await _sb.from('order_status_log').insert({
       order_id: _assignKurirOrderId, status: 'on_delivery', keterangan: ket, by_role: 'warung'
     });
+    // Simpan dulu sebelum modal ditutup (closeModal akan null-kan _assignKurirOrderId)
+    var savedOrderId = _assignKurirOrderId;
+    var savedOrderCode = _assignKurirOrderCode;
     closeAssignKurirModal();
     showSuccessPopup('🛵', 'Kurir Berangkat!', kurir.nama + ' berangkat pukul ' + (waktu||'-'), 3000);
-    stopRepeatNotif(_assignKurirOrderId);
-    if (_notifCurrentOrderId === _assignKurirOrderId) closeOrderNotif();
+    stopRepeatNotif(savedOrderId);
+    if (_notifCurrentOrderId === savedOrderId) closeOrderNotif();
     loadOnlineOrders();
     // Kirim detail pengantaran ke kurir via WhatsApp
-    if (kurir.hp) kirimWAKurir(kurir, _assignKurirOrderId, _assignKurirOrderCode, waktu, note);
+    if (kurir.hp) kirimWAKurir(kurir, savedOrderId, savedOrderCode, waktu, note);
   } catch(e) {
     showNotif('Gagal: ' + e.message, '#E17055');
     if (btn) { btn.disabled = false; btn.textContent = '🛵 Berangkatkan Kurir'; }
@@ -6538,16 +6541,23 @@ async function kirimWAKurir(kurir, orderId, orderCode, waktu, note) {
   try {
     // Fetch order detail for the WA message
     var res = await _sb.from('online_orders')
-      .select('*,delivery_addresses(*)')
+      .select('*')
       .eq('id', orderId)
       .single();
     var o = res.data || {};
-    var addr = o.delivery_addresses || {};
+    // Fetch address separately
+    var addr = {};
+    if (o.delivery_addr_id) {
+      var aRes = await _sb.from('delivery_addresses').select('*').eq('id', o.delivery_addr_id).single();
+      if (aRes.data) addr = aRes.data;
+    }
     var items = (o.items_snapshot||[]).map(function(i){ return i.qty + 'x ' + i.nama; }).join(', ');
 
     // Build magic link - uses current origin + order page path
     var origin = window.location.origin;
-    var orderPagePath = window.location.pathname.replace('warungku-pos.html','warungku-order.html');
+    // Build path to warungku-order.html relative to current file
+    var curPath = window.location.pathname;
+    var orderPagePath = curPath.replace(/[^/]*$/, 'warungku-order.html');
     var magicLink = origin + orderPagePath + '?konfirm=' + orderId;
 
     // Build WA message
