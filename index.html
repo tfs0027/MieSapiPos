@@ -1561,6 +1561,7 @@ const CFG_KEY = 'wkpos_cfg';
 const SESSION_KEY = 'wkpos_session';
 let CFG = {
   nama:'WarungKu', tagline:'Makan Enak, Harga Bersahabat',
+  orderPageUrl:'', // URL lengkap halaman order pelanggan (GitHub Pages)
   alamat:'Jl. Contoh No.1, Madiun, Jawa Timur',
   telp:'0851-xxxx-xxxx', wa:'6285xxxxxxxx', sosmed:'@warungku',
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
@@ -6554,11 +6555,16 @@ async function kirimWAKurir(kurir, orderId, orderCode, waktu, note) {
     var items = (o.items_snapshot||[]).map(function(i){ return i.qty + 'x ' + i.nama; }).join(', ');
 
     // Build magic link - uses current origin + order page path
-    var origin = window.location.origin;
-    // Build path to warungku-order.html relative to current file
-    var curPath = window.location.pathname;
-    var orderPagePath = curPath.replace(/[^/]*$/, 'warungku-order.html');
-    var magicLink = origin + orderPagePath + '?konfirm=' + orderId;
+    // Gunakan URL dari pengaturan, fallback ke auto-detect
+    var baseOrderUrl = CFG.orderPageUrl || '';
+    if (!baseOrderUrl) {
+      var origin = window.location.origin;
+      var curPath = window.location.pathname;
+      baseOrderUrl = origin + curPath.replace(/[^/]*$/, 'warungku-order.html');
+    }
+    // Remove trailing slash
+    baseOrderUrl = baseOrderUrl.replace(/\?.*$/, '').replace(/\/+$/, '');
+    var magicLink = baseOrderUrl + '?konfirm=' + orderId;
 
     // Build WA message
     var warungNama = CFG.nama || 'WarungKu';
