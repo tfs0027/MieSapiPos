@@ -3725,6 +3725,27 @@ function renderLaporan() {
       }
     });
   });
+  // Also fetch delivered orders from Supabase for current period (more reliable)
+  if (_sb && CFG.restaurantId && !_lapOnlineFetching) {
+    _lapOnlineFetching = true;
+    var qObj = _sb.from('online_orders')
+      .select('order_code,total,ongkir,subtotal,pay_method,nama_pemesan,created_at,catatan')
+      .eq('restaurant_id', CFG.restaurantId)
+      .eq('status', 'delivered');
+    if (dari) qObj = qObj.gte('created_at', dari.toISOString());
+    if (sampai) qObj = qObj.lte('created_at', sampai.toISOString());
+    qObj.then(function(res) {
+      _lapOnlineFetching = false;
+      if (res.error || !res.data) return;
+      // Replace with fresh Supabase data
+      var sbData = res.data.map(function(o){
+        return {id:o.order_code,total:o.total||0,ongkir:o.ongkir||0,subtotal:o.subtotal||0,pay:o.pay_method,nama:o.nama_pemesan,time:o.created_at?new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}):'-'};
+      });
+      // Update ST.currentShift.onlineOrders with fresh data
+      if (ST.currentShift) ST.currentShift.onlineOrders = sbData;
+      renderLaporan();
+    });
+  }
   var nDays = getLapDayCount();
   var nTrx = trxs.length;
   // Rata-rata per transaksi
@@ -5915,6 +5936,7 @@ async function updateOrderStatus(orderId, status, ket, btn){
         if(!ST.currentShift.onlineOrders) ST.currentShift.onlineOrders=[];
         ST.currentShift.onlineOrders.push({id:o.order_code,total:o.total,ongkir:o.ongkir,subtotal:o.subtotal,pay:o.pay_method,nama:o.nama_pemesan,time:new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})});
         sbSyncShift(ST.currentShift);
+        saveShiftLocal();
       }
     }
     // Show success popup based on status
