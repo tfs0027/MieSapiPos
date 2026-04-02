@@ -3434,11 +3434,12 @@ function renderOnlinePlatformList() {
 function switchLapTab(tab, btn) {
   document.querySelectorAll('[id^="lap-sub-"]').forEach(function(b){b.classList.remove('active');});
   if (btn) btn.classList.add('active');
-  var panels = ['jual','peng'];
-  panels.forEach(function(p) {
-    var el = $('lap-panel-'+p); if(el) el.style.display = p===tab?'block':'none';
+  var panels = ['jual','peng','kurir'];
+  panels.forEach(function(pp) {
+    var el = $('lap-panel-'+pp); if(el) el.style.display = pp===tab?'block':'none';
   });
   if (tab === 'peng') renderLaporanPengeluaran();
+  if (tab === 'kurir') loadRekapKurir();
 }
 
 function getAllPengeluaran() {
@@ -6603,6 +6604,202 @@ async function kirimWAKurir(kurir, orderId, orderCode, waktu, note) {
     console.warn('kirimWAKurir error:', e.message);
     showNotif('⚠️ Gagal buka WA, cek HP kurir', '#E17055');
   }
+}
+
+
+// ── Rekap Kurir ───────────────────────────────────────────────────────────
+var _rekapKurirData = [];
+
+async function loadRekapKurir() {
+  if (!_sb || !CFG.restaurantId) {
+    showNotif('Hubungkan ke Supabase terlebih dahulu', '#E17055');
+    return;
+  }
+  var tbody = $('kurir-table-body');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--txt3)">⏳ Memuat data...</td></tr>';
+
+  try {
+    var res = await _sb.from('online_orders')
+      .select('id,order_code,created_at,nama_pemesan,subtotal,ongkir,total,pay_method,catatan,status,kurir_nama,kurir_hp,kurir_berangkat')
+      .eq('restaurant_id', CFG.restaurantId)
+      .eq('status', 'delivered')
+      .order('created_at', {ascending: false});
+
+    if (res.error) throw res.error;
+    _rekapKurirData = res.data || [];
+
+    // Also get kurir info from order_status_log for orders without kurir_nama
+    // Extract kurir names from catatan field
+    _rekapKurirData.forEach(function(o) {
+      if (!o.kurir_nama) {
+        // Try to extract from status log keterangan (stored in catatan or will be in log)
+        o.kurir_nama = '-';
+      }
+    });
+
+    // Build kurir filter dropdown
+    var kurirNamaSet = new Set();
+    _rekapKurirData.forEach(function(o){ if(o.kurir_nama && o.kurir_nama !== '-') kurirNamaSet.add(o.kurir_nama); });
+    // Also add from CFG.kurirList
+    (CFG.kurirList||[]).forEach(function(k){ if(k.nama) kurirNamaSet.add(k.nama); });
+    var sel = $('kurir-filter-nama');
+    if (sel) {
+      sel.innerHTML = '<option value="">Semua Kurir</option>' +
+        Array.from(kurirNamaSet).sort().map(function(nm){
+          return '<option value="'+nm+'">'+nm+'</option>';
+        }).join('');
+    }
+
+    // Set default date range (this month)
+    var today = new Date();
+    var y = today.getFullYear(), m = String(today.getMonth()+1).padStart(2,'0');
+    var d1 = $('kurir-filter-dari'), d2 = $('kurir-filter-sampai');
+    if (d1 && !d1.value) d1.value = y+'-'+m+'-01';
+    if (d2 && !d2.value) d2.value = y+'-'+m+'-'+String(today.getDate()).padStart(2,'0');
+
+    renderRekapKurir();
+  } catch(e) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--red-dk)">Gagal: '+e.message+'</td></tr>';
+  }
+}
+
+function renderRekapKurir() {
+  var filterKurir = ($('kurir-filter-nama')||{value:''}).value;
+  var filterDari  = ($('kurir-filter-dari')||{value:''}).value;
+  var filterSampai= ($('kurir-filter-sampai')||{value:''}).value;
+
+  var data = _rekapKurirData.filter(function(o) {
+    if (filterKurir && o.kurir_nama !== filterKurir) return false;
+    var tgl = o.created_at ? o.created_at.substring(0,10) : '';
+    if (filterDari && tgl < filterDari) return false;
+    if (filterSampai && tgl > filterSampai) return false;
+    return true;
+  });
+
+  // Summary
+  var totalOngkir = data.reduce(function(a,o){ return a+(o.ongkir||0); }, 0);
+  var totalPesanan = data.length;
+  var totalOmzet = data.reduce(function(a,o){ return a+(o.total||0); }, 0);
+
+  // Group by kurir for summary
+  var byKurir = {};
+  data.forEach(function(o) {
+    var nm = o.kurir_nama || '-';
+    if (!byKurir[nm]) byKurir[nm] = {count:0, ongkir:0};
+    byKurir[nm].count++;
+    byKurir[nm].ongkir += o.ongkir||0;
+  });
+
+  var cards = $('kurir-summary-cards');
+  if (cards) {
+    cards.innerHTML =
+      '<div style="background:var(--accent-bg,#FFF3EE);border-radius:12px;padding:12px 14px;border:1.5px solid var(--accent)">' +
+        '<div style="font-size:11px;color:var(--txt2)">Total Pengiriman</div>' +
+        '<div style="font-size:22px;font-weight:800;color:var(--accent)">' + totalPesanan + '</div>' +
+        '<div style="font-size:10px;color:var(--txt2)">pesanan terkirim</div>' +
+      '</div>' +
+      '<div style="background:var(--blue-bg,#EFF6FF);border-radius:12px;padding:12px 14px;border:1.5px solid var(--blue-dk)">' +
+        '<div style="font-size:11px;color:var(--txt2)">Total Ongkir</div>' +
+        '<div style="font-size:18px;font-weight:800;color:var(--blue-dk)">Rp ' + totalOngkir.toLocaleString('id-ID') + '</div>' +
+        '<div style="font-size:10px;color:var(--txt2)">semua kurir</div>' +
+      '</div>' +
+      '<div style="background:var(--green-bg);border-radius:12px;padding:12px 14px;border:1.5px solid var(--green-dk)">' +
+        '<div style="font-size:11px;color:var(--txt2)">Total Omzet</div>' +
+        '<div style="font-size:18px;font-weight:800;color:var(--green-dk)">Rp ' + totalOmzet.toLocaleString('id-ID') + '</div>' +
+        '<div style="font-size:10px;color:var(--txt2)">dari pengiriman</div>' +
+      '</div>';
+  }
+
+  // Per-kurir breakdown
+  var kurirBreakdown = Object.keys(byKurir).map(function(nm) {
+    return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px dashed var(--brd)">' +
+      '<span>🛵 <b>' + nm + '</b></span>' +
+      '<span>' + byKurir[nm].count + ' pesanan &middot; Rp ' + (byKurir[nm].ongkir).toLocaleString('id-ID') + '</span>' +
+    '</div>';
+  }).join('');
+  if (kurirBreakdown && cards) {
+    cards.innerHTML += '<div style="grid-column:1/-1;background:var(--bg2);border-radius:12px;padding:12px 14px;border:1px solid var(--brd)">' +
+      '<div style="font-size:11px;font-weight:700;margin-bottom:6px">Ringkasan per Kurir</div>' +
+      kurirBreakdown + '</div>';
+  }
+
+  // Table
+  var tbody = $('kurir-table-body');
+  if (!tbody) return;
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--txt3)">Tidak ada data pada filter ini</td></tr>';
+    $('kurir-table-foot').innerHTML = '';
+    return;
+  }
+
+  var payLabel = {cod:'COD',qris:'QRIS',transfer:'Transfer'};
+  tbody.innerHTML = data.map(function(o) {
+    var tgl = o.created_at ? new Date(o.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'2-digit'}) : '-';
+    var jam = o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '';
+    return '<tr style="border-bottom:1px solid var(--brd)">' +
+      '<td style="padding:7px 10px;font-size:11px;color:var(--txt2)">' + tgl + '<br>' + jam + '</td>' +
+      '<td style="padding:7px 10px;font-family:var(--font-mono);font-size:11px;font-weight:700">' + (o.order_code||'-') + '</td>' +
+      '<td style="padding:7px 10px;font-size:12px">' +
+        (o.kurir_nama && o.kurir_nama !== '-'
+          ? '<span style="background:#EDE9FE;color:#5B21B6;padding:2px 8px;border-radius:10px;font-weight:600;font-size:11px">🛵 '+o.kurir_nama+'</span>'
+          : '<span style="color:var(--txt3);font-size:11px">—</span>') +
+        (o.kurir_berangkat ? '<div style="font-size:10px;color:var(--txt2)">'+o.kurir_berangkat+'</div>' : '') +
+      '</td>' +
+      '<td style="padding:7px 10px;font-size:12px">' + (o.nama_pemesan||'-') + '</td>' +
+      '<td style="padding:7px 10px;text-align:right;font-size:12px">Rp ' + ((o.subtotal||0).toLocaleString('id-ID')) + '</td>' +
+      '<td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:700;color:var(--blue-dk)">Rp ' + ((o.ongkir||0).toLocaleString('id-ID')) + '</td>' +
+      '<td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:700">Rp ' + ((o.total||0).toLocaleString('id-ID')) + '</td>' +
+      '<td style="padding:7px 10px;font-size:11px">' +
+        '<span style="background:var(--bg2);border-radius:6px;padding:2px 7px">' + (payLabel[o.pay_method]||o.pay_method||'-') + '</span>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  // Footer totals
+  $('kurir-table-foot').innerHTML =
+    '<tr style="background:var(--bg2);font-weight:800">' +
+      '<td colspan="4" style="padding:8px 10px;font-size:12px">TOTAL ('+data.length+' pesanan)</td>' +
+      '<td style="padding:8px 10px;text-align:right;font-size:12px">Rp ' + data.reduce(function(a,o){return a+(o.subtotal||0);},0).toLocaleString('id-ID') + '</td>' +
+      '<td style="padding:8px 10px;text-align:right;font-size:12px;color:var(--blue-dk)">Rp ' + totalOngkir.toLocaleString('id-ID') + '</td>' +
+      '<td style="padding:8px 10px;text-align:right;font-size:12px">Rp ' + totalOmzet.toLocaleString('id-ID') + '</td>' +
+      '<td></td>' +
+    '</tr>';
+}
+
+function exportRekapKurir() {
+  var filterKurir = ($('kurir-filter-nama')||{value:''}).value;
+  var filterDari  = ($('kurir-filter-dari')||{value:''}).value;
+  var filterSampai= ($('kurir-filter-sampai')||{value:''}).value;
+  var data = _rekapKurirData.filter(function(o) {
+    if (filterKurir && o.kurir_nama !== filterKurir) return false;
+    var tgl = o.created_at ? o.created_at.substring(0,10) : '';
+    if (filterDari && tgl < filterDari) return false;
+    if (filterSampai && tgl > filterSampai) return false;
+    return true;
+  });
+  var header = ['Tanggal','Jam','Kode Pesanan','Kurir','HP Kurir','Jam Berangkat','Penerima','Subtotal','Ongkir','Total','Metode Bayar'];
+  var rows = data.map(function(o) {
+    var dt = o.created_at ? new Date(o.created_at) : new Date();
+    return [
+      dt.toLocaleDateString('id-ID'),
+      dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
+      o.order_code||'',
+      o.kurir_nama||'-',
+      o.kurir_hp||'-',
+      o.kurir_berangkat||'-',
+      o.nama_pemesan||'',
+      o.subtotal||0,
+      o.ongkir||0,
+      o.total||0,
+      o.pay_method||''
+    ].join(',');
+  });
+  var csv = [header.join(',')].concat(rows).join(String.fromCharCode(10));
+  var blob = new Blob([csv], {type:'text/csv'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'rekap-kurir-'+new Date().toISOString().substring(0,10)+'.csv';
+  a.click(); URL.revokeObjectURL(url);
 }
 
 function renderBankListCfg() {
