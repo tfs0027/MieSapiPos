@@ -284,6 +284,22 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .onc-ring{position:absolute;top:10px;right:10px;width:10px;height:10px;border-radius:50%;background:#E17055;animation:ping 1s cubic-bezier(0,0,.2,1) infinite}
 @keyframes bell-shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-15deg)}40%{transform:rotate(15deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(8deg)}}
 @keyframes ping{0%{transform:scale(1);opacity:1}75%,100%{transform:scale(2);opacity:0}}
+
+/* ── Success Popup ─────────────────────────────────────────────── */
+#success-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.8);
+  opacity:0;pointer-events:none;transition:all .3s cubic-bezier(.34,1.56,.64,1);z-index:4000;
+  background:var(--bg);border-radius:20px;padding:28px 32px;text-align:center;
+  box-shadow:0 8px 48px rgba(0,0,0,.2),0 0 0 2px var(--green-dk);
+  min-width:260px;max-width:320px}
+#success-popup.show{opacity:1;pointer-events:all;transform:translate(-50%,-50%) scale(1)}
+#success-popup .sp-icon{font-size:52px;margin-bottom:8px;animation:bounce-in .5s ease}
+#success-popup .sp-title{font-size:17px;font-weight:800;color:var(--green-dk);margin-bottom:6px}
+#success-popup .sp-sub{font-size:12px;color:var(--txt2);line-height:1.6;margin-bottom:16px}
+#success-popup .sp-bar{height:3px;background:var(--brd);border-radius:2px;overflow:hidden;margin-bottom:12px}
+#success-popup .sp-bar-fill{height:100%;background:var(--green-dk);width:100%;transition:width linear}
+#success-popup .sp-close{background:var(--green-dk);color:#fff;border:none;border-radius:10px;
+  padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;width:100%}
+@keyframes bounce-in{0%{transform:scale(0)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
 </style>
 </head>
 <body>
@@ -3051,7 +3067,7 @@ function exportLaporanHTML() {
     html += '<td>' + (t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':'Transfer') + '</td>';
     html += '<td>' + (t.kasir||'') + '</td></tr>';
   });
-    html += '</table></body></html>';
+      html += '</table></body></html>';
   var blob = new Blob([html], {type:'text/html;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var win = window.open(url, '_blank');
@@ -5831,9 +5847,23 @@ async function updateOrderStatus(orderId, status, ket, btn){
         sbSyncShift(ST.currentShift);
       }
     }
-    showNotif('✅ Status diperbarui: '+status,'#00B894');
-    // Stop repeat notif if order confirmed or cancelled
-    if (status === 'confirmed' || status === 'cancelled') stopRepeatNotif(orderId);
+    // Show success popup based on status
+    var statusMsg = {
+      confirmed: {icon:'✅', title:'Pesanan Diterima!', sub:'Pesanan sudah dikonfirmasi. Siap untuk dimasak.'},
+      preparing: {icon:'👨‍🍳', title:'Mulai Memasak!', sub:'Pesanan sedang diproses di dapur.'},
+      ready_pickup: {icon:'🏃', title:'Siap Diambil!', sub:'Pesanan siap — pelanggan bisa segera datang.'},
+      on_delivery: {icon:'🛵', title:'Pesanan Dikirim!', sub:'Kurir sedang dalam perjalanan.'},
+      delivered: {icon:'🎉', title:'Selesai!', sub:'Pesanan telah sampai ke pelanggan.'},
+      cancelled: {icon:'❌', title:'Pesanan Dibatalkan', sub:'Pesanan telah ditolak.'}
+    }[status];
+    if (statusMsg) showSuccessPopup(statusMsg.icon, statusMsg.title, statusMsg.sub, 3000);
+    else showNotif('✅ Status diperbarui: '+status,'#00B894');
+    // Stop repeat notif and close popup card if order confirmed or cancelled
+    if (status === 'confirmed' || status === 'cancelled') {
+      stopRepeatNotif(orderId);
+      // Close notif card if it's for this order
+      if (_notifCurrentOrderId === orderId) closeOrderNotif();
+    }
     // Auto-switch tab after terminal status
     if (status === 'cancelled') {
       window._orderTab = 'cancelled';
@@ -6276,6 +6306,34 @@ function rejectFromNotif() {
   openAlasanModal(_notifCurrentOrderId, document.getElementById('onc-code').textContent);
 }
 
+
+// ── Success Popup ──────────────────────────────────────────────────────
+var _successTimer = null;
+
+function showSuccessPopup(icon, title, sub, dur) {
+  dur = dur || 3000;
+  var el = $('success-popup');
+  var ic = $('sp-icon'), ti = $('sp-title'), su = $('sp-sub'), bar = $('sp-bar-fill');
+  if (!el) return;
+  if (ic) ic.textContent = icon || '✅';
+  if (ti) ti.textContent = title || 'Berhasil!';
+  if (su) su.textContent = sub || '';
+  if (bar) { bar.style.transition = 'none'; bar.style.width = '100%'; }
+  el.classList.add('show');
+  // Animate progress bar
+  setTimeout(function() {
+    if (bar) { bar.style.transition = 'width ' + dur + 'ms linear'; bar.style.width = '0%'; }
+  }, 50);
+  if (_successTimer) clearTimeout(_successTimer);
+  _successTimer = setTimeout(closeSuccessPopup, dur);
+}
+
+function closeSuccessPopup() {
+  var el = $('success-popup');
+  if (el) el.classList.remove('show');
+  if (_successTimer) { clearTimeout(_successTimer); _successTimer = null; }
+}
+
 function renderBankListCfg() {
   var el = $('bank-list-cfg'); if (!el) return;
   var banks = CFG.banks || [];
@@ -6654,6 +6712,16 @@ if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
 
 renderLogin();
 </script>
+
+<!-- Success Popup -->
+<div id="success-popup">
+  <div class="sp-icon" id="sp-icon">✅</div>
+  <div class="sp-title" id="sp-title">Berhasil!</div>
+  <div class="sp-sub" id="sp-sub"></div>
+  <div class="sp-bar"><div class="sp-bar-fill" id="sp-bar-fill"></div></div>
+  <button class="sp-close" onclick="closeSuccessPopup()">OK</button>
+</div>
+
 
 <!-- Order Notification Popup -->
 <div id="order-notif-overlay">
