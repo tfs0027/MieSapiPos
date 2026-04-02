@@ -960,6 +960,14 @@ tr:hover td{background:rgba(108,92,231,.03)}
             </div>
 
             <div class="card">
+              <div class="card-hd"><span class="card-title">🛵 Manajemen Kurir <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
+              <div style="font-size:11px;color:var(--txt2);margin-bottom:10px">Daftar kurir yang bisa di-assign untuk pengiriman pesanan online.</div>
+              <div id="kurir-list-cfg" style="margin-bottom:10px"></div>
+              <button class="btn" style="width:100%;margin-bottom:6px" onclick="tambahKurir()">➕ Tambah Kurir</button>
+              <button class="btn btn-primary" style="width:100%" onclick="saveKurirCfg()">💾 Simpan Daftar Kurir</button>
+            </div>
+
+            <div class="card">
               <div class="card-hd"><span class="card-title">🧾 Tampilan Struk</span></div>
               <div class="form-group">
                 <label class="form-lbl">Logo Toko (untuk Struk)</label>
@@ -1561,6 +1569,7 @@ let CFG = {
   enableService:false, serviceTipe:'pct', service:0,
   notifSound:true, notifBrowser:true, notifRepeat:true, notifInterval:30, notifVolume:0.8, notifAudioData:null, serviceFlat:0, serviceMaks:0, serviceNama:'Biaya Layanan', autoOpenWarung:true,
   vouchers:[],
+  kurirList:[], // [{id, nama, hp, aktif}]
   isOpen:true, closedNote:'Maaf, warung sedang tutup. Silakan coba lagi nanti.',
   qrisImg:null,
   sbUrl:'https://lztdvlrunspmcoewfjcg.supabase.co', sbKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4', restaurantId:'49ce0232-ce6d-4b67-bcb6-4e8df70844de',
@@ -3067,7 +3076,7 @@ function exportLaporanHTML() {
     html += '<td>' + (t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':'Transfer') + '</td>';
     html += '<td>' + (t.kasir||'') + '</td></tr>';
   });
-      html += '</table></body></html>';
+        html += '</table></body></html>';
   var blob = new Blob([html], {type:'text/html;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var win = window.open(url, '_blank');
@@ -5803,8 +5812,8 @@ async function loadOnlineOrders(){
             var kirimBtn=document.createElement('button');
             kirimBtn.className='btn btn-sm';
             kirimBtn.style.color='#7C3AED';
-            kirimBtn.textContent='🛵 Kirim';
-            (function(oid){kirimBtn.onclick=function(){updateOrderStatus(oid,'on_delivery','Kurir sedang mengantar',kirimBtn);};})(o.id);
+            kirimBtn.textContent='🛵 Assign Kurir';
+            (function(oid,ocode){kirimBtn.onclick=function(){openAssignKurirModal(oid,ocode);};})(o.id,o.order_code);
             actDiv.insertBefore(kirimBtn, waBtn);
           }
         }
@@ -5817,12 +5826,19 @@ async function loadOnlineOrders(){
           actDiv.insertBefore(ambilBtn, waBtn);
         }
         if(o.status==='on_delivery'){
-          var selesaiBtn=document.createElement('button');
-          selesaiBtn.className='btn btn-sm';
-          selesaiBtn.style.color='var(--green-dk)';
-          selesaiBtn.textContent='🎉 Selesai';
-          (function(oid){selesaiBtn.onclick=function(){updateOrderStatus(oid,'delivered','Pesanan telah diterima',selesaiBtn);};})(o.id);
-          actDiv.insertBefore(selesaiBtn, waBtn);
+          // Show kurir info if available
+          if(o.kurir_nama){
+            var kurirInfo=document.createElement('div');
+            kurirInfo.style.cssText='font-size:10px;color:var(--txt2);margin-bottom:4px;display:flex;align-items:center;gap:4px';
+            kurirInfo.innerHTML='🛵 <b>'+o.kurir_nama+'</b>'+(o.kurir_berangkat?' · berangkat '+o.kurir_berangkat:'');
+            actDiv.insertBefore(kurirInfo, waBtn);
+          }
+          var tibBtn=document.createElement('button');
+          tibBtn.className='btn btn-sm';
+          tibBtn.style.cssText='color:#fff;background:var(--green-dk);font-weight:700';
+          tibBtn.textContent='✅ Konfirmasi Tiba';
+          (function(oid){tibBtn.onclick=function(){konfirmasiTiba(oid,tibBtn);};})(o.id);
+          actDiv.insertBefore(tibBtn, waBtn);
         }
       }
       el.appendChild(card);
@@ -6215,6 +6231,7 @@ function hapusVoucher(i) {
   if (!CFG.vouchers) return;
   CFG.vouchers.splice(i, 1);
   renderVoucherList();
+  renderKurirList();
   // Notif settings
   var ns = $('cfg-notif-sound'); if(ns) ns.checked = CFG.notifSound !== false;
   var nb = $('cfg-notif-browser'); if(nb) nb.checked = CFG.notifBrowser !== false;
@@ -6332,6 +6349,139 @@ function closeSuccessPopup() {
   var el = $('success-popup');
   if (el) el.classList.remove('show');
   if (_successTimer) { clearTimeout(_successTimer); _successTimer = null; }
+}
+
+
+// ── Kurir Management ──────────────────────────────────────────────────────
+var _assignKurirOrderId = null;
+var _assignKurirOrderCode = null;
+
+function renderKurirList() {
+  var el = $('kurir-list-cfg'); if (!el) return;
+  var list = CFG.kurirList || [];
+  if (!list.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--txt3);padding:4px 0">Belum ada kurir. Klik "+ Tambah Kurir".</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(k, i) {
+    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius)">' +
+      '<div style="flex:1">' +
+        '<input class="fi kurir-nama" placeholder="Nama kurir" value="' + (k.nama||'') + '" style="margin-bottom:4px">' +
+        '<input class="fi kurir-hp" placeholder="No. HP" value="' + (k.hp||'') + '" type="tel">' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:4px;align-items:center">' +
+        '<label style="font-size:10px;cursor:pointer;display:flex;align-items:center;gap:3px"><input type="checkbox" class="kurir-aktif" ' + (k.aktif!==false?'checked':'') + '> Aktif</label>' +
+        '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusKurir(' + i + ')">🗑️</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function tambahKurir() {
+  if (!CFG.kurirList) CFG.kurirList = [];
+  CFG.kurirList.push({nama:'', hp:'', aktif:true});
+  renderKurirList();
+}
+
+function hapusKurir(i) {
+  if (!confirm('Hapus kurir ini?')) return;
+  CFG.kurirList.splice(i, 1);
+  renderKurirList();
+}
+
+function saveKurirCfg() {
+  var rows = document.querySelectorAll('#kurir-list-cfg > div');
+  CFG.kurirList = Array.from(rows).map(function(row) {
+    return {
+      nama: (row.querySelector('.kurir-nama')||{value:''}).value.trim(),
+      hp:   (row.querySelector('.kurir-hp')||{value:''}).value.trim(),
+      aktif: !!(row.querySelector('.kurir-aktif')||{checked:true}).checked
+    };
+  }).filter(function(k){ return k.nama; });
+  saveCFG();
+  showNotif('✅ Daftar kurir disimpan', '#00B894');
+  renderKurirList();
+}
+
+function openAssignKurirModal(orderId, orderCode) {
+  _assignKurirOrderId = orderId;
+  _assignKurirOrderCode = orderCode;
+  // Fill order info
+  var info = $('assign-order-info');
+  if (info) info.textContent = '📦 Pesanan ' + orderCode + ' siap dikirim';
+  // Fill kurir dropdown
+  var sel = $('assign-kurir-select');
+  if (sel) {
+    var aktif = (CFG.kurirList||[]).filter(function(k){ return k.aktif !== false; });
+    sel.innerHTML = '<option value="">-- Pilih kurir --</option>' +
+      aktif.map(function(k, i) {
+        return '<option value="' + i + '" data-hp="' + k.hp + '">' + k.nama + (k.hp?' ('+k.hp+')':'') + '</option>';
+      }).join('');
+    sel.onchange = function() {
+      var opt = sel.options[sel.selectedIndex];
+      var hp = $('assign-kurir-hp');
+      if (hp) hp.value = opt ? (opt.dataset.hp || '') : '';
+    };
+  }
+  // Set current time
+  var now = new Date();
+  var t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  var waktu = $('assign-kurir-waktu'); if (waktu) waktu.value = t;
+  var note = $('assign-kurir-note'); if (note) note.value = '';
+  // Show modal
+  $('assign-kurir-backdrop').style.display = 'block';
+  $('assign-kurir-modal').classList.add('show');
+}
+
+function closeAssignKurirModal() {
+  $('assign-kurir-backdrop').style.display = 'none';
+  $('assign-kurir-modal').classList.remove('show');
+  _assignKurirOrderId = null;
+}
+
+async function prosesAssignKurir() {
+  var sel = $('assign-kurir-select');
+  var waktu = ($('assign-kurir-waktu')||{}).value;
+  var note = ($('assign-kurir-note')||{}).value.trim();
+  if (!sel || !sel.value) { showNotif('Pilih kurir terlebih dahulu', '#E17055'); return; }
+  var idx = parseInt(sel.value);
+  var aktif = (CFG.kurirList||[]).filter(function(k){ return k.aktif !== false; });
+  var kurir = aktif[idx];
+  if (!kurir) return;
+  var btn = $('btn-assign-kirim');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  var ket = '🛵 Kurir: ' + kurir.nama + (kurir.hp ? ' (' + kurir.hp + ')' : '') +
+    (waktu ? ' · Berangkat: ' + waktu : '') + (note ? ' · ' + note : '');
+  // Update order: set status on_delivery + save kurir info
+  try {
+    var up = await _sb.from('online_orders').update({
+      status: 'on_delivery',
+      kurir_nama: kurir.nama,
+      kurir_hp: kurir.hp || '',
+      kurir_berangkat: waktu || ''
+    }).eq('id', _assignKurirOrderId);
+    // If columns don't exist, fallback update without them
+    if (up.error && up.error.message && up.error.message.indexOf('column') >= 0) {
+      await _sb.from('online_orders').update({status: 'on_delivery'}).eq('id', _assignKurirOrderId);
+    }
+    await _sb.from('order_status_log').insert({
+      order_id: _assignKurirOrderId, status: 'on_delivery', keterangan: ket, by_role: 'warung'
+    });
+    closeAssignKurirModal();
+    showSuccessPopup('🛵', 'Kurir Berangkat!', kurir.nama + ' berangkat pukul ' + (waktu||'-'), 3000);
+    stopRepeatNotif(_assignKurirOrderId);
+    if (_notifCurrentOrderId === _assignKurirOrderId) closeOrderNotif();
+    loadOnlineOrders();
+  } catch(e) {
+    showNotif('Gagal: ' + e.message, '#E17055');
+    if (btn) { btn.disabled = false; btn.textContent = '🛵 Berangkatkan Kurir'; }
+  }
+}
+
+async function konfirmasiTiba(orderId, btn) {
+  if (!confirm('Konfirmasi pesanan sudah tiba di pelanggan?')) return;
+  var tiba = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+  await updateOrderStatus(orderId, 'delivered', '✅ Pesanan tiba pukul ' + tiba + ' — dikonfirmasi warung', btn);
 }
 
 function renderBankListCfg() {
@@ -6712,6 +6862,41 @@ if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
 
 renderLogin();
 </script>
+
+<!-- Assign Kurir Modal -->
+<div class="modal-backdrop" id="assign-kurir-backdrop" onclick="closeAssignKurirModal()" style="z-index:2000;display:none"></div>
+<div class="modal" id="assign-kurir-modal" style="z-index:2001;max-width:400px">
+  <div class="modal-hd">
+    <span class="modal-title">🛵 Assign Kurir & Keberangkatan</span>
+    <button class="btn-icon" onclick="closeAssignKurirModal()">✕</button>
+  </div>
+  <div class="modal-body" style="padding:16px 20px">
+    <div id="assign-order-info" style="background:var(--accent3,#EDE9FE);border-radius:10px;padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--accent)"></div>
+    <div class="form-group">
+      <label class="form-lbl">Pilih Kurir</label>
+      <select class="fi" id="assign-kurir-select"><option value="">-- Pilih kurir --</option></select>
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">No. HP Kurir</label>
+      <input class="fi" id="assign-kurir-hp" placeholder="Otomatis dari data kurir" readonly style="background:var(--bg2)">
+    </div>
+    <div class="frow">
+      <div class="form-group">
+        <label class="form-lbl">Waktu Keberangkatan</label>
+        <input class="fi" id="assign-kurir-waktu" type="time">
+      </div>
+      <div class="form-group">
+        <label class="form-lbl">Catatan</label>
+        <input class="fi" id="assign-kurir-note" placeholder="Opsional">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" style="flex:1" onclick="closeAssignKurirModal()">Batal</button>
+      <button class="btn btn-primary" style="flex:2" id="btn-assign-kirim" onclick="prosesAssignKurir()">🛵 Berangkatkan Kurir</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- Success Popup -->
 <div id="success-popup">
