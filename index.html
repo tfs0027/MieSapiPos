@@ -6518,6 +6518,8 @@ async function prosesAssignKurir() {
     stopRepeatNotif(_assignKurirOrderId);
     if (_notifCurrentOrderId === _assignKurirOrderId) closeOrderNotif();
     loadOnlineOrders();
+    // Kirim detail pengantaran ke kurir via WhatsApp
+    if (kurir.hp) kirimWAKurir(kurir, _assignKurirOrderId, _assignKurirOrderCode, waktu, note);
   } catch(e) {
     showNotif('Gagal: ' + e.message, '#E17055');
     if (btn) { btn.disabled = false; btn.textContent = '🛵 Berangkatkan Kurir'; }
@@ -6528,6 +6530,58 @@ async function konfirmasiTiba(orderId, btn) {
   if (!confirm('Konfirmasi pesanan sudah tiba di pelanggan?')) return;
   var tiba = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
   await updateOrderStatus(orderId, 'delivered', '✅ Pesanan tiba pukul ' + tiba + ' — dikonfirmasi warung', btn);
+}
+
+
+// ── WhatsApp Magic Link ke Kurir ─────────────────────────────────────────
+async function kirimWAKurir(kurir, orderId, orderCode, waktu, note) {
+  try {
+    // Fetch order detail for the WA message
+    var res = await _sb.from('online_orders')
+      .select('*,delivery_addresses(*)')
+      .eq('id', orderId)
+      .single();
+    var o = res.data || {};
+    var addr = o.delivery_addresses || {};
+    var items = (o.items_snapshot||[]).map(function(i){ return i.qty + 'x ' + i.nama; }).join(', ');
+
+    // Build magic link - uses current origin + order page path
+    var origin = window.location.origin;
+    var orderPagePath = window.location.pathname.replace('warungku-pos.html','warungku-order.html');
+    var magicLink = origin + orderPagePath + '?konfirm=' + orderId;
+
+    // Build WA message
+    var warungNama = CFG.nama || 'WarungKu';
+    var msg = [
+      '🛵 *DETAIL PENGANTARAN - ' + warungNama + '*',
+      '',
+      '📦 *Pesanan:* ' + (orderCode || o.order_code || '-'),
+      '👤 *Penerima:* ' + (o.nama_pemesan || '-'),
+      '📞 *HP Penerima:* ' + (o.hp_pemesan || '-'),
+      '📍 *Alamat:* ' + (addr.alamat_lengkap || '-'),
+      '🍱 *Menu:* ' + (items || '-'),
+      '💰 *Total:* Rp ' + ((o.total||0).toLocaleString('id-ID')),
+      '💵 *Pembayaran:* ' + ({cod:'COD (bayar di tempat)',qris:'QRIS (sudah dibayar)',transfer:'Transfer (sudah dibayar)'}[o.pay_method] || o.pay_method || '-'),
+      '',
+      (waktu ? '⏰ *Berangkat:* ' + waktu : ''),
+      (note ? '📝 *Catatan:* ' + note : ''),
+      '',
+      '✅ *Setelah pesanan tiba, konfirmasi di sini:*',
+      magicLink,
+      '',
+      '_Terima kasih!_ 🙏'
+    ].filter(Boolean).join(String.fromCharCode(10));
+
+    // Format HP (remove leading 0, add 62)
+    var hp = kurir.hp.replace(/[^0-9]/g,'');
+    if (hp.startsWith('0')) hp = '62' + hp.slice(1);
+
+    var waUrl = 'https://wa.me/' + hp + '?text=' + encodeURIComponent(msg);
+    window.open(waUrl, '_blank');
+  } catch(e) {
+    console.warn('kirimWAKurir error:', e.message);
+    showNotif('⚠️ Gagal buka WA, cek HP kurir', '#E17055');
+  }
 }
 
 function renderBankListCfg() {
