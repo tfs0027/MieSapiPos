@@ -1092,6 +1092,116 @@ tr:hover td{background:rgba(108,92,231,.03)}
 
       </div>
 
+
+      <!-- REKRUTMEN PAGE -->
+      <div class="page" id="page-rekrutmen">
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+          <div style="display:flex;gap:4px;flex:1">
+            <button class="shift-tab active" id="rek-tab-pelamar" onclick="switchRekTab('pelamar',this)">📋 Daftar Pelamar</button>
+            <button class="shift-tab" id="rek-tab-setting" onclick="switchRekTab('setting',this)">⚙️ Pengaturan Form</button>
+          </div>
+          <div id="rek-link-wrap" style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;color:var(--txt2)">Link Formulir:</span>
+            <input id="rek-link-el" readonly style="font-size:10px;width:200px;padding:5px 8px;border:1px solid var(--brd);border-radius:6px;background:var(--bg2);color:var(--txt)" value="">
+            <button class="btn btn-sm" onclick="copyRekLink()">📋</button>
+          </div>
+        </div>
+
+        <!-- PELAMAR PANEL -->
+        <div id="rek-panel-pelamar">
+          <!-- Filter bar -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
+            <div class="form-group" style="margin:0;flex:1;min-width:100px">
+              <label class="form-lbl">Status</label>
+              <select class="fi" id="rek-filter-status" onchange="renderPelamarList()">
+                <option value="">Semua</option>
+                <option value="baru">🆕 Baru</option>
+                <option value="review">👀 Review</option>
+                <option value="interview">🗣️ Interview</option>
+                <option value="diterima">✅ Diterima</option>
+                <option value="ditolak">❌ Ditolak</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:100px">
+              <label class="form-lbl">Posisi</label>
+              <select class="fi" id="rek-filter-posisi" onchange="renderPelamarList()">
+                <option value="">Semua Posisi</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;flex:2;min-width:140px">
+              <label class="form-lbl">Cari Nama / HP</label>
+              <input class="fi" id="rek-search" placeholder="Ketik nama atau HP..." oninput="renderPelamarList()">
+            </div>
+            <button class="btn btn-sm" onclick="loadPelamar()">🔄 Refresh</button>
+            <button class="btn btn-sm" onclick="exportPelamar()">📥 CSV</button>
+          </div>
+          <!-- Summary badges -->
+          <div id="rek-summary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+          <!-- Pelamar cards -->
+          <div id="rek-pelamar-list">
+            <div style="text-align:center;padding:32px;color:var(--txt3);font-size:13px">Klik 🔄 Refresh untuk memuat data pelamar</div>
+          </div>
+        </div>
+
+        <!-- SETTING PANEL -->
+        <div id="rek-panel-setting" style="display:none">
+          <div class="g2">
+            <div>
+              <!-- Info lowongan -->
+              <div class="card">
+                <div class="card-hd"><span class="card-title">📢 Info Lowongan</span></div>
+                <div class="form-group">
+                  <label class="form-lbl">Status Penerimaan</label>
+                  <div style="display:flex;gap:8px;margin-top:6px">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;flex:1;padding:8px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-rek-aktif-1">
+                      <input type="radio" name="rekAktif" value="1" onchange="toggleRekAktif()"> ✅ Sedang Menerima
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;flex:1;padding:8px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-rek-aktif-0">
+                      <input type="radio" name="rekAktif" value="0" onchange="toggleRekAktif()"> 🔒 Ditutup
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-lbl">Judul Halaman Lamaran</label>
+                  <input class="fi" id="rek-judul" placeholder="Bergabung Bersama Kami">
+                </div>
+                <div class="form-group">
+                  <label class="form-lbl">Deskripsi</label>
+                  <textarea class="fi" id="rek-deskripsi" rows="3" style="resize:none" placeholder="Tuliskan info singkat tentang lowongan..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-lbl">Pesan Setelah Submit</label>
+                  <input class="fi" id="rek-pesan-selesai" placeholder="Terima kasih! Lamaran kamu sudah kami terima.">
+                </div>
+                <div class="form-group">
+                  <label class="form-lbl">No. WA Notifikasi Pelamar Baru</label>
+                  <input class="fi" id="rek-notif-wa" placeholder="6281234567890" type="tel">
+                  <div style="font-size:10px;color:var(--txt2);margin-top:4px">Kosongkan jika tidak perlu notifikasi WA</div>
+                </div>
+                <button class="btn btn-primary" style="width:100%" onclick="saveRekSetting()">💾 Simpan Pengaturan</button>
+              </div>
+
+              <!-- Posisi -->
+              <div class="card" style="margin-top:10px">
+                <div class="card-hd"><span class="card-title">💼 Posisi yang Dibuka</span></div>
+                <div id="rek-posisi-list" style="margin-bottom:10px"></div>
+                <button class="btn" style="width:100%" onclick="tambahPosisi()">➕ Tambah Posisi</button>
+              </div>
+            </div>
+
+            <div>
+              <!-- Pertanyaan kustom -->
+              <div class="card">
+                <div class="card-hd"><span class="card-title">❓ Pertanyaan Form</span></div>
+                <div style="font-size:11px;color:var(--txt2);margin-bottom:10px">Field Nama, HP, Email, dan Posisi sudah otomatis ada. Tambah pertanyaan kustom di bawah.</div>
+                <div id="rek-pertanyaan-list" style="margin-bottom:10px"></div>
+                <button class="btn" style="width:100%" onclick="tambahPertanyaan()">➕ Tambah Pertanyaan</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="page" id="page-locked">
         <div style="background:var(--red-bg);border:1px solid var(--red);border-radius:var(--radius-lg);padding:32px;text-align:center;margin-top:40px">
           <div style="font-size:36px;margin-bottom:10px">🔒</div>
@@ -1519,7 +1629,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
 // ═══════════════════════════════
 const USERS = [
   {id:1,name:'Budi Santoso',role:'admin',pin:'1234',avatar:'BS',bg:'#A29BFE',tc:'#3C3489',
-   perms:{order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1}},
+   perms:{order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1}},
   {id:2,name:'Siti Rahayu',role:'kasir',pin:'5678',avatar:'SR',bg:'#00B894',tc:'#007A63',
    perms:{order:1,meja:1,shift:1,menu:0,stok:0,laporan:0,riwayat:1,users:0,settings:0,diskon:1,void_trx:0,edit_harga:0}},
   {id:3,name:'Andi Wijaya',role:'kasir',pin:'9012',avatar:'AW',bg:'#FDCB6E',tc:'#9A7D1A',
@@ -1622,7 +1732,16 @@ let CFG = {
   enableService:false, serviceTipe:'pct', service:0,
   notifSound:true, notifBrowser:true, notifRepeat:true, notifInterval:30, notifVolume:0.8, notifAudioData:null, serviceFlat:0, serviceMaks:0, serviceNama:'Biaya Layanan', autoOpenWarung:true,
   vouchers:[],
-  kurirList:[], // [{id, nama, hp, aktif}]
+  kurirList:[],
+  rekrutmen:{
+    aktif: false,
+    judulLowongan: 'Bergabung Bersama Kami',
+    deskripsi: 'Kami membuka lowongan untuk bergabung bersama tim kami.',
+    posisi: [], // [{nama, kuota, aktif}]
+    pertanyaan: [], // [{id, label, tipe, wajib, opsi:[]}]
+    pesanSelesai: 'Terima kasih! Lamaran kamu sudah kami terima.',
+    notifWA: '', // nomor WA untuk notif pelamar baru
+  }, // [{id, nama, hp, aktif}]
   isOpen:true, closedNote:'Maaf, warung sedang tutup. Silakan coba lagi nanti.',
   qrisImg:null,
   sbUrl:'https://lztdvlrunspmcoewfjcg.supabase.co', sbKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4', restaurantId:'49ce0232-ce6d-4b67-bcb6-4e8df70844de',
@@ -1791,13 +1910,14 @@ const NAV_ITEMS = [
   {id:'laporan',label:'Laporan Penjualan',icon:'📊',perm:'laporan',sec:'Laporan'},
   {id:'riwayat',label:'Riwayat Transaksi',icon:'📋',perm:'riwayat',sec:null},
   {id:'online-order',label:'Pesanan Online',icon:'🛵',perm:'shift',sec:'Operasional Online'},
+  {id:'rekrutmen',label:'Rekrutmen',icon:'📝',perm:'users',sec:'SDM & Rekrutmen'},
   {id:'users',label:'Manajemen User',icon:'👥',perm:'users',sec:'Pengaturan'},
   {id:'settings',label:'Pengaturan Toko',icon:'⚙️',perm:'settings',sec:null},
 ];
 const PAGE_TITLES = {
   order:'Kasir & Order',meja:'Manajemen Meja',shift:'Buka / Tutup Kasir',
   menu:'Menu & Harga',stok:'Stok Bahan Baku',laporan:'Laporan Penjualan',
-  riwayat:'Riwayat Transaksi','online-order':'Pesanan Online',users:'Manajemen User',settings:'Pengaturan Toko',locked:'Akses Ditolak'
+  riwayat:'Riwayat Transaksi','online-order':'Pesanan Online',rekrutmen:'Rekrutmen & Pelamar',users:'Manajemen User',settings:'Pengaturan Toko',locked:'Akses Ditolak'
 };
 
 function buildSidebar() {
@@ -1836,6 +1956,7 @@ function nav(p) {
   }
   if (p === 'riwayat') renderRiwayat();
   if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders(); window._initOrderDelegation && window._initOrderDelegation(); }
+  if (p === 'rekrutmen') { renderRekrutmenPage(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
   if (p === 'settings') renderSettings();
@@ -6889,6 +7010,377 @@ function exportRekapKurir() {
   var a = document.createElement('a');
   a.href = url; a.download = 'rekap-kurir-'+new Date().toISOString().substring(0,10)+'.csv';
   a.click(); URL.revokeObjectURL(url);
+}
+
+
+// ═══════════════════════════════════════════════
+// REKRUTMEN SYSTEM
+// ═══════════════════════════════════════════════
+var _pelamarData = [];
+
+function switchRekTab(tab, btn) {
+  document.querySelectorAll('[id^="rek-tab-"]').forEach(function(b){b.classList.remove('active');});
+  if (btn) btn.classList.add('active');
+  $('rek-panel-pelamar').style.display = tab==='pelamar' ? 'block' : 'none';
+  $('rek-panel-setting').style.display = tab==='setting' ? 'block' : 'none';
+  if (tab==='pelamar') loadPelamar();
+  if (tab==='setting') renderRekSetting();
+}
+
+function renderRekrutmenPage() {
+  updateRekLink();
+  loadPelamar();
+}
+
+function updateRekLink() {
+  var el = $('rek-link-el');
+  if (!el) return;
+  var base = (CFG.rekrutmen && CFG.rekrutmen.orderPageUrl) || (CFG.orderPageUrl||'').replace('warungku-order.html','warungku-recruit.html');
+  if (!base) {
+    var origin = window.location.origin;
+    base = origin + window.location.pathname.replace(/[^/]*$/, 'warungku-recruit.html');
+  }
+  el.value = base + '?r=' + (CFG.restaurantId||'');
+}
+
+function copyRekLink() {
+  var el = $('rek-link-el');
+  if (!el) return;
+  navigator.clipboard.writeText(el.value).then(function(){
+    showNotif('✅ Link formulir disalin', '#00B894');
+  }).catch(function(){
+    el.select(); document.execCommand('copy');
+    showNotif('✅ Link disalin', '#00B894');
+  });
+}
+
+// ── PELAMAR ────────────────────────────────────
+async function loadPelamar() {
+  if (!_sb || !CFG.restaurantId) { showNotif('Hubungkan Supabase dulu', '#E17055'); return; }
+  var listEl = $('rek-pelamar-list');
+  if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--txt3)">⏳ Memuat...</div>';
+  try {
+    var res = await _sb.from('applicants')
+      .select('*')
+      .eq('restaurant_id', CFG.restaurantId)
+      .order('created_at', {ascending: false});
+    if (res.error) throw res.error;
+    _pelamarData = res.data || [];
+    // Build posisi filter
+    var posSet = new Set(_pelamarData.map(function(a){ return a.posisi||''; }).filter(Boolean));
+    var pSel = $('rek-filter-posisi');
+    if (pSel) {
+      pSel.innerHTML = '<option value="">Semua Posisi</option>' +
+        Array.from(posSet).map(function(pos){ return '<option value="'+pos+'">'+pos+'</option>'; }).join('');
+    }
+    renderPelamarList();
+  } catch(e) {
+    if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--red-dk)">Gagal: '+e.message+'</div>';
+  }
+}
+
+function renderPelamarList() {
+  var filterStatus = ($('rek-filter-status')||{value:''}).value;
+  var filterPosisi = ($('rek-filter-posisi')||{value:''}).value;
+  var search = (($('rek-search')||{value:''}).value||'').toLowerCase();
+
+  var data = _pelamarData.filter(function(a) {
+    if (filterStatus && a.status !== filterStatus) return false;
+    if (filterPosisi && a.posisi !== filterPosisi) return false;
+    if (search && !(a.nama||'').toLowerCase().includes(search) && !(a.hp||'').includes(search)) return false;
+    return true;
+  });
+
+  // Summary
+  var counts = {baru:0,review:0,interview:0,diterima:0,ditolak:0};
+  _pelamarData.forEach(function(a){ if(counts[a.status]!==undefined) counts[a.status]++; });
+  var sumEl = $('rek-summary');
+  if (sumEl) {
+    var badges = [
+      {key:'baru',label:'🆕 Baru',bg:'var(--blue-bg)',color:'var(--blue-dk)'},
+      {key:'review',label:'👀 Review',bg:'var(--amber-bg)',color:'var(--amber-dk)'},
+      {key:'interview',label:'🗣️ Interview',bg:'#EDE9FE',color:'#5B21B6'},
+      {key:'diterima',label:'✅ Diterima',bg:'var(--green-bg)',color:'var(--green-dk)'},
+      {key:'ditolak',label:'❌ Ditolak',bg:'var(--red-bg)',color:'var(--red-dk)'}
+    ];
+    sumEl.innerHTML = badges.map(function(b) {
+      return '<div onclick="$(\'rek-filter-status\').value=\''+b.key+'\';renderPelamarList()" style="cursor:pointer;background:'+b.bg+';color:'+b.color+';padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700">' +
+        b.label + ' <span style="font-size:14px">' + counts[b.key] + '</span></div>';
+    }).join('') + '<div onclick="$(\'rek-filter-status\').value=\'\';renderPelamarList()" style="cursor:pointer;background:var(--bg2);color:var(--txt2);padding:5px 12px;border-radius:20px;font-size:12px">Semua <b>'+_pelamarData.length+'</b></div>';
+  }
+
+  var listEl = $('rek-pelamar-list');
+  if (!listEl) return;
+  if (!data.length) {
+    listEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--txt3)">Tidak ada pelamar</div>';
+    return;
+  }
+
+  var statusInfo = {
+    baru:{label:'🆕 Baru',bg:'var(--blue-bg)',color:'var(--blue-dk)'},
+    review:{label:'👀 Review',bg:'var(--amber-bg)',color:'var(--amber-dk)'},
+    interview:{label:'🗣️ Interview',bg:'#EDE9FE',color:'#5B21B6'},
+    diterima:{label:'✅ Diterima',bg:'var(--green-bg)',color:'var(--green-dk)'},
+    ditolak:{label:'❌ Ditolak',bg:'var(--red-bg)',color:'var(--red-dk)'}
+  };
+
+  listEl.innerHTML = data.map(function(a) {
+    var si = statusInfo[a.status] || {label:a.status,bg:'var(--bg2)',color:'var(--txt2)'};
+    var tgl = a.created_at ? new Date(a.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-';
+    var jawaban = '';
+    try { jawaban = a.jawaban ? JSON.parse(a.jawaban) : {}; } catch(e) { jawaban = {}; }
+    return '<div class="card" style="margin-bottom:8px;padding:12px 14px">' +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
+        '<div style="flex:1">' +
+          '<div style="font-size:14px;font-weight:800">' + (a.nama||'-') + '</div>' +
+          '<div style="font-size:11px;color:var(--txt2);margin-top:2px">' +
+            '📞 ' + (a.hp||'-') + (a.email?' · 📧 '+a.email:'') +
+          '</div>' +
+          '<div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+            (a.posisi?'<span style="background:var(--accent3,#EDE9FE);color:var(--accent);font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">💼 '+a.posisi+'</span>':'') +
+            '<span style="background:'+si.bg+';color:'+si.color+';font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700">'+si.label+'</span>' +
+            '<span style="font-size:10px;color:var(--txt3)">'+tgl+'</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">' +
+          '<select class="fi" style="font-size:11px;padding:4px 8px;width:130px" onchange="ubahStatusPelamar(\''+a.id+'\',this.value)">' +
+            ['baru','review','interview','diterima','ditolak'].map(function(s){
+              return '<option value="'+s+'"'+(a.status===s?' selected':'')+'>'+statusInfo[s].label+'</option>';
+            }).join('') +
+          '</select>' +
+          '<div style="display:flex;gap:4px">' +
+            (a.hp?'<button class="btn btn-sm" style="font-size:10px" onclick="waKePelamar(\''+a.id+'\')">💬 WA</button>':'') +
+            '<button class="btn btn-sm" style="font-size:10px" onclick="lihatDetailPelamar(\''+a.id+'\')">👁️ Detail</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      (a.catatan_admin?'<div style="margin-top:8px;font-size:11px;background:var(--amber-bg);border-radius:6px;padding:5px 10px;color:var(--amber-dk)">📝 '+a.catatan_admin+'</div>':'') +
+    '</div>';
+  }).join('');
+}
+
+async function ubahStatusPelamar(id, status) {
+  if (!_sb) return;
+  try {
+    await _sb.from('applicants').update({status:status}).eq('id',id);
+    var idx = _pelamarData.findIndex(function(a){ return a.id===id; });
+    if (idx>=0) _pelamarData[idx].status = status;
+    renderPelamarList();
+    showNotif('✅ Status diperbarui', '#00B894');
+  } catch(e) { showNotif('Gagal: '+e.message,'#E17055'); }
+}
+
+function lihatDetailPelamar(id) {
+  var a = _pelamarData.find(function(x){ return x.id===id; });
+  if (!a) return;
+  var jawaban = {};
+  try { jawaban = a.jawaban ? JSON.parse(a.jawaban) : {}; } catch(e) {}
+  var pertanyaan = (CFG.rekrutmen&&CFG.rekrutmen.pertanyaan)||[];
+  var jawabanHTML = pertanyaan.map(function(q) {
+    return '<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--txt2)">'+q.label+'</div>' +
+      '<div style="font-size:12px;font-weight:600">'+(jawaban[q.id]||'-')+'</div></div>';
+  }).join('');
+
+  // Use existing modal-wrap system
+  var modal = document.createElement('div');
+  modal.className = 'modal-wrap';
+  modal.id = 'detail-pelamar-wrap';
+  modal.innerHTML = '<div class="modal modal-lg">' +
+    '<h3>📋 Detail Pelamar</h3>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">' +
+      '<div><div style="font-size:10px;color:var(--txt2)">Nama</div><div style="font-weight:700">'+a.nama+'</div></div>' +
+      '<div><div style="font-size:10px;color:var(--txt2)">No. HP</div><div style="font-weight:700">'+a.hp+'</div></div>' +
+      '<div><div style="font-size:10px;color:var(--txt2)">Email</div><div style="font-weight:700">'+(a.email||'-')+'</div></div>' +
+      '<div><div style="font-size:10px;color:var(--txt2)">Posisi</div><div style="font-weight:700">'+(a.posisi||'-')+'</div></div>' +
+      '<div><div style="font-size:10px;color:var(--txt2)">Kode Referensi</div><div style="font-family:monospace;font-weight:700">'+(a.kode||'-')+'</div></div>' +
+      '<div><div style="font-size:10px;color:var(--txt2)">Status</div><div style="font-weight:700">'+a.status+'</div></div>' +
+    '</div>' +
+    (jawabanHTML ? '<div style="background:var(--bg2);border-radius:10px;padding:12px 14px;margin-bottom:12px">'+jawabanHTML+'</div>' : '') +
+    '<div class="form-group"><label class="form-lbl">Catatan Admin</label>' +
+      '<textarea class="fi" id="catatan-pelamar-input" rows="2" style="resize:none">'+( a.catatan_admin||'')+'</textarea></div>' +
+    '<div style="display:flex;gap:8px">' +
+      '<button class="btn" style="flex:1" onclick="document.getElementById(\'detail-pelamar-wrap\').remove()">Tutup</button>' +
+      '<button class="btn btn-primary" style="flex:2" onclick="simpanCatatanPelamar(\''+id+'\')">💾 Simpan Catatan</button>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(modal);
+  modal.classList.add('open');
+}
+
+async function simpanCatatanPelamar(id) {
+  var catatan = ($('catatan-pelamar-input')||{value:''}).value.trim();
+  await _sb.from('applicants').update({catatan_admin:catatan}).eq('id',id);
+  var idx = _pelamarData.findIndex(function(a){ return a.id===id; });
+  if (idx>=0) _pelamarData[idx].catatan_admin = catatan;
+  var wrap = document.getElementById('detail-pelamar-wrap');
+  if (wrap) wrap.remove();
+  renderPelamarList();
+  showNotif('✅ Catatan disimpan','#00B894');
+}
+
+function waKePelamar(id) {
+  var a = _pelamarData.find(function(x){ return x.id===id; });
+  if (!a || !a.hp) return;
+  var hp = a.hp.replace(/[^0-9]/g,'');
+  if (hp.startsWith('0')) hp = '62'+hp.slice(1);
+  var msg = 'Halo ' + a.nama + ', kami dari ' + (CFG.nama||'Warung') + ' ingin menghubungi Anda terkait lamaran posisi ' + (a.posisi||'-') + ' (Kode: ' + a.kode + ').';
+  window.open('https://wa.me/'+hp+'?text='+encodeURIComponent(msg), '_blank');
+}
+
+function exportPelamar() {
+  var data = _pelamarData;
+  var header = ['Kode','Nama','HP','Email','Posisi','Status','Tanggal','Catatan'];
+  var rows = data.map(function(a) {
+    return [a.kode,a.nama,a.hp,a.email||'',a.posisi||'',a.status,
+      a.created_at?a.created_at.substring(0,10):'', a.catatan_admin||''].join(',');
+  });
+  var csv = [header.join(',')].concat(rows).join(String.fromCharCode(10));
+  var blob = new Blob([csv],{type:'text/csv'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href=url; a.download='pelamar-'+new Date().toISOString().substring(0,10)+'.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ── SETTINGS ───────────────────────────────────
+function renderRekSetting() {
+  var r = CFG.rekrutmen || {};
+  var aktif = r.aktif !== false;
+  var ra1 = document.querySelector('input[name="rekAktif"][value="1"]');
+  var ra0 = document.querySelector('input[name="rekAktif"][value="0"]');
+  if (ra1) ra1.checked = aktif;
+  if (ra0) ra0.checked = !aktif;
+  toggleRekAktif();
+  var j = $('rek-judul'); if(j) j.value = r.judulLowongan||'';
+  var d = $('rek-deskripsi'); if(d) d.value = r.deskripsi||'';
+  var ps = $('rek-pesan-selesai'); if(ps) ps.value = r.pesanSelesai||'';
+  var nw = $('rek-notif-wa'); if(nw) nw.value = r.notifWA||'';
+  renderPosisiList();
+  renderPertanyaanList();
+}
+
+function toggleRekAktif() {
+  var ra1 = document.querySelector('input[name="rekAktif"][value="1"]');
+  var aktif = ra1 && ra1.checked;
+  var l1=$('lbl-rek-aktif-1'),l0=$('lbl-rek-aktif-0');
+  if(l1){l1.style.borderColor=aktif?'var(--green)':'var(--brd)';l1.style.background=aktif?'var(--green-bg)':'';}
+  if(l0){l0.style.borderColor=!aktif?'var(--red)':'var(--brd)';l0.style.background=!aktif?'var(--red-bg)':'';}
+}
+
+function saveRekSetting() {
+  if (!CFG.rekrutmen) CFG.rekrutmen = {};
+  var ra1 = document.querySelector('input[name="rekAktif"][value="1"]');
+  CFG.rekrutmen.aktif = !!(ra1 && ra1.checked);
+  CFG.rekrutmen.judulLowongan = ($('rek-judul')||{value:''}).value.trim();
+  CFG.rekrutmen.deskripsi = ($('rek-deskripsi')||{value:''}).value.trim();
+  CFG.rekrutmen.pesanSelesai = ($('rek-pesan-selesai')||{value:''}).value.trim();
+  CFG.rekrutmen.notifWA = ($('rek-notif-wa')||{value:''}).value.trim();
+  // Save posisi
+  CFG.rekrutmen.posisi = Array.from(document.querySelectorAll('.rek-posisi-row')).map(function(row){
+    return {
+      nama: (row.querySelector('.rek-pos-nama')||{value:''}).value.trim(),
+      kuota: parseInt((row.querySelector('.rek-pos-kuota')||{value:'0'}).value)||0,
+      aktif: (row.querySelector('.rek-pos-aktif')||{checked:true}).checked
+    };
+  }).filter(function(pos){ return pos.nama; });
+  // Save pertanyaan
+  CFG.rekrutmen.pertanyaan = Array.from(document.querySelectorAll('.rek-q-row')).map(function(row,i){
+    var tipe = (row.querySelector('.rek-q-tipe')||{value:'text'}).value;
+    var opsiEl = row.querySelector('.rek-q-opsi');
+    var opsi = opsiEl ? opsiEl.value.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+    return {
+      id: 'q'+i,
+      label: (row.querySelector('.rek-q-label')||{value:''}).value.trim(),
+      tipe: tipe,
+      wajib: (row.querySelector('.rek-q-wajib')||{checked:false}).checked,
+      opsi: opsi
+    };
+  }).filter(function(q){ return q.label; });
+  saveCFG();
+  syncRekrutmenToSupabase();
+  showNotif('✅ Pengaturan rekrutmen disimpan','#00B894');
+}
+
+async function syncRekrutmenToSupabase() {
+  if (!_sb || !CFG.restaurantId) return;
+  try {
+    await _sb.from('restaurants').update({
+      rekrutmen_cfg: CFG.rekrutmen
+    }).eq('id', CFG.restaurantId);
+  } catch(e) { console.warn('syncRekrutmen:', e.message); }
+}
+
+// ── POSISI ─────────────────────────────────────
+function renderPosisiList() {
+  var el = $('rek-posisi-list'); if(!el) return;
+  var list = (CFG.rekrutmen&&CFG.rekrutmen.posisi)||[];
+  if (!list.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--txt3);padding:4px">Belum ada posisi. Klik Tambah.</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(pos,i){
+    return '<div class="rek-posisi-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius)">' +
+      '<input class="fi rek-pos-nama" placeholder="Nama posisi" value="'+(pos.nama||'')+'" style="flex:2">' +
+      '<input class="fi rek-pos-kuota" type="number" min="0" value="'+(pos.kuota||0)+'" placeholder="Kuota" style="width:60px" title="Kuota (0=tidak terbatas)">' +
+      '<label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="rek-pos-aktif"'+(pos.aktif!==false?' checked':'')+'>Aktif</label>' +
+      '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusPosisi('+i+')">🗑️</button>' +
+    '</div>';
+  }).join('');
+}
+
+function tambahPosisi() {
+  if (!CFG.rekrutmen) CFG.rekrutmen={posisi:[],pertanyaan:[]};
+  if (!CFG.rekrutmen.posisi) CFG.rekrutmen.posisi=[];
+  CFG.rekrutmen.posisi.push({nama:'',kuota:0,aktif:true});
+  renderPosisiList();
+}
+
+function hapusPosisi(i) {
+  CFG.rekrutmen.posisi.splice(i,1); renderPosisiList();
+}
+
+// ── PERTANYAAN ─────────────────────────────────
+function renderPertanyaanList() {
+  var el = $('rek-pertanyaan-list'); if(!el) return;
+  var list = (CFG.rekrutmen&&CFG.rekrutmen.pertanyaan)||[];
+  if (!list.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--txt3);padding:4px">Belum ada pertanyaan kustom.</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(q,i){
+    var showOpsi = q.tipe==='pilihan' || q.tipe==='radio';
+    return '<div class="rek-q-row" style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
+        '<input class="fi rek-q-label" placeholder="Pertanyaan..." value="'+(q.label||'')+'" style="flex:1">' +
+        '<select class="fi rek-q-tipe" onchange="toggleOpsiField(this)" style="width:110px">' +
+          ['text','textarea','pilihan','radio','angka'].map(function(t){
+            return '<option value="'+t+'"'+(q.tipe===t?' selected':'')+'>'+{text:'Teks Pendek',textarea:'Teks Panjang',pilihan:'Pilihan (dropdown)',radio:'Pilihan (radio)',angka:'Angka'}[t]+'</option>';
+          }).join('') +
+        '</select>' +
+        '<label style="font-size:10px;display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" class="rek-q-wajib"'+(q.wajib?' checked':'')+'>Wajib</label>' +
+        '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusPertanyaan('+i+')">🗑️</button>' +
+      '</div>' +
+      '<div class="opsi-field" style="display:'+(showOpsi?'block':'none')+'">' +
+        '<input class="fi rek-q-opsi" placeholder="Opsi 1, Opsi 2, Opsi 3 (pisah koma)" value="'+(q.opsi?q.opsi.join(', '):'')+'"></div>' +
+    '</div>';
+  }).join('');
+}
+
+function toggleOpsiField(sel) {
+  var row = sel.closest('.rek-q-row');
+  var opsi = row && row.querySelector('.opsi-field');
+  if (opsi) opsi.style.display = (sel.value==='pilihan'||sel.value==='radio') ? 'block' : 'none';
+}
+
+function tambahPertanyaan() {
+  if (!CFG.rekrutmen) CFG.rekrutmen={posisi:[],pertanyaan:[]};
+  if (!CFG.rekrutmen.pertanyaan) CFG.rekrutmen.pertanyaan=[];
+  CFG.rekrutmen.pertanyaan.push({id:'q'+Date.now(),label:'',tipe:'text',wajib:false,opsi:[]});
+  renderPertanyaanList();
+}
+
+function hapusPertanyaan(i) {
+  CFG.rekrutmen.pertanyaan.splice(i,1); renderPertanyaanList();
 }
 
 function renderBankListCfg() {
