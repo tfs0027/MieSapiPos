@@ -1178,7 +1178,21 @@ tr:hover td{background:rgba(108,92,231,.03)}
                   <input class="fi" id="rek-notif-wa" placeholder="6281234567890" type="tel">
                   <div style="font-size:10px;color:var(--txt2);margin-top:4px">Kosongkan jika tidak perlu notifikasi WA</div>
                 </div>
-                <button class="btn btn-primary" style="width:100%" onclick="saveRekSetting()">💾 Simpan Pengaturan</button>
+                <button class="btn btn-primary" style="width:100%;margin-bottom:12px" onclick="saveRekSetting()">💾 Simpan Pengaturan</button>
+                <!-- Link formulir -->
+                <div style="background:var(--blue-bg,#EFF6FF);border:1.5px solid var(--blue-dk);border-radius:12px;padding:12px 14px">
+                  <div style="font-size:11px;font-weight:700;color:var(--blue-dk);margin-bottom:8px">🔗 Link Formulir Lamaran</div>
+                  <div class="form-group" style="margin-bottom:8px">
+                    <label class="form-lbl">URL File warungku-recruit.html (GitHub Pages)</label>
+                    <input class="fi" id="rek-url-cfg" placeholder="https://username.github.io/warungku-recruit.html" type="url">
+                    <div style="font-size:10px;color:var(--txt2);margin-top:4px">Isi dengan URL lengkap file di GitHub Pages, lalu simpan pengaturan.</div>
+                  </div>
+                  <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Link yang akan dibagikan ke pelamar:</div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <input id="rek-link-setting" readonly style="flex:1;font-size:11px;padding:7px 10px;border:1px solid var(--brd);border-radius:8px;background:var(--bg);color:var(--txt);font-family:var(--font-mono)" value="">
+                    <button class="btn btn-sm" onclick="copyRekLink2()">📋 Salin</button>
+                  </div>
+                </div>
               </div>
 
               <!-- Posisi -->
@@ -7032,15 +7046,29 @@ function renderRekrutmenPage() {
   loadPelamar();
 }
 
+function getRekBaseUrl() {
+  var base = (CFG.rekrutmen && CFG.rekrutmen.recruitUrl) || '';
+  if (!base) base = (CFG.orderPageUrl||'').replace('warungku-order.html','warungku-recruit.html');
+  if (!base) base = window.location.origin + window.location.pathname.replace(/[^/]*$/,'warungku-recruit.html');
+  return base.replace(/\?.*$/,'').replace(/\/+$/,'');
+}
+
 function updateRekLink() {
   var el = $('rek-link-el');
   if (!el) return;
-  var base = (CFG.rekrutmen && CFG.rekrutmen.orderPageUrl) || (CFG.orderPageUrl||'').replace('warungku-order.html','warungku-recruit.html');
-  if (!base) {
-    var origin = window.location.origin;
-    base = origin + window.location.pathname.replace(/[^/]*$/, 'warungku-recruit.html');
-  }
-  el.value = base + '?r=' + (CFG.restaurantId||'');
+  el.value = getRekBaseUrl() + '?r=' + (CFG.restaurantId||'');
+}
+
+function updateRekLinkDisplay() {
+  var el = $('rek-link-setting');
+  if (!el) return;
+  el.value = getRekBaseUrl() + '?r=' + (CFG.restaurantId||'');
+  updateRekLink();
+}
+
+function copyRekLink2() {
+  var el = $('rek-link-setting'); if(!el) return;
+  navigator.clipboard.writeText(el.value).then(function(){ showNotif('✅ Link disalin','#00B894'); }).catch(function(){ el.select(); document.execCommand('copy'); showNotif('✅ Link disalin','#00B894'); });
 }
 
 function copyRekLink() {
@@ -7178,7 +7206,7 @@ function lihatDetailPelamar(id) {
   var pertanyaan = (CFG.rekrutmen&&CFG.rekrutmen.pertanyaan)||[];
   var jawabanHTML = pertanyaan.map(function(q) {
     return '<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--txt2)">'+q.label+'</div>' +
-      '<div style="font-size:12px;font-weight:600">'+(jawaban[q.id]||'-')+'</div></div>';
+      '<div style="font-size:12px;font-weight:600">'+(jawaban[q.id]&&jawaban[q.id].startsWith('data:image')?'<img src="'+jawaban[q.id]+'" style="max-width:100%;border-radius:8px;max-height:200px">':( jawaban[q.id]||'-'))+'</div></div>';
   }).join('');
 
   // Use existing modal-wrap system
@@ -7255,6 +7283,8 @@ function renderRekSetting() {
   var d = $('rek-deskripsi'); if(d) d.value = r.deskripsi||'';
   var ps = $('rek-pesan-selesai'); if(ps) ps.value = r.pesanSelesai||'';
   var nw = $('rek-notif-wa'); if(nw) nw.value = r.notifWA||'';
+  var ru = $('rek-url-cfg'); if(ru) ru.value = r.recruitUrl||'';
+  updateRekLinkDisplay();
   renderPosisiList();
   renderPertanyaanList();
 }
@@ -7275,6 +7305,9 @@ function saveRekSetting() {
   CFG.rekrutmen.deskripsi = ($('rek-deskripsi')||{value:''}).value.trim();
   CFG.rekrutmen.pesanSelesai = ($('rek-pesan-selesai')||{value:''}).value.trim();
   CFG.rekrutmen.notifWA = ($('rek-notif-wa')||{value:''}).value.trim();
+  var rekUrl = ($('rek-url-cfg')||{value:''}).value.trim();
+  if (rekUrl) CFG.rekrutmen.recruitUrl = rekUrl;
+  updateRekLinkDisplay();
   // Save posisi
   CFG.rekrutmen.posisi = Array.from(document.querySelectorAll('.rek-posisi-row')).map(function(row){
     return {
@@ -7353,8 +7386,8 @@ function renderPertanyaanList() {
       '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
         '<input class="fi rek-q-label" placeholder="Pertanyaan..." value="'+(q.label||'')+'" style="flex:1">' +
         '<select class="fi rek-q-tipe" onchange="toggleOpsiField(this)" style="width:110px">' +
-          ['text','textarea','pilihan','radio','angka'].map(function(t){
-            return '<option value="'+t+'"'+(q.tipe===t?' selected':'')+'>'+{text:'Teks Pendek',textarea:'Teks Panjang',pilihan:'Pilihan (dropdown)',radio:'Pilihan (radio)',angka:'Angka'}[t]+'</option>';
+          ['text','textarea','pilihan','radio','angka','file','foto'].map(function(t){
+            return '<option value="'+t+'"'+(q.tipe===t?' selected':'')+'>'+{text:'Teks Pendek',textarea:'Teks Panjang',pilihan:'Pilihan (dropdown)',radio:'Pilihan (radio)',angka:'Angka',file:'Upload File (PDF/DOC)',foto:'Upload Foto/Gambar'}[t]+'</option>';
           }).join('') +
         '</select>' +
         '<label style="font-size:10px;display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" class="rek-q-wajib"'+(q.wajib?' checked':'')+'>Wajib</label>' +
