@@ -1751,6 +1751,17 @@ function doLogin(u) {
   nav('order');
   // Simpan session ke localStorage
   try { localStorage.setItem(SESSION_KEY, JSON.stringify({userId: u.id, savedAt: Date.now()})); } catch(e){}
+  // Auto-pull dari Supabase jika terkonfigurasi
+  if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) {
+    setTimeout(function() {
+      pullAllFromSupabase().then(function() {
+        showNotif('✅ Data tersinkronisasi dari Supabase', '#00B894');
+        renderLaporan && nav && window._currentPage==='laporan' && renderLaporan();
+      }).catch(function(e) {
+        console.warn('Auto-pull on login failed:', e.message);
+      });
+    }, 800);
+  }
 }
 
 function doLogout() {
@@ -1816,7 +1827,13 @@ function nav(p) {
   if (p === 'meja') renderMeja();
   if (p === 'menu') renderMenuTable();
   if (p === 'stok') renderStok();
-  if (p === 'laporan') renderLaporan();
+  if (p === 'laporan') {
+    renderLaporan();
+    // Auto-refresh from Supabase if connected
+    if (_sb && CFG.restaurantId && !_lapOnlineFetching) {
+      pullAllFromSupabase().then(function(){ renderLaporan(); }).catch(function(){});
+    }
+  }
   if (p === 'riwayat') renderRiwayat();
   if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders(); window._initOrderDelegation && window._initOrderDelegation(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
@@ -5271,7 +5288,8 @@ async function pullAllFromSupabase() {
       ST.transactions = trxs.map(function(t) {
         return {id: t.trx_code, time: t.created_at ? t.created_at.substr(11,5) : '',
           date: t.created_at ? t.created_at.substr(0,10) : '',
-          table: t.meja||'', items: [], subtotal: t.subtotal||0,
+          table: t.meja||'',
+          items: (function(){ try { return t.items_json ? JSON.parse(t.items_json) : []; } catch(e){ return []; } })(), subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0, tax: t.tax||0, total: t.total||0,
           pay: t.pay_method, splitPay: t.split_pay, kasir: t.kasir_nama||'',
           voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''};
@@ -5314,6 +5332,8 @@ async function sbSyncTransaction(trx) {
       split_pay: trx.splitPay||null, meja: trx.table||'',
       order_note: trx.orderNote||'', kasir_nama: trx.kasir||'',
       voided: trx.voided||false, created_at: new Date().toISOString(),
+      items_json: trx.items ? JSON.stringify(trx.items) : '[]',
+      shift_id: ST.currentShift ? ST.currentShift.id : null,
     }, {onConflict:'id'});
   } catch(e) { console.warn('sbSyncTransaction:', e.message); }
 }
