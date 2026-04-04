@@ -885,6 +885,26 @@ tr:hover td{background:rgba(108,92,231,.03)}
           </div>
           <button class="btn btn-primary" style="width:100%" onclick="saveRestoStatus()">💾 Simpan Status</button>
         </div>
+        <!-- Link Share Card -->
+        <div class="card" style="margin-bottom:12px" id="order-link-card">
+          <div class="card-hd"><span class="card-title">🔗 Link Halaman Order</span>
+            <button class="btn btn-sm" onclick="refreshOrderLink()" style="font-size:10px">🔄</button>
+          </div>
+          <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">Bagikan link ini ke pelanggan agar bisa memesan secara online:</div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+            <input id="order-link-display" readonly class="fi" style="flex:1;font-size:11px;font-family:var(--font-mono);cursor:pointer;background:var(--bg2)" onclick="this.select()" value="—">
+            <button class="btn btn-sm btn-primary" onclick="copyOrderLink()" style="flex-shrink:0">📋 Salin</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="openOrderLink()" style="font-size:11px">🌐 Buka</button>
+            <button class="btn btn-sm" style="font-size:11px;color:#25D366;border-color:#25D366" onclick="shareOrderLinkWA()">💬 Bagikan via WA</button>
+            <button class="btn btn-sm" onclick="showOrderQR()" style="font-size:11px">📱 QR Code</button>
+          </div>
+          <div id="order-qr-wrap" style="display:none;margin-top:10px;text-align:center">
+            <div id="order-qr-canvas" style="display:inline-block;background:#fff;padding:12px;border-radius:10px;border:1px solid var(--brd)"></div>
+            <div style="font-size:10px;color:var(--txt2);margin-top:6px">Scan QR untuk buka halaman order</div>
+          </div>
+        </div>
         <!-- Online orders list -->
         <div class="card">
           <div class="card-hd"><span class="card-title">📋 Pesanan Online</span>
@@ -2172,7 +2192,9 @@ function nav(p) {
     }
   }
   if (p === 'riwayat') renderRiwayat();
-  if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders(); window._initOrderDelegation && window._initOrderDelegation(); }
+  if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders();
+    refreshOrderLink(); // update link display
+    window._initOrderDelegation && window._initOrderDelegation(); }
   if (p === 'rekrutmen') { renderRekrutmenPage(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
@@ -7800,7 +7822,7 @@ async function loadSubscription() {
   if (!_sb || !CFG.restaurantId) return;
   try {
     var res = await _sb.from('subscriptions')
-      .select('*,plans(fitur)')
+      .select('*,plans(nama,fitur,harga,periode)')
       .eq('restaurant_id', CFG.restaurantId)
       .single();
     if (res.error || !res.data) return;
@@ -7841,8 +7863,11 @@ function updateSbSubStrip(sub, selesai, now) {
   strip.style.display = 'block';
   // Paket name
   var planNama = (sub && sub.plans && sub.plans.nama) ? sub.plans.nama : '—';
-  var statusBadge = sub ? (sub.status === 'trial' ? ' (Trial)' : sub.status === 'active' ? '' : ' ('+sub.status+')') : '';
-  if (elPaket) elPaket.textContent = '📦 ' + planNama + statusBadge;
+  var planHarga = (sub && sub.plans && sub.plans.harga !== undefined)
+    ? (sub.plans.harga === 0 ? 'Gratis' : 'Rp '+sub.plans.harga.toLocaleString('id-ID')+'/'+( sub.plans.periode||'bln'))
+    : '';
+  var statusBadge = sub ? (sub.status === 'trial' ? ' · Trial' : sub.status === 'active' ? '' : ' · '+sub.status) : '';
+  if (elPaket) elPaket.innerHTML = '📦 <b>' + planNama + '</b>' + (planHarga ? ' <span style="font-size:9px;opacity:.7">('+planHarga+')</span>' : '') + statusBadge;
   // Expire
   if (elExpire) {
     if (!selesai) { elExpire.textContent = 'Tidak ada batas waktu'; elExpire.style.color='rgba(255,255,255,.55)'; }
@@ -7874,7 +7899,24 @@ function applyFeatureFlags() {
   });
 }
 
-function perpanjangLangganan() { location.href='warungku-register.html'; }
+function perpanjangLangganan() {
+  // Build register URL dari orderPageUrl base
+  var base = CFG.orderPageUrl || window.location.href;
+  var regUrl;
+  if (base.includes('warungku-')) {
+    regUrl = base.replace(/warungku-[^?#]+\.html/, 'warungku-register.html');
+  } else {
+    // GitHub Pages index URL
+    var origin = window.location.origin;
+    var path = window.location.pathname.replace(/[^/]*$/, '');
+    regUrl = origin + path + 'warungku-register.html';
+  }
+  if (regUrl.includes('warungku-register.html')) {
+    window.open(regUrl, '_blank');
+  } else {
+    showNotif('Set URL halaman order di Pengaturan Toko terlebih dahulu', '#F59E0B');
+  }
+}
 
 function showSubscriptionExpired(sub) {
   var overlay = document.getElementById('sub-expired-overlay');
@@ -7892,6 +7934,67 @@ function showSubscriptionExpired(sub) {
       '</div>';
     document.body.appendChild(overlay);
   }
+}
+
+function getOrderUrl() {
+  if (!CFG.restaurantId) return '';
+  // Build from orderPageUrl first
+  if (CFG.orderPageUrl) {
+    var base = CFG.orderPageUrl.replace(/[?#].*$/,'').replace(/\/+$/,'');
+    return base + '?r=' + CFG.restaurantId;
+  }
+  // Fallback: construct from current URL
+  var origin = window.location.origin;
+  var path = window.location.pathname.replace(/[^/]*$/, '');
+  return origin + path + 'warungku-order.html?r=' + CFG.restaurantId;
+}
+
+function refreshOrderLink() {
+  var url = getOrderUrl();
+  var el = document.getElementById('order-link-display');
+  if (el) el.value = url || '— Set URL di Pengaturan Toko';
+}
+
+function copyOrderLink() {
+  var url = getOrderUrl();
+  if (!url) { showNotif('Set URL order di Pengaturan Toko dulu', '#E17055'); return; }
+  navigator.clipboard.writeText(url).then(function(){
+    showNotif('✅ Link order disalin!', '#00B894');
+  }).catch(function(){
+    var el = document.getElementById('order-link-display');
+    if(el){ el.select(); document.execCommand('copy'); showNotif('✅ Link disalin', '#00B894'); }
+  });
+}
+
+function openOrderLink() {
+  var url = getOrderUrl();
+  if (!url) { showNotif('Set URL order di Pengaturan Toko dulu', '#E17055'); return; }
+  window.open(url, '_blank');
+}
+
+function shareOrderLinkWA() {
+  var url = getOrderUrl();
+  if (!url) { showNotif('Set URL order di Pengaturan Toko dulu', '#E17055'); return; }
+  var nl = String.fromCharCode(10);
+  var msg = '🛵 *Pesan Online di ' + CFG.nama + '*' + nl + nl +
+    'Klik link di bawah untuk pesan langsung dari HP:' + nl +
+    '▶ ' + url + nl + nl +
+    'Pilih menu, isi alamat, dan pesanan langsung kami proses!';
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+function showOrderQR() {
+  var url = getOrderUrl();
+  if (!url) { showNotif('Set URL order di Pengaturan Toko dulu', '#E17055'); return; }
+  var wrap = document.getElementById('order-qr-wrap');
+  var canvas = document.getElementById('order-qr-canvas');
+  if (!wrap || !canvas) return;
+  var isShowing = wrap.style.display !== 'none';
+  if (isShowing) { wrap.style.display = 'none'; return; }
+  // Simple QR via API
+  wrap.style.display = 'block';
+  canvas.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' +
+    encodeURIComponent(url) + '" style="border-radius:6px;display:block" width="180" height="180">';
 }
 
 function deteksiLokasiToko() {
