@@ -1345,6 +1345,26 @@ tr:hover td{background:rgba(108,92,231,.03)}
   </div>
 </div>
 
+<!-- Kode Toko Splash (muncul jika belum ada restaurant_id) -->
+<div id="splash-screen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1A120A,#2D1B0E);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:20px">
+  <div style="text-align:center;max-width:380px;width:100%">
+    <div style="font-size:56px;margin-bottom:12px" id="splash-logo">🍜</div>
+    <div style="font-size:22px;font-weight:900;color:#fff;margin-bottom:6px">WarungKu POS</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:32px">Masukkan kode toko untuk memulai</div>
+    <div style="background:rgba(255,255,255,.08);border-radius:16px;padding:24px">
+      <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.5);margin-bottom:8px;text-align:left;letter-spacing:.5px">KODE / ID TOKO</div>
+      <input id="splash-kode" class="fi" placeholder="Paste kode toko dari admin..." 
+        style="background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;font-family:monospace;font-size:13px;margin-bottom:12px"
+        oninput="this.value=this.value.trim()">
+      <div id="splash-err" style="color:#FC8181;font-size:12px;margin-bottom:10px;display:none"></div>
+      <button onclick="aktivasiKodeToko()" style="width:100%;padding:13px;background:#E8581E;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">
+        ▶ Mulai
+      </button>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:16px">Kode toko dikirim oleh admin melalui WhatsApp</div>
+  </div>
+</div>
+
 <!-- MODALS -->
 
 <div class="modal-wrap" id="split-modal">
@@ -8164,7 +8184,84 @@ if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
     doLogin(u);
   } catch(e) { console.warn('restoreSession:', e); }
 })();
+checkSplashOrLogin();
 
+
+
+// ── Kode Toko / Restaurant ID Auto-config ─────────────────────────────────
+(function initFromUrl() {
+  // Check URL param ?r=RESTAURANT_ID
+  var params = new URLSearchParams(window.location.search);
+  var rId = params.get('r');
+  if (rId && rId.length > 10) {
+    // Auto-configure from URL
+    CFG.restaurantId = rId;
+    // Also set default SB config if not set
+    if (!CFG.sbUrl) {
+      CFG.sbUrl = 'https://lztdvlrunspmcoewfjcg.supabase.co';
+      CFG.sbKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4';
+    }
+    saveCFG();
+    // Remove ?r= from URL bar (clean URL)
+    try {
+      var cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch(e) {}
+    console.log('✅ Restaurant ID configured from URL:', rId);
+  }
+})();
+
+function checkSplashOrLogin() {
+  // Already configured → go to login
+  if (CFG.restaurantId && CFG.restaurantId.length > 10) {
+    var splash = document.getElementById('splash-screen');
+    if (splash) splash.style.display = 'none';
+    return; // normal flow continues
+  }
+  // Not configured → show splash
+  var splash = document.getElementById('splash-screen');
+  if (splash) splash.style.display = 'flex';
+  var loginScreen = document.getElementById('login-screen');
+  if (loginScreen) loginScreen.style.display = 'none';
+}
+
+async function aktivasiKodeToko() {
+  var kode = (document.getElementById('splash-kode') || {}).value.trim();
+  var errEl = document.getElementById('splash-err');
+  if (!kode || kode.length < 10) {
+    if (errEl) { errEl.textContent = 'Masukkan kode toko yang valid'; errEl.style.display = 'block'; }
+    return;
+  }
+  // Validate: check if restaurant exists in Supabase
+  var btn = document.querySelector('#splash-screen button');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Memverifikasi...'; }
+  try {
+    if (!CFG.sbUrl) {
+      CFG.sbUrl = 'https://lztdvlrunspmcoewfjcg.supabase.co';
+      CFG.sbKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4';
+    }
+    var sbTemp = window.supabase.createClient(CFG.sbUrl, CFG.sbKey);
+    var res = await sbTemp.from('restaurants').select('id,nama,logo').eq('id', kode).single();
+    if (res.error || !res.data) {
+      if (errEl) { errEl.textContent = 'Kode toko tidak ditemukan. Cek kembali kode yang dikirim admin.'; errEl.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Mulai'; }
+      return;
+    }
+    // Valid! Save and continue
+    CFG.restaurantId = kode;
+    if (res.data.nama) CFG.nama = res.data.nama;
+    if (res.data.logo) CFG.logo = res.data.logo;
+    saveCFG();
+    var splash = document.getElementById('splash-screen');
+    if (splash) splash.style.display = 'none';
+    var loginScreen = document.getElementById('login-screen');
+    if (loginScreen) loginScreen.style.display = 'flex';
+    renderLogin();
+  } catch(e) {
+    if (errEl) { errEl.textContent = 'Gagal: ' + e.message; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Mulai'; }
+  }
+}
 
 renderLogin();
 </script>
