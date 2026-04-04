@@ -933,6 +933,27 @@ tr:hover td{background:rgba(108,92,231,.03)}
                 <textarea class="fi" id="cfg-alamat-online" rows="2" placeholder="Kosongkan jika sama dengan alamat utama di atas..."></textarea>
                 <div style="font-size:10px;color:var(--txt2);margin-top:4px">Ditampilkan di halaman order pelanggan. Jika dikosongkan, menggunakan Alamat utama.</div>
               </div>
+              <!-- Koordinat Toko -->
+              <div class="form-group">
+                <label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">
+                  📍 Koordinat Toko (untuk hitung jarak ongkir)
+                  <button type="button" class="btn btn-sm" onclick="deteksiLokasiToko()" style="font-size:10px;padding:3px 10px;background:var(--blue-dk);color:#fff;border-color:var(--blue-dk)">📡 Deteksi Otomatis</button>
+                </label>
+                <div class="frow" style="margin-top:6px">
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-lbl">Latitude</label>
+                    <input class="fi" id="cfg-lat" type="number" step="0.000001" placeholder="-7.648514" style="font-family:var(--font-mono)">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-lbl">Longitude</label>
+                    <input class="fi" id="cfg-lng" type="number" step="0.000001" placeholder="111.529115" style="font-family:var(--font-mono)">
+                  </div>
+                </div>
+                <div id="lokasi-status" style="font-size:11px;margin-top:5px;color:var(--txt2)"></div>
+                <div style="font-size:10px;color:var(--txt2);margin-top:4px;line-height:1.6">
+                  Koordinat ini digunakan halaman order untuk menghitung jarak ke pelanggan secara otomatis. Klik <b>Deteksi Otomatis</b> untuk mengisi koordinat lokasi toko sekarang, atau isi manual dari Google Maps.
+                </div>
+              </div>
               <div class="frow"><div class="form-group"><label class="form-lbl">Telepon</label><input class="fi" id="cfg-telp" placeholder="0851-xxxx-xxxx"></div>
               <div class="form-group"><label class="form-lbl">WhatsApp Toko</label><input class="fi" id="cfg-wa" placeholder="6285xxxxxxxx"></div></div>
               <div class="form-group"><label class="form-lbl">Instagram / Sosial Media</label><input class="fi" id="cfg-sosmed" placeholder="@warungku"></div>
@@ -1889,6 +1910,8 @@ let CFG = {
   orderPageUrl:'', // URL lengkap halaman order pelanggan (GitHub Pages)
   alamat:'Jl. Contoh No.1, Madiun, Jawa Timur',
   alamatOnline:'', // alamat khusus untuk pesanan online (kosong = pakai alamat utama)
+  lat: null,  // koordinat toko (digunakan untuk hitung jarak ongkir)
+  lng: null,
   telp:'0851-xxxx-xxxx', wa:'6285xxxxxxxx', sosmed:'@warungku',
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
@@ -7871,6 +7894,51 @@ function showSubscriptionExpired(sub) {
   }
 }
 
+function deteksiLokasiToko() {
+  var statusEl = document.getElementById('lokasi-status');
+  if (!navigator.geolocation) {
+    if(statusEl) statusEl.textContent = '❌ Browser tidak mendukung geolokasi';
+    showNotif('Browser tidak mendukung geolokasi', '#E17055');
+    return;
+  }
+  if(statusEl) { statusEl.textContent = '⏳ Mendeteksi lokasi...'; statusEl.style.color='var(--amber-dk)'; }
+  showNotif('📡 Mendeteksi lokasi...', '#6C5CE7');
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+      var latEl = document.getElementById('cfg-lat');
+      var lngEl = document.getElementById('cfg-lng');
+      if(latEl) latEl.value = lat.toFixed(7);
+      if(lngEl) lngEl.value = lng.toFixed(7);
+      CFG.lat = lat;
+      CFG.lng = lng;
+      saveCFG();
+      // Push to Supabase restaurants table
+      if (_sb && CFG.restaurantId) {
+        _sb.from('restaurants').update({lat: lat, lng: lng}).eq('id', CFG.restaurantId)
+          .then(function(r) {
+            if (r.error) {
+              if(statusEl) { statusEl.textContent = '✅ Disimpan lokal · ⚠️ Supabase: '+r.error.message; statusEl.style.color='var(--amber-dk)'; }
+            } else {
+              if(statusEl) { statusEl.textContent = '✅ Koordinat tersimpan & tersync ke Supabase'; statusEl.style.color='var(--green-dk)'; }
+              showNotif('✅ Koordinat toko disimpan!', '#00B894');
+            }
+          });
+      } else {
+        if(statusEl) { statusEl.textContent = '✅ Koordinat disimpan lokal (lat: '+lat.toFixed(5)+', lng: '+lng.toFixed(5)+')'; statusEl.style.color='var(--green-dk)'; }
+        showNotif('✅ Koordinat toko terdeteksi!', '#00B894');
+      }
+    },
+    function(err) {
+      var msg = {1:'Izin lokasi ditolak — aktifkan di pengaturan browser', 2:'Lokasi tidak tersedia', 3:'Timeout'}[err.code] || err.message;
+      if(statusEl) { statusEl.textContent = '❌ ' + msg; statusEl.style.color='var(--red-dk)'; }
+      showNotif('Gagal deteksi lokasi: ' + msg, '#E17055');
+    },
+    {enableHighAccuracy: true, timeout: 10000, maximumAge: 0}
+  );
+}
+
 function renderBankListCfg() {
   var el = $('bank-list-cfg'); if (!el) return;
   var banks = CFG.banks || [];
@@ -7918,6 +7986,13 @@ function renderSettings() {
   $('cfg-tagline').value = CFG.tagline;
   $('cfg-alamat').value = CFG.alamat;
   var aoEl2 = $('cfg-alamat-online'); if(aoEl2) aoEl2.value = CFG.alamatOnline||'';
+  var latEl2 = $('cfg-lat'); if(latEl2) latEl2.value = CFG.lat||'';
+  var lngEl2 = $('cfg-lng'); if(lngEl2) lngEl2.value = CFG.lng||'';
+  var lsEl = $('lokasi-status');
+  if (lsEl) {
+    if (CFG.lat && CFG.lng) { lsEl.textContent = '✅ Koordinat tersimpan: '+CFG.lat.toFixed(5)+', '+CFG.lng.toFixed(5); lsEl.style.color='var(--green-dk)'; }
+    else { lsEl.textContent = '⚠️ Koordinat belum diset — klik Deteksi Otomatis'; lsEl.style.color='var(--amber-dk)'; }
+  }
   $('cfg-telp').value = CFG.telp;
   $('cfg-wa').value = CFG.wa;
   $('cfg-sosmed').value = CFG.sosmed;
@@ -7987,6 +8062,14 @@ function saveCfgToko() {
   var qp=$('qris-img-preview'); if(qp) qp.style.display=CFG.qrisImg?'block':'none';
   saveCFG();
   var aoEl = $('cfg-alamat-online'); if(aoEl) CFG.alamatOnline = aoEl.value.trim();
+  var latEl = $('cfg-lat'), lngEl = $('cfg-lng');
+  if(latEl && latEl.value) CFG.lat = parseFloat(latEl.value);
+  if(lngEl && lngEl.value) CFG.lng = parseFloat(lngEl.value);
+  // Push lat/lng to Supabase restaurants
+  if (_sb && CFG.restaurantId && CFG.lat && CFG.lng) {
+    _sb.from('restaurants').update({lat: CFG.lat, lng: CFG.lng}).eq('id', CFG.restaurantId)
+      .catch(function(e){ console.warn('save lat/lng:', e.message); });
+  }
   $('sb-icon').textContent = CFG.logo;
   $('sb-name-el').textContent = CFG.nama + ' POS';
   $('login-title').textContent = CFG.nama + ' POS';
