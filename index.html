@@ -435,6 +435,13 @@ tr:hover td{background:rgba(108,92,231,.03)}
       <span id="sb-shift-txt">Kasir belum dibuka</span>
     </div>
     <div id="sidebar-nav"></div>
+    <!-- Sub info strip -->
+    <div id="sb-sub-strip" style="display:none;margin:0 8px 6px;background:rgba(0,0,0,.25);border-radius:10px;padding:8px 10px">
+      <div style="font-size:9px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Langganan & Toko</div>
+      <div style="font-size:11px;font-weight:700;color:#fff" id="sb-sub-paket">—</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.55);margin-top:2px" id="sb-sub-expire">—</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.35);margin-top:3px;font-family:monospace;word-break:break-all" id="sb-sub-rid">—</div>
+    </div>
     <div class="sb-foot">
       <div class="sb-user-chip" onclick="doLogout()">
         <div class="u-ava" id="sb-ava" style="width:32px;height:32px;font-size:11px"></div>
@@ -921,6 +928,11 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <div class="form-group"><label class="form-lbl">Nama Toko</label><input class="fi" id="cfg-nama" placeholder="WarungKu"></div>
               <div class="form-group"><label class="form-lbl">Tagline</label><input class="fi" id="cfg-tagline" placeholder="Makan Enak, Harga Bersahabat"></div>
               <div class="form-group"><label class="form-lbl">Alamat</label><textarea class="fi" id="cfg-alamat" rows="2" placeholder="Jl. Contoh No.1..."></textarea></div>
+              <div class="form-group">
+                <label class="form-lbl">Alamat untuk Pesanan Online</label>
+                <textarea class="fi" id="cfg-alamat-online" rows="2" placeholder="Kosongkan jika sama dengan alamat utama di atas..."></textarea>
+                <div style="font-size:10px;color:var(--txt2);margin-top:4px">Ditampilkan di halaman order pelanggan. Jika dikosongkan, menggunakan Alamat utama.</div>
+              </div>
               <div class="frow"><div class="form-group"><label class="form-lbl">Telepon</label><input class="fi" id="cfg-telp" placeholder="0851-xxxx-xxxx"></div>
               <div class="form-group"><label class="form-lbl">WhatsApp Toko</label><input class="fi" id="cfg-wa" placeholder="6285xxxxxxxx"></div></div>
               <div class="form-group"><label class="form-lbl">Instagram / Sosial Media</label><input class="fi" id="cfg-sosmed" placeholder="@warungku"></div>
@@ -1876,6 +1888,7 @@ let CFG = {
   nama:'WarungKu', tagline:'Makan Enak, Harga Bersahabat',
   orderPageUrl:'', // URL lengkap halaman order pelanggan (GitHub Pages)
   alamat:'Jl. Contoh No.1, Madiun, Jawa Timur',
+  alamatOnline:'', // alamat khusus untuk pesanan online (kosong = pakai alamat utama)
   telp:'0851-xxxx-xxxx', wa:'6285xxxxxxxx', sosmed:'@warungku',
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
@@ -2032,6 +2045,11 @@ function doLogin(u) {
         console.warn('Auto-pull on login failed:', e.message);
       });
       loadSubscription();
+    // Show ID toko immediately without waiting for sub
+    var rEl = document.getElementById('sb-sub-rid');
+    if (rEl) { rEl.textContent = 'ID: ' + (CFG.restaurantId||'—'); }
+    var strip = document.getElementById('sb-sub-strip');
+    if (strip && CFG.restaurantId) strip.style.display = 'block';
     }, 800);
   }
 }
@@ -5551,6 +5569,22 @@ async function pullAllFromSupabase() {
   sbStatusBar('⏳ Mengambil data dari Supabase...', 'loading');
 
   try {
+    // Load restaurant name from Supabase
+    try {
+      var restoRes = await _sb.from('restaurants').select('nama,logo').eq('id', rid).single();
+      if (restoRes.data && restoRes.data.nama) {
+        CFG.nama = restoRes.data.nama;
+        if (restoRes.data.logo) CFG.logo = restoRes.data.logo;
+        saveCFG();
+        var snEl = document.getElementById('sb-name-el');
+        if (snEl) snEl.textContent = CFG.nama + ' POS';
+        var siEl = document.getElementById('sb-icon');
+        if (siEl) siEl.textContent = CFG.logo;
+        var ltEl = document.getElementById('login-title');
+        if (ltEl) ltEl.textContent = CFG.nama + ' POS';
+      }
+    } catch(e) { console.warn('fetch restaurant name:', e.message); }
+
     // Load menus
     var { data: menus, error: e1 } = await _sb.from('menus')
       .select('*').eq('restaurant_id', rid).eq('status', 'available');
@@ -5965,6 +5999,7 @@ async function syncRestoStatusToSupabase(){
     var cfgToSync = {
       isOpen: CFG.isOpen!==false,
       closedNote: CFG.closedNote||'',
+      alamatOnline: CFG.alamatOnline || CFG.alamat || '',
       banks: CFG.banks||[],
       qrisImg: CFG.qrisImg||null,
       qrisNama: CFG.qrisNama||'',
@@ -6505,7 +6540,8 @@ function printOnlineStruk(orderId, tipe) {
           html += '<div class="r-c r-b" style="font-size:13px">'+(CFG.logoImg?'':CFG.logo+' ')+CFG.nama+'</div>';
         }
         if (CFG.tagline) html += '<div class="r-c" style="color:var(--txt2)">'+CFG.tagline+'</div>';
-        if (CFG.se.alamat && CFG.alamat) html += '<div class="r-c" style="color:var(--txt2)">'+CFG.alamat+'</div>';
+        var _alamatDisplay = CFG.alamatOnline || CFG.alamat;
+        if (CFG.se.alamat && _alamatDisplay) html += '<div class="r-c" style="color:var(--txt2)">'+_alamatDisplay+'</div>';
         if (CFG.se.telp && CFG.telp) html += '<div class="r-c" style="color:var(--txt2)">Tel: '+CFG.telp+'</div>';
         html += '<hr class="r-d">';
         html += '<div style="text-align:center;font-size:10px;font-weight:700;background:var(--blue-bg);border-radius:4px;padding:3px;margin-bottom:6px;color:var(--blue-dk)">🛵 PESANAN ONLINE</div>';
@@ -7761,6 +7797,8 @@ async function loadSubscription() {
     if (typeof overrideFitur === 'string') { try{ overrideFitur=JSON.parse(overrideFitur); }catch(e){ overrideFitur={}; } }
     _fitur = Object.assign({}, planFitur, overrideFitur);
     applyFeatureFlags();
+    // Update sidebar strip
+    updateSbSubStrip(sub, selesai, now);
     // Show days remaining if trial or near expiry
     if (selesai) {
       var sisa = Math.ceil((selesai - now) / 86400000);
@@ -7769,6 +7807,32 @@ async function loadSubscription() {
       }
     }
   } catch(e) { console.warn('loadSubscription:', e.message); }
+}
+
+function updateSbSubStrip(sub, selesai, now) {
+  var strip = document.getElementById('sb-sub-strip');
+  var elPaket = document.getElementById('sb-sub-paket');
+  var elExpire = document.getElementById('sb-sub-expire');
+  var elRid = document.getElementById('sb-sub-rid');
+  if (!strip) return;
+  strip.style.display = 'block';
+  // Paket name
+  var planNama = (sub && sub.plans && sub.plans.nama) ? sub.plans.nama : '—';
+  var statusBadge = sub ? (sub.status === 'trial' ? ' (Trial)' : sub.status === 'active' ? '' : ' ('+sub.status+')') : '';
+  if (elPaket) elPaket.textContent = '📦 ' + planNama + statusBadge;
+  // Expire
+  if (elExpire) {
+    if (!selesai) { elExpire.textContent = 'Tidak ada batas waktu'; elExpire.style.color='rgba(255,255,255,.55)'; }
+    else {
+      var sisa = Math.ceil((selesai - now) / 86400000);
+      var tglStr = selesai.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+      if (sisa <= 0) { elExpire.textContent = '⚠️ Berakhir: '+tglStr; elExpire.style.color='#FC8181'; }
+      else if (sisa <= 7) { elExpire.textContent = '⚠️ Berakhir '+sisa+' hari · '+tglStr; elExpire.style.color='#FBBF24'; }
+      else { elExpire.textContent = '✅ Aktif hingga '+tglStr; elExpire.style.color='#6EE7B7'; }
+    }
+  }
+  // Restaurant ID
+  if (elRid) elRid.textContent = 'ID: ' + (CFG.restaurantId || '—');
 }
 
 function applyFeatureFlags() {
@@ -7853,6 +7917,7 @@ function renderSettings() {
   $('cfg-nama').value = CFG.nama;
   $('cfg-tagline').value = CFG.tagline;
   $('cfg-alamat').value = CFG.alamat;
+  var aoEl2 = $('cfg-alamat-online'); if(aoEl2) aoEl2.value = CFG.alamatOnline||'';
   $('cfg-telp').value = CFG.telp;
   $('cfg-wa').value = CFG.wa;
   $('cfg-sosmed').value = CFG.sosmed;
@@ -7921,6 +7986,7 @@ function saveCfgToko() {
   // render QRIS preview
   var qp=$('qris-img-preview'); if(qp) qp.style.display=CFG.qrisImg?'block':'none';
   saveCFG();
+  var aoEl = $('cfg-alamat-online'); if(aoEl) CFG.alamatOnline = aoEl.value.trim();
   $('sb-icon').textContent = CFG.logo;
   $('sb-name-el').textContent = CFG.nama + ' POS';
   $('login-title').textContent = CFG.nama + ' POS';
