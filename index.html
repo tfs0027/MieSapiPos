@@ -7269,7 +7269,8 @@ function lihatDetailPelamar(id) {
 
 async function simpanCatatanPelamar(id) {
   var catatan = ($('catatan-pelamar-input')||{value:''}).value.trim();
-  await _sb.from('applicants').update({catatan_admin:catatan}).eq('id',id);
+  var cRes = await _sb.from('applicants').update({catatan_admin:catatan}).eq('id',id);
+  if (cRes.error) { showNotif('Gagal simpan catatan: '+(cRes.error.message||'Cek RLS'),'#E17055'); return; }
   var idx = _pelamarData.findIndex(function(a){ return a.id===id; });
   if (idx>=0) _pelamarData[idx].catatan_admin = catatan;
   var wrap = document.getElementById('detail-pelamar-wrap');
