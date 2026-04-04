@@ -7213,7 +7213,7 @@ function lihatDetailPelamar(id) {
         '<img src="'+val+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--brd);cursor:pointer" onclick="showMediaPopup(this.src,\'foto\')" title="Klik untuk lihat">' +
         '<div style="display:flex;flex-direction:column;gap:4px">' +
           '<button class="btn btn-sm" style="font-size:10px" onclick="showMediaPopup(\''+val+'\',\'foto\')">🔍 Lihat Foto</button>' +
-          '<button class="btn btn-sm" style="font-size:10px" onclick="window.open(\''+val+'\',\'_blank\')">🔗 Tab Baru</button>' +
+          '<button class="btn btn-sm" style="font-size:10px" onclick="openInNewTab(\''+val+'\')">' + '🔗 Tab Baru</button>' +
         '</div>' +
       '</div>';
     } else if (val !== '-' && val.startsWith('data:')) {
@@ -7225,7 +7225,7 @@ function lihatDetailPelamar(id) {
           '<div style="display:flex;gap:4px">' +
             '<button class="btn btn-sm" style="font-size:10px" onclick="showMediaPopup(\''+val+'\',\'file\')">👁️ Preview</button>' +
             '<button class="btn btn-sm" style="font-size:10px" onclick="downloadFile(\''+val+'\')">💾 Download</button>' +
-            '<button class="btn btn-sm" style="font-size:10px" onclick="window.open(\''+val+'\',\'_blank\')">🔗 Tab Baru</button>' +
+            '<button class="btn btn-sm" style="font-size:10px" onclick="openInNewTab(\''+val+'\')">' + '🔗 Tab Baru</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -7468,7 +7468,8 @@ function showMediaPopup(src, type) {
   hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--brd);flex-shrink:0';
   hdr.innerHTML = '<span style="font-size:14px;font-weight:700">'+(type==='foto'?'🖼️ Lihat Foto':'📄 Preview File')+'</span>' +
     '<div style="display:flex;gap:6px">' +
-      '<button class="btn btn-sm" style="font-size:11px" onclick="window.open(\''+src+'\',\'_blank\')">🔗 Buka Tab Baru</button>' +
+      '<button class="btn btn-sm" style="font-size:11px" onclick="openInNewTab(\''+src+'\')">' +
+      '🔗 Buka Tab Baru</button>' +
       '<button class="btn btn-sm" style="font-size:11px" onclick="downloadFile(\''+src+'\')">💾 Download</button>' +
       '<button class="btn btn-sm" style="font-size:11px;color:var(--red-dk)" onclick="document.getElementById(\'media-popup-wrap\').remove()">✕ Tutup</button>' +
     '</div>';
@@ -7482,11 +7483,19 @@ function showMediaPopup(src, type) {
     img.src = src;
     img.style.cssText = 'max-width:100%;max-height:70vh;border-radius:8px;object-fit:contain';
     content.appendChild(img);
-  } else if (src.startsWith('data:application/pdf') || src.includes('pdf')) {
-    var iframe = document.createElement('iframe');
-    iframe.src = src;
-    iframe.style.cssText = 'width:700px;max-width:80vw;height:65vh;border:none;border-radius:8px';
-    content.appendChild(iframe);
+  } else if (src.startsWith('data:application/pdf')) {
+    // PDF: use blob URL for iframe (data URIs blocked in iframes)
+    try {
+      var arr2=src.split(','),bstr2=atob(arr2[1]),n2=bstr2.length,u8=new Uint8Array(n2);
+      while(n2--) u8[n2]=bstr2.charCodeAt(n2);
+      var blob2=new Blob([u8],{type:'application/pdf'});
+      var pdfUrl=URL.createObjectURL(blob2);
+      var iframe=document.createElement('iframe');
+      iframe.src=pdfUrl;
+      iframe.style.cssText='width:700px;max-width:80vw;height:65vh;border:none;border-radius:8px';
+      content.appendChild(iframe);
+      setTimeout(function(){URL.revokeObjectURL(pdfUrl);},300000);
+    } catch(e2) { content.innerHTML='<div style="text-align:center;padding:24px">PDF tidak bisa di-preview. Coba Download.</div>'; }
   } else {
     content.innerHTML = '<div style="text-align:center;color:var(--txt2);padding:32px">' +
       '<div style="font-size:48px;margin-bottom:12px">📄</div>' +
@@ -7499,6 +7508,22 @@ function showMediaPopup(src, type) {
   inner.appendChild(content);
   wrap.appendChild(inner);
   document.body.appendChild(wrap);
+}
+
+function openInNewTab(src) {
+  // base64 URLs can't be opened directly in new tab in modern browsers
+  // Convert to blob URL first
+  try {
+    var arr = src.split(','), mime = arr[0].match(/:(.*?);/)[1];
+    var bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+    while(n--) u8arr[n] = bstr.charCodeAt(n);
+    var blob = new Blob([u8arr], {type:mime});
+    var url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+  } catch(e) {
+    window.open(src, '_blank');
+  }
 }
 
 function downloadFile(src) {
