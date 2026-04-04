@@ -2011,6 +2011,7 @@ function doLogin(u) {
       }).catch(function(e) {
         console.warn('Auto-pull on login failed:', e.message);
       });
+      loadSubscription();
     }, 800);
   }
 }
@@ -7710,6 +7711,80 @@ function hapusRekLogo() {
   if (img) { img.src=''; img.style.display='none'; }
   if (emoji) emoji.style.display = 'block';
   showNotif('Logo dihapus', '#E17055');
+}
+
+
+// ── Feature Flag System ───────────────────────────────────────────────────
+var _fitur = {}; // active features from subscription
+
+async function loadSubscription() {
+  if (!_sb || !CFG.restaurantId) return;
+  try {
+    var res = await _sb.from('subscriptions')
+      .select('*,plans(fitur)')
+      .eq('restaurant_id', CFG.restaurantId)
+      .single();
+    if (res.error || !res.data) return;
+    var sub = res.data;
+    // Check if subscription is active
+    var now = new Date();
+    var selesai = sub.selesai ? new Date(sub.selesai) : null;
+    var isActive = (sub.status === 'active' || sub.status === 'trial') && (!selesai || selesai >= now);
+    if (!isActive) {
+      showSubscriptionExpired(sub);
+      return;
+    }
+    // Merge plan fitur + override
+    var planFitur = (sub.plans && sub.plans.fitur) || {};
+    var overrideFitur = sub.fitur_override || {};
+    if (typeof planFitur === 'string') { try{ planFitur=JSON.parse(planFitur); }catch(e){ planFitur={}; } }
+    if (typeof overrideFitur === 'string') { try{ overrideFitur=JSON.parse(overrideFitur); }catch(e){ overrideFitur={}; } }
+    _fitur = Object.assign({}, planFitur, overrideFitur);
+    applyFeatureFlags();
+    // Show days remaining if trial or near expiry
+    if (selesai) {
+      var sisa = Math.ceil((selesai - now) / 86400000);
+      if (sisa <= 7) {
+        showNotif('⚠️ Langganan berakhir ' + sisa + ' hari lagi', '#F59E0B');
+      }
+    }
+  } catch(e) { console.warn('loadSubscription:', e.message); }
+}
+
+function applyFeatureFlags() {
+  // Hide nav items based on fitur
+  var navMap = {
+    'online-order': _fitur.online_order,
+    'rekrutmen': _fitur.rekrutmen,
+    'stok': _fitur.stok,
+    'laporan': _fitur.laporan,
+    'riwayat': _fitur.riwayat,
+    'users': _fitur.multi_user,
+  };
+  Object.keys(navMap).forEach(function(navId) {
+    var el = document.querySelector('[data-p="'+navId+'"]');
+    if (el) el.style.display = navMap[navId] !== false ? '' : 'none';
+  });
+}
+
+function perpanjangLangganan() { location.href='warungku-register.html'; }
+
+function showSubscriptionExpired(sub) {
+  var overlay = document.getElementById('sub-expired-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'sub-expired-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:20px;padding:32px;max-width:400px;text-align:center">' +
+        '<div style="font-size:48px;margin-bottom:12px">⏰</div>' +
+        '<div style="font-size:20px;font-weight:900;margin-bottom:8px">Langganan Berakhir</div>' +
+        '<div style="font-size:13px;color:#6B7280;margin-bottom:20px">Masa aktif langganan telah habis. Silakan perpanjang untuk melanjutkan penggunaan.</div>' +
+        '<button onclick="perpanjangLangganan()" style="width:100%;padding:13px;background:#E8581E;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:8px">🔄 Perpanjang Sekarang</button>' +
+        '<div style="font-size:11px;color:#9CA3AF">Hubungi admin untuk bantuan</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+  }
 }
 
 function renderBankListCfg() {
