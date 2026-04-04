@@ -7205,8 +7205,40 @@ function lihatDetailPelamar(id) {
   try { jawaban = a.jawaban ? JSON.parse(a.jawaban) : {}; } catch(e) {}
   var pertanyaan = (CFG.rekrutmen&&CFG.rekrutmen.pertanyaan)||[];
   var jawabanHTML = pertanyaan.map(function(q) {
-    return '<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--txt2)">'+q.label+'</div>' +
-      '<div style="font-size:12px;font-weight:600">'+(jawaban[q.id]&&jawaban[q.id].startsWith('data:image')?'<img src="'+jawaban[q.id]+'" style="max-width:100%;border-radius:8px;max-height:200px">':( jawaban[q.id]||'-'))+'</div></div>';
+    var val = jawaban[q.id] || '-';
+    var contentHTML = '';
+    if (val !== '-' && val.startsWith('data:image')) {
+      // Foto - show thumbnail + popup button
+      contentHTML = '<div style="display:flex;align-items:flex-start;gap:8px;margin-top:4px">' +
+        '<img src="'+val+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--brd);cursor:pointer" onclick="showMediaPopup(this.src,\'foto\')" title="Klik untuk lihat">' +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+          '<button class="btn btn-sm" style="font-size:10px" onclick="showMediaPopup(\''+val+'\',\'foto\')">🔍 Lihat Foto</button>' +
+          '<button class="btn btn-sm" style="font-size:10px" onclick="window.open(\''+val+'\',\'_blank\')">🔗 Tab Baru</button>' +
+        '</div>' +
+      '</div>';
+    } else if (val !== '-' && val.startsWith('data:')) {
+      // File (PDF/DOC in base64)
+      contentHTML = '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
+        '<span style="font-size:24px">📄</span>' +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+          '<span style="font-size:11px;color:var(--txt2)">File terlampir</span>' +
+          '<div style="display:flex;gap:4px">' +
+            '<button class="btn btn-sm" style="font-size:10px" onclick="showMediaPopup(\''+val+'\',\'file\')">👁️ Preview</button>' +
+            '<button class="btn btn-sm" style="font-size:10px" onclick="downloadFile(\''+val+'\')">💾 Download</button>' +
+            '<button class="btn btn-sm" style="font-size:10px" onclick="window.open(\''+val+'\',\'_blank\')">🔗 Tab Baru</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    } else if (val !== '-') {
+      // Check if it's a filename (plain file upload)
+      var isFilename = /\.(pdf|doc|docx|jpg|jpeg|png|gif)$/i.test(val);
+      contentHTML = isFilename
+        ? '<span style="background:var(--bg2);border:1px solid var(--brd);border-radius:6px;padding:3px 10px;font-size:11px;font-family:var(--font-mono)">📎 '+val+'</span>'
+        : '<span style="font-size:12px;font-weight:600">'+val+'</span>';
+    } else { contentHTML = '<span style="font-size:12px;color:var(--txt3)">-</span>'; }
+    return '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--brd)">' +
+      '<div style="font-size:10px;color:var(--txt2);font-weight:600;margin-bottom:3px">'+q.label+'</div>' +
+      contentHTML+'</div>';
   }).join('');
 
   // Use existing modal-wrap system
@@ -7414,6 +7446,72 @@ function tambahPertanyaan() {
 
 function hapusPertanyaan(i) {
   CFG.rekrutmen.pertanyaan.splice(i,1); renderPertanyaanList();
+}
+
+
+// ── Media Popup (Foto & File Preview) ────────────────────────────────────
+function showMediaPopup(src, type) {
+  // Remove existing
+  var existing = document.getElementById('media-popup-wrap');
+  if (existing) existing.remove();
+
+  var wrap = document.createElement('div');
+  wrap.id = 'media-popup-wrap';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px';
+  wrap.onclick = function(e){ if(e.target===wrap) wrap.remove(); };
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:var(--bg);border-radius:16px;max-width:90vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.4)';
+
+  // Header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--brd);flex-shrink:0';
+  hdr.innerHTML = '<span style="font-size:14px;font-weight:700">'+(type==='foto'?'🖼️ Lihat Foto':'📄 Preview File')+'</span>' +
+    '<div style="display:flex;gap:6px">' +
+      '<button class="btn btn-sm" style="font-size:11px" onclick="window.open(\''+src+'\',\'_blank\')">🔗 Buka Tab Baru</button>' +
+      '<button class="btn btn-sm" style="font-size:11px" onclick="downloadFile(\''+src+'\')">💾 Download</button>' +
+      '<button class="btn btn-sm" style="font-size:11px;color:var(--red-dk)" onclick="document.getElementById(\'media-popup-wrap\').remove()">✕ Tutup</button>' +
+    '</div>';
+
+  // Content
+  var content = document.createElement('div');
+  content.style.cssText = 'flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px;min-height:200px;max-height:75vh';
+
+  if (type === 'foto' || src.startsWith('data:image')) {
+    var img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:100%;max-height:70vh;border-radius:8px;object-fit:contain';
+    content.appendChild(img);
+  } else if (src.startsWith('data:application/pdf') || src.includes('pdf')) {
+    var iframe = document.createElement('iframe');
+    iframe.src = src;
+    iframe.style.cssText = 'width:700px;max-width:80vw;height:65vh;border:none;border-radius:8px';
+    content.appendChild(iframe);
+  } else {
+    content.innerHTML = '<div style="text-align:center;color:var(--txt2);padding:32px">' +
+      '<div style="font-size:48px;margin-bottom:12px">📄</div>' +
+      '<div style="font-size:13px">Preview tidak tersedia untuk tipe file ini.</div>' +
+      '<div style="font-size:11px;margin-top:8px;color:var(--txt3)">Gunakan tombol "Buka Tab Baru" atau "Download"</div>' +
+    '</div>';
+  }
+
+  inner.appendChild(hdr);
+  inner.appendChild(content);
+  wrap.appendChild(inner);
+  document.body.appendChild(wrap);
+}
+
+function downloadFile(src) {
+  var a = document.createElement('a');
+  a.href = src;
+  // Try to determine extension from data URI
+  var ext = 'file';
+  if (src.startsWith('data:image/jpeg')) ext='jpg';
+  else if (src.startsWith('data:image/png')) ext='png';
+  else if (src.startsWith('data:application/pdf')) ext='pdf';
+  else if (src.startsWith('data:application/msword')) ext='doc';
+  a.download = 'lampiran-pelamar.'+ext;
+  a.click();
 }
 
 function renderBankListCfg() {
