@@ -1161,6 +1161,21 @@ tr:hover td{background:rgba(108,92,231,.03)}
                     </label>
                   </div>
                 </div>
+                <!-- Logo UMKM -->
+                <div class="form-group">
+                  <label class="form-lbl">Logo UMKM / Perusahaan</label>
+                  <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                    <div id="rek-logo-preview" style="width:64px;height:64px;border-radius:10px;border:1.5px solid var(--brd);background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;overflow:hidden">
+                      <span id="rek-logo-emoji">🏢</span>
+                      <img id="rek-logo-img" style="width:100%;height:100%;object-fit:cover;display:none">
+                    </div>
+                    <div style="flex:1">
+                      <label class="btn btn-sm" style="cursor:pointer;display:block;margin-bottom:6px">📂 Upload Logo<input type="file" id="rek-logo-input" accept="image/*" style="display:none" onchange="uploadRekLogo(this)"></label>
+                      <button class="btn btn-sm" style="color:var(--red-dk);width:100%" onclick="hapusRekLogo()">🗑️ Hapus Logo</button>
+                    </div>
+                  </div>
+                  <div style="font-size:10px;color:var(--txt2);margin-top:4px">JPG/PNG maks 500KB. Tampil di halaman formulir pelamar.</div>
+                </div>
                 <div class="form-group">
                   <label class="form-lbl">Judul Halaman Lamaran</label>
                   <input class="fi" id="rek-judul" placeholder="Bergabung Bersama Kami">
@@ -1749,6 +1764,7 @@ let CFG = {
   kurirList:[],
   rekrutmen:{
     aktif: false,
+    logoImg: null, // base64 logo
     judulLowongan: 'Bergabung Bersama Kami',
     deskripsi: 'Kami membuka lowongan untuk bergabung bersama tim kami.',
     posisi: [], // [{nama, kuota, aktif}]
@@ -7316,6 +7332,10 @@ function renderRekSetting() {
   var d = $('rek-deskripsi'); if(d) d.value = r.deskripsi||'';
   var ps = $('rek-pesan-selesai'); if(ps) ps.value = r.pesanSelesai||'';
   var nw = $('rek-notif-wa'); if(nw) nw.value = r.notifWA||'';
+  // Load logo
+  var rli = $('rek-logo-img'), rle = $('rek-logo-emoji');
+  if (r.logoImg) { if(rli){rli.src=r.logoImg;rli.style.display='block';} if(rle) rle.style.display='none'; }
+  else { if(rli) rli.style.display='none'; if(rle) rle.style.display='block'; }
   var ru = $('rek-url-cfg'); if(ru) ru.value = r.recruitUrl||'';
   updateRekLinkDisplay();
   renderPosisiList();
@@ -7338,6 +7358,7 @@ function saveRekSetting() {
   CFG.rekrutmen.deskripsi = ($('rek-deskripsi')||{value:''}).value.trim();
   CFG.rekrutmen.pesanSelesai = ($('rek-pesan-selesai')||{value:''}).value.trim();
   CFG.rekrutmen.notifWA = ($('rek-notif-wa')||{value:''}).value.trim();
+  // logoImg stays as-is (saved by uploadRekLogo directly)
   var rekUrl = ($('rek-url-cfg')||{value:''}).value.trim();
   if (rekUrl) CFG.rekrutmen.recruitUrl = rekUrl;
   updateRekLinkDisplay();
@@ -7538,6 +7559,32 @@ function downloadFile(src) {
   else if (src.startsWith('data:application/msword')) ext='doc';
   a.download = 'lampiran-pelamar.'+ext;
   a.click();
+}
+
+
+function uploadRekLogo(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 500*1024) { showNotif('Maks 500KB', '#E17055'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    if (!CFG.rekrutmen) CFG.rekrutmen = {};
+    CFG.rekrutmen.logoImg = e.target.result;
+    var img = $('rek-logo-img'), emoji = $('rek-logo-emoji');
+    if (img) { img.src = e.target.result; img.style.display = 'block'; }
+    if (emoji) emoji.style.display = 'none';
+    showNotif('✅ Logo disimpan', '#00B894');
+  };
+  reader.readAsDataURL(file);
+}
+
+function hapusRekLogo() {
+  if (!CFG.rekrutmen) return;
+  CFG.rekrutmen.logoImg = null;
+  var img = $('rek-logo-img'), emoji = $('rek-logo-emoji');
+  if (img) { img.src=''; img.style.display='none'; }
+  if (emoji) emoji.style.display = 'block';
+  showNotif('Logo dihapus', '#E17055');
 }
 
 function renderBankListCfg() {
