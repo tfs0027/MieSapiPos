@@ -1987,9 +1987,13 @@ function showNotif(msg, color) {
 // ═══════════════════════════════
 
 // ── Session & Shift Persistence ──────────────────────────────────────────
+function getShiftKey() {
+  return 'wkpos_shift_' + (CFG.restaurantId || 'default');
+}
+
 function saveShiftLocal() {
   try {
-    localStorage.setItem('wkpos_shift', JSON.stringify({
+    localStorage.setItem(getShiftKey(), JSON.stringify({
       currentShift: ST.currentShift,
       shifts: ST.shifts,
       trxCounter: ST.trxCounter,
@@ -2001,7 +2005,7 @@ function saveShiftLocal() {
 
 function loadShiftLocal() {
   try {
-    var s = localStorage.getItem('wkpos_shift');
+    var s = localStorage.getItem(getShiftKey());
     if (!s) return;
     var d = JSON.parse(s);
     if (d.currentShift) ST.currentShift = d.currentShift;
