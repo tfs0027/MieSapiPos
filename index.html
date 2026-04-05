@@ -4113,6 +4113,7 @@ function renderLaporanPengeluaran() {
 
 // Fetch transaksi dari Supabase untuk laporan — tanpa confirm dialog
 var _fetchingLapTrx = false;
+var _lapOnlineFetching = false;
 async function fetchLaporanFromSupabase() {
   if (!_sb || !CFG.restaurantId || _fetchingLapTrx) return;
   _fetchingLapTrx = true;
@@ -5746,22 +5747,39 @@ async function pushAllToSupabase() {
   });
   await upsert('users', users, 'User');
 
-  // 5. Shifts (closed only) — semua kolom summary
-  var shifts = ST.shifts.map(function(sh) {
-    return {
-      id: seedUUID(rid+'shift'+sh.id), restaurant_id: rid,
-      shift_code: sh.id, kasir_nama: sh.kasir||'',
+  // 5. Shifts — upsert satu per satu agar bisa skip kolom yang tidak ada
+  for (var si = 0; si < ST.shifts.length; si++) {
+    var sh = ST.shifts[si];
+    // Data minimal yang pasti ada
+    var shData = {
+      restaurant_id: rid, shift_code: sh.id,
       modal_awal: sh.modalAwal||0, status: sh.status||'closed',
-      tanggal: sh.tanggal||'', waktu_buka: sh.waktuBuka||'',
-      waktu_tutup: sh.waktuTutup||null,
-      total_penjualan: sh.totalPenjualan||0, total_pengeluaran: sh.totalPengeluaran||0,
-      laba_bersih: sh.labaBersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
-      transfer: sh.transfer||0, ekspektasi_kas: sh.ekspektasiKas||0,
-      kas_fisik: sh.kasFisik||0, selisih: sh.selisih||0, total_online: sh.totalOnline||0,
-      updated_at: new Date().toISOString()
+      tanggal: sh.tanggal||''
     };
-  });
-  await upsert('shifts', shifts, 'Shift');
+    // Tambah kolom opsional jika ada nilainya
+    if (sh.kasir) shData.kasir_nama = sh.kasir;
+    if (sh.waktuBuka) shData.waktu_buka = sh.waktuBuka;
+    if (sh.waktuTutup) shData.waktu_tutup = sh.waktuTutup;
+    if (sh.totalPenjualan) shData.total_penjualan = sh.totalPenjualan;
+    if (sh.totalPengeluaran) shData.total_pengeluaran = sh.totalPengeluaran;
+    if (sh.labaBersih) shData.laba_bersih = sh.labaBersih;
+    if (sh.tunai) shData.tunai = sh.tunai;
+    if (sh.qris) shData.qris = sh.qris;
+    if (sh.transfer) shData.transfer = sh.transfer;
+    if (sh.kasFisik) shData.kas_fisik = sh.kasFisik;
+    if (sh.selisih !== undefined) shData.selisih = sh.selisih;
+    if (sh.totalOnline) shData.total_online = sh.totalOnline;
+    try {
+      var sr = await _sb.from('shifts').upsert(shData, {onConflict:'shift_code'});
+      if (sr.error) {
+        // Fallback: hanya kolom minimal
+        await _sb.from('shifts').upsert({
+          restaurant_id: rid, shift_code: sh.id,
+          modal_awal: sh.modalAwal||0, status: sh.status||'closed', tanggal: sh.tanggal||''
+        }, {onConflict:'shift_code'});
+      } else { ok++; }
+    } catch(ex) { errors.push('Shift ' + sh.id + ': ' + ex.message); }
+  }
 
   // 6. Transactions — dengan items_json
   var trxs = ST.transactions.map(function(t) {
