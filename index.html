@@ -2084,6 +2084,7 @@ function doLogin(u) {
       });
       loadSubscription();
     loadSystemConfig(); // fetch URLs from system_config
+    checkForceLogout(); // cek force_logout dari admin
     // Show ID toko immediately without waiting for sub
     var rEl = document.getElementById('sb-sub-rid');
     if (rEl) { rEl.textContent = 'ID: ' + (CFG.restaurantId||'—'); }
@@ -4678,6 +4679,21 @@ function prosesTutupKasir() {
   syncRestoStatusToSupabase();
   renderRestoStatusUI();
   sbSyncShift(closed);
+  // Cek force_logout dari admin
+  if (_pendingForceLogout) {
+    // Clear flag di Supabase
+    if (_sb && CFG.restaurantId) {
+      _sb.from('restaurants').update({force_logout: false, logout_reason: null})
+        .eq('id', CFG.restaurantId)
+        .then(function() { console.log('force_logout cleared'); });
+    }
+    // Tampilkan pesan lalu auto-logout setelah 3 detik
+    var banner = document.getElementById('force-logout-banner');
+    if (banner) banner.remove();
+    showSuccessPopup('⚡', 'Logout Otomatis', 'Admin telah meminta logout. Anda akan dikeluarkan dalam 3 detik...', 3500);
+    _pendingForceLogout = false;
+    setTimeout(function() { doLogout(); }, 3200);
+  }
 }
 
 function renderShiftPage() {
