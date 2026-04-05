@@ -3556,13 +3556,24 @@ function getLapFilteredTrx() {
 
 function parseTrxDate(dateStr, timeStr) {
   var months = {Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,Jun:5,Jul:6,Agu:7,Sep:8,Okt:9,Nov:10,Des:11};
-  var parts = (dateStr||'').split(' ');
-  if (parts.length===3) {
-    var d = new Date(parseInt(parts[2]), months[parts[1]]||0, parseInt(parts[0]));
-    if (timeStr) { var tp=timeStr.split(':'); d.setHours(parseInt(tp[0])||0,parseInt(tp[1])||0); }
-    return d;
+  var str = (dateStr||'').trim();
+  var d;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    // ISO format: "2024-01-15" atau "2024-01-15T..."
+    d = new Date(str.length === 10 ? str + 'T00:00:00' : str);
+  } else {
+    var parts = str.split(' ');
+    if (parts.length === 3) {
+      d = new Date(parseInt(parts[2]), months[parts[1]]||0, parseInt(parts[0]));
+    } else {
+      d = new Date(str);
+    }
   }
-  return new Date(dateStr);
+  if (timeStr && timeStr.includes(':')) {
+    var tp = timeStr.split(':');
+    d.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0);
+  }
+  return d;
 }
 
 
@@ -5735,48 +5746,68 @@ async function pushAllToSupabase() {
   });
   await upsert('users', users, 'User');
 
-  // 5. Shifts (closed only)
+  // 5. Shifts (closed only) — semua kolom summary
   var shifts = ST.shifts.map(function(sh) {
     return {
       id: seedUUID(rid+'shift'+sh.id), restaurant_id: rid,
-      shift_code: sh.id, modal_awal: sh.modalAwal||0,
-      status: sh.status, tanggal: sh.tanggal||'',
-      waktu_tutup: sh.status==='closed' ? new Date().toISOString() : null,
+      shift_code: sh.id, kasir_nama: sh.kasir||'',
+      modal_awal: sh.modalAwal||0, status: sh.status||'closed',
+      tanggal: sh.tanggal||'', waktu_buka: sh.waktuBuka||'',
+      waktu_tutup: sh.waktuTutup||null,
+      total_penjualan: sh.totalPenjualan||0, total_pengeluaran: sh.totalPengeluaran||0,
+      laba_bersih: sh.labaBersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
+      transfer: sh.transfer||0, ekspektasi_kas: sh.ekspektasiKas||0,
+      kas_fisik: sh.kasFisik||0, selisih: sh.selisih||0, total_online: sh.totalOnline||0,
+      updated_at: new Date().toISOString()
     };
   });
   await upsert('shifts', shifts, 'Shift');
 
-  // 6. Transactions
+  // 6. Transactions — dengan items_json
   var trxs = ST.transactions.map(function(t) {
     return {
       id: seedUUID(rid+'trx'+t.id), restaurant_id: rid,
-      trx_code: t.id, subtotal: t.subtotal||0,
-      disc_pct: t.disc||0, disc_amt: t.discAmt||0,
+      trx_code: t.id, shift_code: t.shiftId||null,
+      subtotal: t.subtotal||0, disc_pct: t.disc||0, disc_amt: t.discAmt||0,
       tax: t.tax||0, total: t.total||0,
       pay_method: t.pay==='split'?'split':t.pay,
-      split_pay: t.splitPay||null,
-      meja: t.table||'', order_note: t.orderNote||'',
-      kasir_nama: t.kasir||'',
-      voided: t.voided||false, void_alasan: t.voidAlasan||'',
-      created_at: new Date().toISOString(),
+      split_pay: t.splitPay ? JSON.stringify(t.splitPay) : null,
+      meja: t.table||'', order_note: t.orderNote||'', kasir_nama: t.kasir||'',
+      items_json: t.items ? JSON.stringify(t.items) : '[]',
+      voided: t.voided||false, void_alasan: t.voidAlasan||''
     };
   });
   await upsert('transactions', trxs, 'Transaksi');
 
-  // 7. Expenses
+  // 7. Expenses — semua kolom sesuai schema baru
   var exps = [];
   ST.shifts.forEach(function(sh) {
-    (sh.pengeluaran||[]).forEach(function(p) {
+    (sh.pengeluaran||[]).forEach(function(peng) {
       exps.push({
-        id: seedUUID(rid+'exp'+p.id), restaurant_id: rid,
-        shift_id: seedUUID(rid+'shift'+sh.id),
-        nama: p.nama, nominal: p.nominal, kategori: p.kategori||'',
-        ket: p.ket||'', input_manual: p.inputManual||false,
-        input_by: p.inputBy||'',
+        id: seedUUID(rid+'exp'+peng.id), restaurant_id: rid,
+        shift_code: sh.id,
+        nama: peng.nama, nominal: peng.nominal||0,
+        kategori: peng.kategori||'Operasional',
+        keterangan: peng.ket||'', referensi: peng.ref||'',
+        waktu: peng.waktu||'', tanggal: sh.tanggal||'',
+        kasir_nama: sh.kasir||''
       });
     });
   });
-  await upsert('expenses', exps, 'Pengeluaran');
+  if (ST.currentShift && ST.currentShift.pengeluaran) {
+    ST.currentShift.pengeluaran.forEach(function(peng) {
+      exps.push({
+        id: seedUUID(rid+'exp'+peng.id), restaurant_id: rid,
+        shift_code: ST.currentShift.id,
+        nama: peng.nama, nominal: peng.nominal||0,
+        kategori: peng.kategori||'Operasional',
+        keterangan: peng.ket||'', referensi: peng.ref||'',
+        waktu: peng.waktu||'', tanggal: ST.currentShift.tanggal||'',
+        kasir_nama: ST.currentShift.kasir||''
+      });
+    });
+  }
+  if (exps.length) await upsert('expenses', exps, 'Pengeluaran');
 
   if (errors.length) {
     sbStatusBar('⚠️ Selesai dengan ' + errors.length + ' error: ' + errors[0], 'err');
@@ -5791,7 +5822,6 @@ async function pushAllToSupabase() {
 async function pullAllFromSupabase() {
   if (!initSupabase()) { showNotif('Konfigurasi Supabase dulu', '#E17055'); return; }
   var rid = CFG.restaurantId;
-  if (!confirm('Load data dari Supabase? Data lokal saat ini akan diganti.')) return;
   sbStatusBar('⏳ Mengambil data dari Supabase...', 'loading');
 
   try {
@@ -5844,7 +5874,7 @@ async function pullAllFromSupabase() {
     if (!e3 && trxs && trxs.length) {
       ST.transactions = trxs.map(function(t) {
         return {id: t.trx_code, time: t.created_at ? t.created_at.substr(11,5) : '',
-          date: t.created_at ? t.created_at.substr(0,10) : '',
+          date: t.created_at ? t.created_at.substr(0,10) : '', // ISO format — parseTrxDate handles both
           table: t.meja||'',
           items: (function(){ try { return t.items_json ? JSON.parse(t.items_json) : []; } catch(e){ return []; } })(), subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0, tax: t.tax||0, total: t.total||0,
@@ -5865,8 +5895,67 @@ async function pullAllFromSupabase() {
       });
     }
 
+    // Load shifts
+    var d90s = new Date(); d90s.setDate(d90s.getDate()-90);
+    var { data: shifts, error: e5 } = await _sb.from('shifts')
+      .select('*').eq('restaurant_id', rid)
+      .gte('created_at', d90s.toISOString())
+      .order('created_at', {ascending: false});
+    if (!e5 && shifts && shifts.length) {
+      var existingCodes = ST.shifts.map(function(s){return s.id;});
+      shifts.forEach(function(sh) {
+        if (!existingCodes.includes(sh.shift_code) && sh.status === 'closed') {
+          ST.shifts.push({
+            id: sh.shift_code, kasir: sh.kasir_nama||'', status: sh.status,
+            tanggal: sh.tanggal||'', modalAwal: sh.modal_awal||0,
+            totalPenjualan: sh.total_penjualan||0, totalPengeluaran: sh.total_pengeluaran||0,
+            labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
+            transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
+            kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
+            totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
+            waktuTutup: sh.waktu_tutup||'', pengeluaran: [], transaksi: []
+          });
+        }
+      });
+    }
+
+    // Load expenses
+    var { data: exps, error: e6 } = await _sb.from('expenses')
+      .select('*').eq('restaurant_id', rid)
+      .gte('created_at', d90s.toISOString())
+      .order('created_at', {ascending: false});
+    if (!e6 && exps && exps.length) {
+      ST._expensesCache = exps.map(function(e) {
+        return {
+          id: e.id, nama: e.nama, nominal: e.nominal||0,
+          kategori: e.kategori||'Operasional', ket: e.keterangan||'',
+          ref: e.referensi||'', waktu: e.waktu||'', tanggal: e.tanggal||'',
+          shiftId: e.shift_code||'', kasir: e.kasir_nama||''
+        };
+      });
+    }
+
+    // Load online orders (delivered)
+    var { data: oOrders, error: e7 } = await _sb.from('online_orders')
+      .select('order_code,total,ongkir,subtotal,pay_method,nama_pemesan,created_at')
+      .eq('restaurant_id', rid).eq('status', 'delivered')
+      .gte('created_at', d90s.toISOString())
+      .order('created_at', {ascending: false});
+    if (!e7 && oOrders) {
+      ST._onlineOrdersCache = oOrders.map(function(o) {
+        return {
+          id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
+          subtotal: o.subtotal||0, pay: o.pay_method, nama: o.nama_pemesan,
+          time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
+          created_at: o.created_at
+        };
+      });
+    }
+
+    saveShiftLocal();
     renderRiwayat();
     renderUsers();
+    renderLaporan();
     sbStatusBar('✅ Data berhasil dimuat dari Supabase!', 'ok');
     showNotif('✅ Data dari Supabase berhasil dimuat!', '#00B894');
   } catch(e) {
