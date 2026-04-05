@@ -6119,7 +6119,7 @@ async function pullAllFromSupabase() {
       ST.transactions = trxs.map(function(t) {
         return {id: t.trx_code, time: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}); })(),
           // FIX: gunakan tanggal lokal bukan UTC
-          date: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })()
+          date: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })(),
           table: t.meja||'',
           items: (function(){ try { return t.items_json ? JSON.parse(t.items_json) : []; } catch(e){ return []; } })(), subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0, tax: t.tax||0, total: t.total||0,
