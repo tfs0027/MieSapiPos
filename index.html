@@ -5800,17 +5800,23 @@ async function pushAllToSupabase() {
     if (t.orderNote) tData.order_note = t.orderNote;
     if (t.voidAlasan) tData.void_alasan = t.voidAlasan;
     try {
-      var tr = await _sb.from('transactions').upsert(tData, {onConflict:'trx_code,restaurant_id'});
+      // Coba insert dulu (paling aman, tidak butuh unique constraint)
+      var tr = await _sb.from('transactions').insert(tData);
       if (tr.error) {
-        // Fallback tanpa kolom opsional
-        var tMin = {
-          restaurant_id: rid, trx_code: t.id,
-          subtotal: t.subtotal||0, total: t.total||0,
-          pay_method: t.pay==='split'?'split':t.pay,
-          kasir_nama: t.kasir||'', voided: t.voided||false
-        };
-        var tr2 = await _sb.from('transactions').upsert(tMin, {onConflict:'trx_code,restaurant_id'});
-        if (tr2.error) { trxErrors++; } else { ok++; }
+        if (tr.error.code === '23505') {
+          // Duplicate — sudah ada, skip (bukan error)
+          ok++;
+        } else {
+          // Coba fallback kolom minimal
+          var tMin = {
+            restaurant_id: rid, trx_code: t.id,
+            subtotal: t.subtotal||0, total: t.total||0,
+            pay_method: t.pay==='split'?'split':t.pay,
+            kasir_nama: t.kasir||'', voided: t.voided||false
+          };
+          var tr2 = await _sb.from('transactions').insert(tMin);
+          if (tr2.error && tr2.error.code !== '23505') { trxErrors++; } else { ok++; }
+        }
       } else { ok++; }
     } catch(ex) { trxErrors++; }
   }
