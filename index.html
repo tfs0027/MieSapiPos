@@ -4098,28 +4098,18 @@ async function fetchLaporanFromSupabase() {
       .gte('created_at', d90.toISOString())
       .order('created_at', {ascending: false});
     if (!onlineRes.error && onlineRes.data && onlineRes.data.length) {
-      // Masukkan ke currentShift.onlineOrders agar tampil di laporan
-      if (!ST.currentShift) {
-        // Buat placeholder shift untuk menampung data online
-        if (!ST._onlineOrdersCache) ST._onlineOrdersCache = [];
-        ST._onlineOrdersCache = onlineRes.data.map(function(o) {
-          return {
-            id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
-            subtotal: o.subtotal||0, pay: o.pay_method, nama: o.nama_pemesan,
-            time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
-            created_at: o.created_at
-          };
-        });
-      } else {
-        ST.currentShift.onlineOrders = onlineRes.data.map(function(o) {
-          return {
-            id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
-            subtotal: o.subtotal||0, pay: o.pay_method, nama: o.nama_pemesan,
-            time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
-            created_at: o.created_at
-          };
-        });
-      }
+      var mapped = onlineRes.data.map(function(o) {
+        return {
+          id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
+          subtotal: o.subtotal||0, pay: o.pay_method, nama: o.nama_pemesan,
+          time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
+          created_at: o.created_at
+        };
+      });
+      // Selalu update cache (sumber utama laporan online)
+      ST._onlineOrdersCache = mapped;
+      // Juga update currentShift jika ada
+      if (ST.currentShift) ST.currentShift.onlineOrders = mapped;
     }
     // Coba ambil transaksi kasir dari tabel transactions (jika ada)
     var trxRes = await _sb.from('transactions')
@@ -4218,7 +4208,8 @@ function renderLaporan() {
       var sbData = res.data.map(function(o){
         return {id:o.order_code,total:o.total||0,ongkir:o.ongkir||0,subtotal:o.subtotal||0,pay:o.pay_method,nama:o.nama_pemesan,time:o.created_at?new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}):'-'};
       });
-      // Update ST.currentShift.onlineOrders with fresh data
+      // Update cache dan currentShift
+      ST._onlineOrdersCache = sbData;
       if (ST.currentShift) ST.currentShift.onlineOrders = sbData;
       renderLaporan();
     });
