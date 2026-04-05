@@ -5781,21 +5781,40 @@ async function pushAllToSupabase() {
     } catch(ex) { errors.push('Shift ' + sh.id + ': ' + ex.message); }
   }
 
-  // 6. Transactions — dengan items_json
-  var trxs = ST.transactions.map(function(t) {
-    return {
-      id: seedUUID(rid+'trx'+t.id), restaurant_id: rid,
-      trx_code: t.id, shift_code: t.shiftId||null,
+  // 6. Transactions — upsert per item, kolom opsional dengan fallback
+  var trxErrors = 0;
+  for (var ti = 0; ti < ST.transactions.length; ti++) {
+    var t = ST.transactions[ti];
+    var tData = {
+      restaurant_id: rid, trx_code: t.id,
       subtotal: t.subtotal||0, disc_pct: t.disc||0, disc_amt: t.discAmt||0,
       tax: t.tax||0, total: t.total||0,
       pay_method: t.pay==='split'?'split':t.pay,
-      split_pay: t.splitPay ? JSON.stringify(t.splitPay) : null,
-      meja: t.table||'', order_note: t.orderNote||'', kasir_nama: t.kasir||'',
-      items_json: t.items ? JSON.stringify(t.items) : '[]',
-      voided: t.voided||false, void_alasan: t.voidAlasan||''
+      meja: t.table||'', kasir_nama: t.kasir||'',
+      voided: t.voided||false
     };
-  });
-  await upsert('transactions', trxs, 'Transaksi');
+    // Kolom opsional
+    if (t.shiftId) tData.shift_code = t.shiftId;
+    if (t.splitPay) tData.split_pay = JSON.stringify(t.splitPay);
+    if (t.items && t.items.length) tData.items_json = JSON.stringify(t.items);
+    if (t.orderNote) tData.order_note = t.orderNote;
+    if (t.voidAlasan) tData.void_alasan = t.voidAlasan;
+    try {
+      var tr = await _sb.from('transactions').upsert(tData, {onConflict:'trx_code,restaurant_id'});
+      if (tr.error) {
+        // Fallback tanpa kolom opsional
+        var tMin = {
+          restaurant_id: rid, trx_code: t.id,
+          subtotal: t.subtotal||0, total: t.total||0,
+          pay_method: t.pay==='split'?'split':t.pay,
+          kasir_nama: t.kasir||'', voided: t.voided||false
+        };
+        var tr2 = await _sb.from('transactions').upsert(tMin, {onConflict:'trx_code,restaurant_id'});
+        if (tr2.error) { trxErrors++; } else { ok++; }
+      } else { ok++; }
+    } catch(ex) { trxErrors++; }
+  }
+  if (trxErrors > 0) errors.push('Transaksi: ' + trxErrors + ' item gagal upload');
 
   // 7. Expenses — semua kolom sesuai schema baru
   var exps = [];
@@ -5825,7 +5844,24 @@ async function pushAllToSupabase() {
       });
     });
   }
-  if (exps.length) await upsert('expenses', exps, 'Pengeluaran');
+  // Upload expenses satu per satu dengan fallback
+  var expErrors = 0;
+  for (var ei = 0; ei < exps.length; ei++) {
+    try {
+      var er = await _sb.from('expenses').upsert(exps[ei], {onConflict:'id'});
+      if (er.error) {
+        // Fallback: kolom minimal saja
+        var eMin = {
+          id: exps[ei].id, restaurant_id: rid,
+          nama: exps[ei].nama, nominal: exps[ei].nominal||0,
+          kategori: exps[ei].kategori||'Operasional'
+        };
+        var er2 = await _sb.from('expenses').upsert(eMin, {onConflict:'id'});
+        if (er2.error) expErrors++; else ok++;
+      } else { ok++; }
+    } catch(ex) { expErrors++; }
+  }
+  if (expErrors > 0) errors.push('Pengeluaran: ' + expErrors + ' item gagal');
 
   if (errors.length) {
     sbStatusBar('⚠️ Selesai dengan ' + errors.length + ' error: ' + errors[0], 'err');
