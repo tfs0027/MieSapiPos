@@ -5020,18 +5020,26 @@ function tambahPengeluaran() {
 async function sbSyncExpense(peng) {
   if (!_sb || !CFG.restaurantId) return;
   try {
-    await _sb.from('expenses').insert({
+    var data = {
       restaurant_id: CFG.restaurantId,
-      shift_code: ST.currentShift ? ST.currentShift.id : null,
       nama: peng.nama,
       nominal: peng.nominal,
-      kategori: peng.kategori||'Operasional',
+      kategori: peng.kategori||'Operasional'
+    };
+    // Kolom opsional — hanya tambah jika ada di schema
+    var extra = {
+      shift_code: ST.currentShift ? ST.currentShift.id : null,
       keterangan: peng.ket||'',
       referensi: peng.ref||'',
       waktu: peng.waktu||'',
       tanggal: ST.currentShift ? ST.currentShift.tanggal : fmtDate(new Date()),
       kasir_nama: ST.cu ? ST.cu.name : ''
-    });
+    };
+    var res = await _sb.from('expenses').insert(Object.assign({}, data, extra));
+    if (res.error) {
+      // Fallback: hanya kolom dasar
+      await _sb.from('expenses').insert(data);
+    }
   } catch(e) { console.warn('sbSyncExpense:', e.message); }
 }
 
@@ -5752,7 +5760,7 @@ async function pushAllToSupabase() {
     var sh = ST.shifts[si];
     // Data minimal yang pasti ada
     var shData = {
-      restaurant_id: rid, shift_code: sh.id,
+      restaurant_id: rid, shift_code: sh.id, // id di-generate Supabase
       modal_awal: sh.modalAwal||0, status: sh.status||'closed',
       tanggal: sh.tanggal||''
     };
@@ -5818,7 +5826,7 @@ async function pushAllToSupabase() {
           if (tr2.error && tr2.error.code !== '23505') { trxErrors++; } else { ok++; }
         }
       } else { ok++; }
-    } catch(ex) { trxErrors++; }
+    } catch(ex) { console.warn('trx upload ex:', ex.message); trxErrors++; }
   }
   if (trxErrors > 0) errors.push('Transaksi: ' + trxErrors + ' item gagal upload');
 
@@ -5850,20 +5858,26 @@ async function pushAllToSupabase() {
       });
     });
   }
-  // Upload expenses satu per satu dengan fallback
+  // Upload expenses — insert, skip duplicate
   var expErrors = 0;
   for (var ei = 0; ei < exps.length; ei++) {
     try {
-      var er = await _sb.from('expenses').upsert(exps[ei], {onConflict:'id'});
+      // Hapus id buatan lokal — biarkan Supabase generate UUID-nya sendiri
+      var eData = Object.assign({}, exps[ei]);
+      delete eData.id;
+      var er = await _sb.from('expenses').insert(eData);
       if (er.error) {
-        // Fallback: kolom minimal saja
-        var eMin = {
-          id: exps[ei].id, restaurant_id: rid,
-          nama: exps[ei].nama, nominal: exps[ei].nominal||0,
-          kategori: exps[ei].kategori||'Operasional'
-        };
-        var er2 = await _sb.from('expenses').upsert(eMin, {onConflict:'id'});
-        if (er2.error) expErrors++; else ok++;
+        if (er.error.code === '23505') { ok++; } // duplicate — skip
+        else {
+          // Fallback kolom minimal
+          var eMin = {
+            restaurant_id: rid,
+            nama: eData.nama, nominal: eData.nominal||0,
+            kategori: eData.kategori||'Operasional'
+          };
+          var er2 = await _sb.from('expenses').insert(eMin);
+          if (er2.error && er2.error.code !== '23505') expErrors++; else ok++;
+        }
       } else { ok++; }
     } catch(ex) { expErrors++; }
   }
