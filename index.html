@@ -3488,23 +3488,24 @@ function getLapFilteredTrx() {
   var now = new Date();
   var dari, sampai;
   if (ST.lapPreset === 'hari') {
-    dari = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    sampai = new Date(dari); sampai.setDate(sampai.getDate()+1);
+    dari = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   } else if (ST.lapPreset === 'minggu') {
-    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
-    dari = new Date(sampai); dari.setDate(dari.getDate()-7);
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-6); dari.setHours(0,0,0,0);
   } else if (ST.lapPreset === 'bulan') {
-    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
-    dari = new Date(sampai); dari.setDate(dari.getDate()-30);
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-29); dari.setHours(0,0,0,0);
   } else if (ST.lapPreset === 'custom') {
     var dEl = $('lap-dari'), sEl = $('lap-sampai');
-    dari = dEl && dEl.value ? new Date(dEl.value) : null;
+    dari = dEl && dEl.value ? new Date(dEl.value+'T00:00:00') : null;
     sampai = sEl && sEl.value ? new Date(sEl.value+'T23:59:59') : null;
   }
   var validTrx = ST.transactions.filter(function(t){return !t.voided;});
   if (ST.lapPreset === 'semua' || (!dari && !sampai)) return validTrx;
   return validTrx.filter(function(t) {
     var d = parseTrxDate(t.date, t.time);
+    if (isNaN(d)) return false; // skip invalid dates
     if (dari && d < dari) return false;
     if (sampai && d > sampai) return false;
     return true;
@@ -4166,7 +4167,8 @@ async function autoSyncFromSupabase() {
           return {
             id: t.trx_code||t.id,
             time: dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
-            date: t.created_at ? t.created_at.substr(0,10) : '',
+            // FIX: gunakan tanggal LOKAL bukan UTC substr (cegah shift tanggal WIB pagi hari)
+            date: dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'),
             table: t.meja||'', subtotal: t.subtotal||0,
             disc: t.disc_pct||0, discAmt: t.disc_amt||0,
             tax: t.tax||0, total: t.total||0, pay: t.pay_method,
@@ -6115,8 +6117,9 @@ async function pullAllFromSupabase() {
       .gte('created_at', d30.toISOString()).order('created_at');
     if (!e3 && trxs && trxs.length) {
       ST.transactions = trxs.map(function(t) {
-        return {id: t.trx_code, time: t.created_at ? t.created_at.substr(11,5) : '',
-          date: t.created_at ? t.created_at.substr(0,10) : '', // ISO format — parseTrxDate handles both
+        return {id: t.trx_code, time: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}); })(),
+          // FIX: gunakan tanggal lokal bukan UTC
+          date: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })()
           table: t.meja||'',
           items: (function(){ try { return t.items_json ? JSON.parse(t.items_json) : []; } catch(e){ return []; } })(), subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0, tax: t.tax||0, total: t.total||0,
