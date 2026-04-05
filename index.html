@@ -993,13 +993,32 @@ tr:hover td{background:rgba(108,92,231,.03)}
             <div>
           <div class="card" style="margin-bottom:10px">
             <div class="card-hd"><span class="card-title">🔔 Notifikasi Pesanan Online</span></div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-sound" onchange="saveNotifCfg()"> 🔊 Bunyi saat pesanan masuk</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-browser" onchange="saveNotifCfg()"> 💬 Push notifikasi browser</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="cfg-notif-repeat" onchange="toggleNotifRepeat();saveNotifCfg()"> 🔁 Bunyi berulang sampai dikonfirmasi</label>
-            <div class="frow" style="margin-top:8px">
-              <div class="form-group"><label class="form-lbl">Volume</label><input class="fi" id="cfg-notif-volume" type="range" min="0.1" max="1" step="0.1" value="0.8" oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'" style="padding:6px 0"><span style="font-size:11px;color:var(--txt2);margin-left:4px">80%</span></div>
+            <div class="form-group">
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-sound" onchange="saveNotifCfg()"> 🔊 Bunyi saat pesanan masuk</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-browser" onchange="saveNotifCfg()"> 💬 Push notifikasi browser</label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="cfg-notif-repeat" onchange="toggleNotifRepeat();saveNotifCfg()"> 🔁 Bunyi berulang sampai dikonfirmasi</label>
             </div>
-            <div id="notif-repeat-fields" style="display:none"><div class="form-group"><label class="form-lbl">Interval Pengulangan (detik)</label><input class="fi" id="cfg-notif-interval" type="number" value="30" min="10" max="300"></div></div>
+            <div class="frow" style="margin-top:4px">
+              <div class="form-group"><label class="form-lbl">Volume Bunyi</label><input class="fi" id="cfg-notif-volume" type="range" min="0.1" max="1" step="0.1" value="0.8" oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'" style="padding:6px 0"><span style="font-size:11px;color:var(--txt2);margin-left:4px">80%</span></div>
+            </div>
+            <div class="form-group" style="margin-top:4px">
+              <label class="form-lbl">🎵 Audio Kustom (MP3/WAV, maks 500KB)</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+                <label class="btn btn-sm" style="cursor:pointer">📂 Upload Audio<input type="file" accept="audio/*" style="display:none" onchange="uploadNotifAudio(this)"></label>
+                <button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusNotifAudio()">🗑️ Hapus</button>
+              </div>
+              <div id="notif-audio-name" style="font-size:11px;color:var(--txt2);margin-top:5px">Menggunakan bunyi default</div>
+            </div>
+            <div id="notif-repeat-fields" style="display:none">
+              <div class="form-group"><label class="form-lbl">Interval Pengulangan (detik)</label><input class="fi" id="cfg-notif-interval" type="number" value="30" min="10" max="300" placeholder="30"></div>
+            </div>
+            <div class="form-group" style="margin-top:4px">
+              <label class="form-lbl">Izin Push Notifikasi Browser</label>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                <button class="btn btn-sm" onclick="requestNotifPermission()">🔔 Minta Izin Notifikasi</button>
+                <span id="notif-perm-status" style="font-size:11px;color:var(--txt2)">—</span>
+              </div>
+            </div>
             <div style="display:flex;gap:8px;margin-top:6px">
               <button class="btn" style="flex:1" id="btn-test-beep" onclick="testBeepStart()">🔊 Test Bunyi</button>
               <button class="btn btn-primary" style="flex:1;display:none" id="btn-stop-beep" onclick="testBeepStop()">⏹️ Selesai</button>
@@ -7089,7 +7108,8 @@ async function kirimWAKurir(kurir, orderId, orderCode, waktu, note) {
     }
     // Remove trailing slash
     baseOrderUrl = baseOrderUrl.replace(/\?.*$/, '').replace(/\/+$/, '');
-    var magicLink = baseOrderUrl + '?konfirm=' + orderId;
+    // Sertakan restaurant_id agar halaman order tahu toko mana
+    var magicLink = baseOrderUrl + '?r=' + CFG.restaurantId + '&konfirm=' + orderId;
 
     // Build WA message
     var warungNama = CFG.nama || 'WarungKu';
