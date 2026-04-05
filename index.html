@@ -5770,6 +5770,47 @@ var _sbRealtimeSub = null;
 var _orderPollInterval = null;
 var _lastKnownOrderCount = 0;
 
+var _pendingForceLogout = false;
+var _forceLogoutReason = '';
+var _restaurantRealtimeSub = null;
+
+function showForceLogoutWarning() {
+  var existing = document.getElementById('force-logout-banner');
+  if (existing) return;
+  var banner = document.createElement('div');
+  banner.id = 'force-logout-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:8000;'
+    + 'background:linear-gradient(90deg,#7C3AED,#6D28D9);color:#fff;'
+    + 'padding:10px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.3)';
+  var closeHtml = '<span style="font-size:11px;background:rgba(255,255,255,.2);padding:3px 10px;border-radius:20px;cursor:pointer" id="fl-close-btn">✕</span>';
+  banner.innerHTML =
+    '<span style="font-size:18px">⚡</span>'
+    + '<div style="flex:1"><div style="font-size:12px;font-weight:700">Peringatan dari Admin</div>'
+    + '<div style="font-size:11px;opacity:.85">Alasan: ' + _forceLogoutReason + ' — Kasir akan otomatis logout saat shift ditutup</div></div>'
+    + closeHtml;
+  // Wire close button after insertion
+  setTimeout(function(){
+    var cb = document.getElementById('fl-close-btn');
+    if(cb) cb.onclick = function(){ banner.style.display='none'; };
+  }, 0);
+  document.body.insertBefore(banner, document.body.firstChild);
+  showNotif('⚡ Logout terjadi saat shift ditutup — ' + _forceLogoutReason, '#7C3AED');
+}
+
+async function checkForceLogout() {
+  if (!_sb || !CFG.restaurantId || _pendingForceLogout) return;
+  try {
+    var res = await _sb.from('restaurants')
+      .select('force_logout,logout_reason')
+      .eq('id', CFG.restaurantId).single();
+    if (res.data && res.data.force_logout) {
+      _pendingForceLogout = true;
+      _forceLogoutReason = res.data.logout_reason || 'Diminta oleh Admin';
+      showForceLogoutWarning();
+    }
+  } catch(e) { console.warn('checkForceLogout:', e.message); }
+}
+
 function startRealtimeOrders() {
   if (!_sb || !CFG.restaurantId) return;
   // Realtime subscription for instant notif on new order
@@ -5790,17 +5831,33 @@ function startRealtimeOrders() {
       })
       .subscribe();
   }
+  // Subscribe perubahan restaurants → deteksi force_logout
+  if (!_restaurantRealtimeSub) {
+    _restaurantRealtimeSub = _sb
+      .channel('restaurant_watch_' + CFG.restaurantId)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'restaurants',
+        filter: 'id=eq.' + CFG.restaurantId
+      }, function(payload) {
+        var r = payload.new;
+        if (r && r.force_logout) {
+          _pendingForceLogout = true;
+          _forceLogoutReason = r.logout_reason || 'Diminta oleh Admin';
+          showForceLogoutWarning();
+        }
+      })
+      .subscribe();
+  }
   // Polling backup: cek setiap 30 detik
   if (_orderPollInterval) clearInterval(_orderPollInterval);
   _orderPollInterval = setInterval(function() {
     if (!_sb || !CFG.restaurantId) return;
     if (window._currentPage === 'online-order') {
-      // Jika sedang di halaman pesanan, refresh otomatis
       loadOnlineOrders();
     } else {
-      // Background: cek jumlah pending orders untuk update badge
       updateOrderBadge();
     }
+    checkForceLogout(); // cek force_logout setiap 30 detik
   }, 30000);
 }
 
