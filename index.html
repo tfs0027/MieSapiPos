@@ -2088,7 +2088,7 @@ function doLogin(u) {
       loadSystemConfig();
       checkForceLogout();
       startRealtimeOrders();
-      fetchLaporanFromSupabase(); // ambil transaksi dari Supabase berdasarkan restaurantId
+      autoSyncFromSupabase(); // sync semua data dari Supabase saat login/refresh
       var rEl = document.getElementById('sb-sub-rid');
       if (rEl) rEl.textContent = 'ID: ' + (CFG.restaurantId||'—');
       var strip = document.getElementById('sb-sub-strip');
@@ -4114,6 +4114,185 @@ function renderLaporanPengeluaran() {
 // Fetch transaksi dari Supabase untuk laporan — tanpa confirm dialog
 var _fetchingLapTrx = false;
 var _lapOnlineFetching = false;
+var _autoSyncing = false;
+
+async function autoSyncFromSupabase() {
+  if (!_sb || !CFG.restaurantId || _autoSyncing) return;
+  _autoSyncing = true;
+  var rid = CFG.restaurantId;
+  try {
+    var d90 = new Date(); d90.setDate(d90.getDate()-90);
+    var iso90 = d90.toISOString();
+
+    // 1. Info toko (nama, logo)
+    try {
+      var rRes = await _sb.from('restaurants').select('nama,logo,cfg').eq('id', rid).single();
+      if (rRes.data) {
+        if (rRes.data.nama) { CFG.nama = rRes.data.nama; }
+        if (rRes.data.logo) { CFG.logo = rRes.data.logo; }
+        // Merge cfg jika ada
+        if (rRes.data.cfg) {
+          var cfg = rRes.data.cfg;
+          if (cfg.isOpen !== undefined) CFG.isOpen = cfg.isOpen;
+          if (cfg.banks) CFG.banks = cfg.banks;
+          if (cfg.vouchers) CFG.vouchers = cfg.vouchers;
+          if (cfg.qrisImg) CFG.qrisImg = cfg.qrisImg;
+          if (cfg.qrisNama) CFG.qrisNama = cfg.qrisNama;
+          if (cfg.qrisId) CFG.qrisId = cfg.qrisId;
+        }
+        saveCFG();
+        var sn = document.getElementById('sb-name-el');
+        if (sn) sn.textContent = CFG.nama + ' POS';
+        var si2 = document.getElementById('sb-icon');
+        if (si2) si2.textContent = CFG.logo;
+      }
+    } catch(e) { console.warn('sync restaurant:', e.message); }
+
+    // 2. Menu
+    try {
+      var mRes = await _sb.from('menus').select('*').eq('restaurant_id', rid).order('urutan');
+      if (!mRes.error && mRes.data && mRes.data.length) {
+        ST.menus = mRes.data.map(function(m, i) {
+          return {
+            id: i+1, sbId: m.id, name: m.nama, price: m.harga,
+            cat: m.kategori||'Makanan', emoji: m.emoji||'🍽️',
+            img: m.foto_url||null, status: m.status||'available',
+            sold: m.terjual||0, opts: m.opts||[], urutan: m.urutan||i+1
+          };
+        });
+        buildCatTabs(); renderMenuGrid();
+        if (window._currentPage === 'menu') renderMenuTable();
+      }
+    } catch(e) { console.warn('sync menus:', e.message); }
+
+    // 3. Members
+    try {
+      var mbRes = await _sb.from('members').select('*').eq('restaurant_id', rid);
+      if (!mbRes.error && mbRes.data) {
+        ST.members = mbRes.data.map(function(m) {
+          return {
+            id: m.id, nama: m.nama, hp: m.hp, catatan: m.catatan||'',
+            poin: m.poin||0, totalTrx: m.total_trx||0,
+            totalBelanja: m.total_belanja||0, bergabung: m.bergabung||fmtDate(new Date())
+          };
+        });
+        if (window._currentPage === 'users') renderMemberList2();
+      }
+    } catch(e) { console.warn('sync members:', e.message); }
+
+    // 4. Users
+    try {
+      var uRes = await _sb.from('users').select('*').eq('restaurant_id', rid);
+      if (!uRes.error && uRes.data && uRes.data.length) {
+        USERS.length = 0;
+        uRes.data.forEach(function(u, i) {
+          USERS.push({
+            id: i+1, name: u.nama, role: u.role, pin: u.pin_hash,
+            avatar: u.nama.split(' ').map(function(w){return w[0];}).join('').substr(0,2).toUpperCase(),
+            bg: '#A29BFE', tc: '#3C3489', perms: u.perms||{}
+          });
+        });
+        if (window._currentPage === 'users') renderUsers();
+      }
+    } catch(e) { console.warn('sync users:', e.message); }
+
+    // 5. Transaksi kasir (90 hari)
+    try {
+      var tRes = await _sb.from('transactions').select('*')
+        .eq('restaurant_id', rid).gte('created_at', iso90)
+        .order('created_at', {ascending: false});
+      if (!tRes.error && tRes.data && tRes.data.length) {
+        ST.transactions = tRes.data.map(function(t) {
+          var dt = t.created_at ? new Date(t.created_at) : new Date();
+          return {
+            id: t.trx_code||t.id,
+            time: dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
+            date: t.created_at ? t.created_at.substr(0,10) : '',
+            table: t.meja||'', subtotal: t.subtotal||0,
+            disc: t.disc_pct||0, discAmt: t.disc_amt||0,
+            tax: t.tax||0, total: t.total||0, pay: t.pay_method,
+            splitPay: t.split_pay ? (typeof t.split_pay==='string'?JSON.parse(t.split_pay):t.split_pay) : null,
+            kasir: t.kasir_nama||'Kasir', shiftId: t.shift_code||'',
+            items: (function(){ try{ return t.items_json?(typeof t.items_json==='string'?JSON.parse(t.items_json):t.items_json):[]; }catch(e){return [];} })(),
+            voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
+          };
+        });
+      }
+    } catch(e) { console.warn('sync transactions:', e.message); }
+
+    // 6. Online orders (delivered)
+    try {
+      var oRes = await _sb.from('online_orders')
+        .select('order_code,total,ongkir,subtotal,pay_method,nama_pemesan,created_at')
+        .eq('restaurant_id', rid).eq('status','delivered')
+        .gte('created_at', iso90).order('created_at', {ascending:false});
+      if (!oRes.error && oRes.data) {
+        ST._onlineOrdersCache = oRes.data.map(function(o) {
+          return {
+            id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
+            subtotal: o.subtotal||0, pay: o.pay_method, nama: o.nama_pemesan,
+            time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
+            created_at: o.created_at
+          };
+        });
+        if (ST.currentShift) ST.currentShift.onlineOrders = ST._onlineOrdersCache;
+      }
+    } catch(e) { console.warn('sync online orders:', e.message); }
+
+    // 7. Pengeluaran
+    try {
+      var eRes = await _sb.from('expenses').select('*')
+        .eq('restaurant_id', rid).gte('created_at', iso90)
+        .order('created_at', {ascending:false});
+      if (!eRes.error && eRes.data && eRes.data.length) {
+        ST._expensesCache = eRes.data.map(function(e) {
+          return {
+            id: e.id, nama: e.nama, nominal: e.nominal||0,
+            kategori: e.kategori||'Operasional', ket: e.keterangan||'',
+            ref: e.referensi||'', waktu: e.waktu||'', tanggal: e.tanggal||'',
+            shiftId: e.shift_code||'', kasir: e.kasir_nama||''
+          };
+        });
+      }
+    } catch(e) { console.warn('sync expenses:', e.message); }
+
+    // 8. Shifts
+    try {
+      var shRes = await _sb.from('shifts').select('*')
+        .eq('restaurant_id', rid).gte('created_at', iso90)
+        .order('created_at', {ascending:false});
+      if (!shRes.error && shRes.data && shRes.data.length) {
+        var existCodes = ST.shifts.map(function(s){return s.id;});
+        shRes.data.forEach(function(sh) {
+          if (!existCodes.includes(sh.shift_code) && sh.status==='closed') {
+            ST.shifts.push({
+              id: sh.shift_code, kasir: sh.kasir_nama||'', status: sh.status,
+              tanggal: sh.tanggal||'', modalAwal: sh.modal_awal||0,
+              totalPenjualan: sh.total_penjualan||0, totalPengeluaran: sh.total_pengeluaran||0,
+              labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
+              transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
+              kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
+              totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
+              waktuTutup: sh.waktu_tutup||'', pengeluaran: [], transaksi: []
+            });
+          }
+        });
+      }
+    } catch(e) { console.warn('sync shifts:', e.message); }
+
+    saveShiftLocal();
+    // Re-render halaman yang sedang aktif
+    if (window._currentPage === 'laporan') renderLaporan();
+    else if (window._currentPage === 'riwayat') renderRiwayat();
+    else if (window._currentPage === 'shift') renderShiftPage();
+    else renderLaporan(); // selalu update laporan di background
+    showNotif('✅ Data tersinkronisasi dari Supabase', '#00B894');
+  } catch(e) {
+    console.warn('autoSync error:', e.message);
+  } finally {
+    _autoSyncing = false;
+  }
+}
 async function fetchLaporanFromSupabase() {
   if (!_sb || !CFG.restaurantId || _fetchingLapTrx) return;
   _fetchingLapTrx = true;
