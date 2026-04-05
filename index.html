@@ -2090,6 +2090,7 @@ function doLogin(u) {
     loadSystemConfig(); // fetch URLs from system_config
     checkForceLogout(); // cek force_logout dari admin
     startRealtimeOrders(); // pastikan polling + realtime aktif setelah login
+    fetchLaporanFromSupabase(); // ambil data laporan dari Supabase saat login
     // Show ID toko immediately without waiting for sub
     var rEl = document.getElementById('sb-sub-rid');
     if (rEl) { rEl.textContent = 'ID: ' + (CFG.restaurantId||'—'); }
@@ -2203,10 +2204,8 @@ function nav(p) {
   if (p === 'stok') renderStok();
   if (p === 'laporan') {
     renderLaporan();
-    // Auto-refresh from Supabase if connected
-    if (_sb && CFG.restaurantId && !_lapOnlineFetching) {
-      pullAllFromSupabase().then(function(){ renderLaporan(); }).catch(function(){});
-    }
+    // Auto-fetch dari Supabase berdasarkan restaurant_id (tanpa confirm)
+    if (_sb && CFG.restaurantId) fetchLaporanFromSupabase();
   }
   if (p === 'riwayat') renderRiwayat();
   if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders();
@@ -4084,6 +4083,66 @@ function renderLaporanPengeluaran() {
   var lbl = $('peng-range-label');
   var labels = {hari:'(Hari ini)', minggu:'(7 hari terakhir)', bulan:'(30 hari terakhir)', semua:'(Semua data)'};
   if (lbl) lbl.textContent = labels[ST.pengPreset] || '';
+}
+
+// Fetch transaksi dari Supabase untuk laporan — tanpa confirm dialog
+var _fetchingLapTrx = false;
+async function fetchLaporanFromSupabase() {
+  if (!_sb || !CFG.restaurantId || _fetchingLapTrx) return;
+  _fetchingLapTrx = true;
+  var rid = CFG.restaurantId;
+  try {
+    // Ambil transaksi kasir 30 hari terakhir
+    var d30 = new Date(); d30.setDate(d30.getDate() - 30);
+    var trxRes = await _sb.from('transactions')
+      .select('*').eq('restaurant_id', rid)
+      .gte('created_at', d30.toISOString()).order('created_at');
+    if (!trxRes.error && trxRes.data && trxRes.data.length) {
+      ST.transactions = trxRes.data.map(function(t) {
+        return {
+          id: t.trx_code, time: t.created_at ? t.created_at.substr(11,5) : '',
+          date: t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '',
+          table: t.meja||'',"items": (function(){ try{ return t.items_json ? JSON.parse(t.items_json) : []; }catch(e){return [];} })(),
+          subtotal: t.subtotal||0, disc: t.disc_pct||0, discAmt: t.disc_amt||0,
+          tax: t.tax||0, total: t.total||0, pay: t.pay_method,
+          splitPay: t.split_pay, kasir: t.kasir_nama||'Kasir',
+          voided: t.voided||false, voidAlasan: t.void_alasan||'',"orderNote": t.order_note||'',"shiftId": t.shift_id||''
+        };
+      });
+      saveShiftLocal();
+    }
+    // Ambil shifts untuk rekap
+    var shiftRes = await _sb.from('shifts')
+      .select('*').eq('restaurant_id', rid)
+      .order('created_at', {ascending: false}).limit(50);
+    if (!shiftRes.error && shiftRes.data && shiftRes.data.length) {
+      // Merge dengan ST.shifts — update yang sudah ada, tambah yang baru
+      shiftRes.data.forEach(function(sh) {
+        var existing = ST.shifts.find(function(s){ return s.id === sh.shift_code; });
+        if (!existing && sh.status === 'closed') {
+          ST.shifts.push({
+            id: sh.shift_code, kasir: sh.kasir_nama||'Kasir',
+            tanggal: sh.tanggal||'', status: sh.status,
+            modalAwal: sh.modal_awal||0,
+            totalPenjualan: sh.total_penjualan||0,
+            totalPengeluaran: sh.total_pengeluaran||0,
+            labaBersih: (sh.total_penjualan||0)-(sh.total_pengeluaran||0),
+            tunai: sh.tunai||0, qris: sh.qris||0, transfer: sh.transfer||0,
+            ekspektasiKas: sh.ekspektasi_kas||0, kasFisik: sh.kas_fisik||0,
+            selisih: sh.selisih||0, waktuBuka: sh.waktu_buka||'—',
+            waktuTutup: sh.waktu_tutup||'—', pengeluaran: [], transaksi: []
+          });
+        }
+      });
+      saveShiftLocal();
+    }
+    renderLaporan();
+    renderShiftPage();
+  } catch(e) {
+    console.warn('fetchLaporanFromSupabase:', e.message);
+  } finally {
+    _fetchingLapTrx = false;
+  }
 }
 
 function renderLaporan() {
