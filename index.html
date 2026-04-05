@@ -1005,7 +1005,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <div class="form-group">
                 <label class="form-lbl">🔗 URL Halaman Order Pelanggan</label>
                 <input class="fi" id="cfg-order-page-url" placeholder="https://username.github.io/warungku-order.html" type="url">
-                <div style="font-size:10px;color:var(--txt2);margin-top:4px;line-height:1.6">Isi dengan URL lengkap file warungku-order.html di GitHub Pages. Digunakan untuk link konfirmasi kurir via WhatsApp.</div>
+                <div style="font-size:10px;color:var(--txt2);margin-top:4px;line-height:1.6">Terisi otomatis dari pengaturan Admin Panel. Bisa juga diisi manual jika perlu override.</div>
               </div>
               <button class="btn btn-primary" style="width:100%" onclick="saveCfgToko()">💾 Simpan Informasi Toko</button>
             </div>
@@ -2088,6 +2088,7 @@ function doLogin(u) {
         console.warn('Auto-pull on login failed:', e.message);
       });
       loadSubscription();
+    loadSystemConfig(); // fetch URLs from system_config
     // Show ID toko immediately without waiting for sub
     var rEl = document.getElementById('sb-sub-rid');
     if (rEl) { rEl.textContent = 'ID: ' + (CFG.restaurantId||'—'); }
@@ -7818,6 +7819,33 @@ function hapusRekLogo() {
 // ── Feature Flag System ───────────────────────────────────────────────────
 var _fitur = {}; // active features from subscription
 
+async function loadSystemConfig() {
+  // Fetch URLs & admin config from system_config table
+  if (!_sb) return;
+  try {
+    var res = await _sb.from('system_config')
+      .select('key,value')
+      .in('key', ['order_url','recruit_url','pos_base_url','admin_wa']);
+    if (res.error || !res.data) return;
+    var cfgMap = {};
+    res.data.forEach(function(row){ cfgMap[row.key] = row.value; });
+    // Update CFG from system_config
+    if (cfgMap.order_url) {
+      CFG.orderPageUrl = cfgMap.order_url;
+      saveCFG();
+    }
+    if (cfgMap.recruit_url && CFG.rekrutmen) {
+      CFG.rekrutmen.recruitUrl = cfgMap.recruit_url;
+      saveCFG();
+    }
+    // Update order link display if on online-order page
+    if (window._currentPage === 'online-order') refreshOrderLink();
+    // Update rek link
+    updateRekLink && updateRekLink();
+    console.log('✅ system_config loaded: order_url='+cfgMap.order_url);
+  } catch(e) { console.warn('loadSystemConfig:', e.message); }
+}
+
 async function loadSubscription() {
   if (!_sb || !CFG.restaurantId) return;
   try {
@@ -7938,15 +7966,12 @@ function showSubscriptionExpired(sub) {
 
 function getOrderUrl() {
   if (!CFG.restaurantId) return '';
-  // Build from orderPageUrl first
   if (CFG.orderPageUrl) {
+    // orderPageUrl is the full base URL (no filename)
     var base = CFG.orderPageUrl.replace(/[?#].*$/,'').replace(/\/+$/,'');
     return base + '?r=' + CFG.restaurantId;
   }
-  // Fallback: construct from current URL
-  var origin = window.location.origin;
-  var path = window.location.pathname.replace(/[^/]*$/, '');
-  return origin + path + 'warungku-order.html?r=' + CFG.restaurantId;
+  return '';
 }
 
 function refreshOrderLink() {
