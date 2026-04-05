@@ -1349,15 +1349,10 @@ tr:hover td{background:rgba(108,92,231,.03)}
                   <div style="font-size:10px;color:var(--txt2);margin-top:4px">Kosongkan jika tidak perlu notifikasi WA</div>
                 </div>
                 <button class="btn btn-primary" style="width:100%;margin-bottom:12px" onclick="saveRekSetting()">💾 Simpan Pengaturan</button>
-                <!-- Link formulir -->
+                <!-- Link formulir — diatur dari Admin Panel -->
                 <div style="background:var(--blue-bg,#EFF6FF);border:1.5px solid var(--blue-dk);border-radius:12px;padding:12px 14px">
-                  <div style="font-size:11px;font-weight:700;color:var(--blue-dk);margin-bottom:8px">🔗 Link Formulir Lamaran</div>
-                  <div class="form-group" style="margin-bottom:8px">
-                    <label class="form-lbl">URL File warungku-recruit.html (GitHub Pages)</label>
-                    <input class="fi" id="rek-url-cfg" placeholder="https://username.github.io/warungku-recruit.html" type="url">
-                    <div style="font-size:10px;color:var(--txt2);margin-top:4px">Isi dengan URL lengkap file di GitHub Pages, lalu simpan pengaturan.</div>
-                  </div>
-                  <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">Link yang akan dibagikan ke pelamar:</div>
+                  <div style="font-size:11px;font-weight:700;color:var(--blue-dk);margin-bottom:6px">🔗 Link Formulir Lamaran</div>
+                  <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">URL diatur oleh Admin Panel → ⚙️ Pengaturan → URL Formulir Rekrutmen.</div>
                   <div style="display:flex;gap:8px;align-items:center">
                     <input id="rek-link-setting" readonly style="flex:1;font-size:11px;padding:7px 10px;border:1px solid var(--brd);border-radius:8px;background:var(--bg);color:var(--txt);font-family:var(--font-mono)" value="">
                     <button class="btn btn-sm" onclick="copyRekLink2()">📋 Salin</button>
@@ -7869,6 +7864,7 @@ async function loadSubscription() {
     if (typeof planFitur === 'string') { try{ planFitur=JSON.parse(planFitur); }catch(e){ planFitur={}; } }
     if (typeof overrideFitur === 'string') { try{ overrideFitur=JSON.parse(overrideFitur); }catch(e){ overrideFitur={}; } }
     _fitur = Object.assign({}, planFitur, overrideFitur);
+    _activeSub = sub; // store globally for perpanjang button
     applyFeatureFlags();
     // Update sidebar strip
     updateSbSubStrip(sub, selesai, now);
@@ -7881,6 +7877,8 @@ async function loadSubscription() {
     }
   } catch(e) { console.warn('loadSubscription:', e.message); }
 }
+
+var _activeSub = null; // store subscription data globally for perpanjang
 
 function updateSbSubStrip(sub, selesai, now) {
   var strip = document.getElementById('sb-sub-strip');
@@ -7927,23 +7925,38 @@ function applyFeatureFlags() {
   });
 }
 
-function perpanjangLangganan() {
-  // Build register URL dari orderPageUrl base
-  var base = CFG.orderPageUrl || window.location.href;
-  var regUrl;
-  if (base.includes('warungku-')) {
-    regUrl = base.replace(/warungku-[^?#]+\.html/, 'warungku-register.html');
-  } else {
-    // GitHub Pages index URL
-    var origin = window.location.origin;
-    var path = window.location.pathname.replace(/[^/]*$/, '');
-    regUrl = origin + path + 'warungku-register.html';
+async function perpanjangLangganan() {
+  // Fetch admin WA from system_config
+  var adminWA = '';
+  if (_sb) {
+    try {
+      var scRes = await _sb.from('system_config').select('value').eq('key','admin_wa').single();
+      if (scRes.data) adminWA = scRes.data.value || '';
+    } catch(e) {}
   }
-  if (regUrl.includes('warungku-register.html')) {
-    window.open(regUrl, '_blank');
-  } else {
-    showNotif('Set URL halaman order di Pengaturan Toko terlebih dahulu', '#F59E0B');
+  if (!adminWA) {
+    showNotif('Nomor WA admin belum dikonfigurasi', '#F59E0B');
+    return;
   }
+  var sub = _activeSub || {};
+  var planNama = (sub.plans && sub.plans.nama) ? sub.plans.nama : '—';
+  var planHarga = (sub.plans && sub.plans.harga !== undefined)
+    ? (sub.plans.harga === 0 ? 'Gratis' : 'Rp '+sub.plans.harga.toLocaleString('id-ID')+'/'+(sub.plans.periode||'bln'))
+    : '—';
+  var selesai = sub.selesai ? new Date(sub.selesai).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}) : '—';
+  var nl = String.fromCharCode(10);
+  var msg =
+    'Halo Admin WarungKu! 👋' + nl + nl +
+    'Saya ingin memperpanjang langganan aplikasi POS:' + nl + nl +
+    '📋 *Detail Toko:*' + nl +
+    '• Nama Toko: *' + CFG.nama + '*' + nl +
+    '• ID Toko: ' + (CFG.restaurantId||'—') + nl +
+    '• Paket Saat Ini: *' + planNama + '* (' + planHarga + ')' + nl +
+    '• Aktif hingga: ' + selesai + nl + nl +
+    'Mohon info untuk perpanjangan paket. Terima kasih! 🙏';
+  var hp = adminWA.replace(/[^0-9]/g,'');
+  if (hp.startsWith('0')) hp = '62' + hp.slice(1);
+  window.open('https://wa.me/' + hp + '?text=' + encodeURIComponent(msg), '_blank');
 }
 
 function showSubscriptionExpired(sub) {
