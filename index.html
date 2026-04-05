@@ -2085,6 +2085,7 @@ function doLogin(u) {
       loadSubscription();
     loadSystemConfig(); // fetch URLs from system_config
     checkForceLogout(); // cek force_logout dari admin
+    startRealtimeOrders(); // pastikan polling + realtime aktif setelah login
     // Show ID toko immediately without waiting for sub
     var rEl = document.getElementById('sb-sub-rid');
     if (rEl) { rEl.textContent = 'ID: ' + (CFG.restaurantId||'—'); }
@@ -2094,6 +2095,12 @@ function doLogin(u) {
   }
 }
 
+var _autoLogoutTimer = null; // timer auto-logout setelah shift tutup
+
+function cancelAutoLogoutTimer() {
+  if (_autoLogoutTimer) { clearTimeout(_autoLogoutTimer); _autoLogoutTimer = null; }
+}
+
 function doLogout() {
   if (isOpen()) {
     var isOwner = !ST.currentShift.userId || ST.currentShift.userId===ST.cu.id || ST.cu.role==='admin';
@@ -2101,6 +2108,13 @@ function doLogout() {
       if (!confirm('⚠️ Kasir ' + ST.currentShift.id + ' masih buka!\n\nTutup kasir dahulu sebelum keluar, atau pilih OK untuk tetap keluar tanpa menutup shift.')) return;
     }
   }
+  // Bersihkan force logout state
+  _pendingForceLogout = false;
+  _forceLogoutReason = '';
+  var flBanner = document.getElementById('force-logout-banner');
+  if (flBanner) flBanner.remove();
+  // Cancel auto-logout timer jika ada
+  cancelAutoLogoutTimer();
   ST.cu = null; ST.selId = null; ST.pin = ''; ST.cart = [];
   try { localStorage.removeItem(SESSION_KEY); } catch(e){}
   $('app').style.display = 'none';
@@ -4532,6 +4546,7 @@ function prosesBukaKasir() {
   };
   closeModal('buka-modal'); updateShiftTopbar(); renderShiftPage();
   showNotif('✅ Kasir dibuka — ' + shiftId, '#00B894');
+  cancelAutoLogoutTimer(); // kasir dibuka — batalkan timer auto-logout
   saveShiftLocal();
   // Warung online otomatis BUKA saat kasir dibuka
   CFG.isOpen = true;
@@ -4681,6 +4696,15 @@ function prosesTutupKasir() {
   syncRestoStatusToSupabase();
   renderRestoStatusUI();
   sbSyncShift(closed);
+  // Auto-logout timer: jika tidak ada shift baru dibuka dalam 30 menit
+  cancelAutoLogoutTimer();
+  _autoLogoutTimer = setTimeout(function() {
+    // Cek lagi — jika kasir sudah buka shift baru, batalkan
+    if (isOpen()) return;
+    // Tampilkan notifikasi dulu
+    showNotif('🔒 Sesi berakhir — tidak ada shift aktif', '#6C5CE7');
+    setTimeout(function() { doLogout(); }, 1500);
+  }, 30 * 60 * 1000); // 30 menit
   // Cek force_logout dari admin
   if (_pendingForceLogout) {
     // Clear flag di Supabase
@@ -5860,7 +5884,7 @@ function startRealtimeOrders() {
       updateOrderBadge();
     }
     checkForceLogout(); // cek force_logout setiap 30 detik
-  }, 30000);
+  }, 15000); // 15 detik — lebih responsif untuk force_logout
 }
 
 async function updateOrderBadge() {
@@ -8606,6 +8630,14 @@ const doprint = () => {
 // INIT
 // ═══════════════════════════════
 if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
+
+// Cek force_logout saat tab/jendela aktif kembali (tanpa harus refresh)
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && ST.cu && _sb) {
+    checkForceLogout();
+  }
+});
+
 // ── Restore session on page load ──────────────────────────────────────────
 (function restoreSession() {
   try {
