@@ -4160,8 +4160,8 @@ async function autoSyncFromSupabase() {
       var tRes = await _sb.from('transactions').select('*')
         .eq('restaurant_id', rid).gte('created_at', iso90)
         .order('created_at', {ascending: false});
-      if (!tRes.error && tRes.data && tRes.data.length) {
-        ST.transactions = tRes.data.map(function(t) {
+      if (!tRes.error && tRes.data) {
+        var sbMapped = tRes.data.map(function(t) {
           var dt = t.created_at ? new Date(t.created_at) : new Date();
           return {
             id: t.trx_code||t.id,
@@ -4176,6 +4176,25 @@ async function autoSyncFromSupabase() {
             voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
           };
         });
+        // FIX: Jangan replace penuh — merge data lokal yang belum tersync ke Supabase
+        var sbCodes = sbMapped.map(function(t){ return t.id; });
+        var localUnsync = ST.transactions.filter(function(t){ return !sbCodes.includes(t.id); });
+        // Gabungkan: Supabase (terpercaya) + lokal yang belum ada di Supabase
+        ST.transactions = sbMapped;
+        if (localUnsync.length) {
+          localUnsync.forEach(function(trx) {
+            ST.transactions.unshift(trx); // tambahkan ke depan
+            // Retry sync ke Supabase untuk transaksi yang belum masuk
+            setTimeout(function(){ sbSyncTransaction(trx); }, 500);
+          });
+          console.log('[WarungKu] Ditemukan ' + localUnsync.length + ' transaksi lokal yg belum tersync, mencoba ulang sync...');
+        }
+        // FIX: Update trxCounter agar tidak bentrok dengan data yang sudah ada
+        var maxNum = ST.transactions.reduce(function(mx, t) {
+          var n = parseInt((t.id||'').replace('TRX-','')) || 0;
+          return Math.max(mx, n);
+        }, 0);
+        if (maxNum >= ST.trxCounter) { ST.trxCounter = maxNum + 1; }
       }
     } catch(e) { console.warn('sync transactions:', e.message); }
 
@@ -4240,6 +4259,8 @@ async function autoSyncFromSupabase() {
     } catch(e) { console.warn('sync shifts:', e.message); }
 
     saveShiftLocal();
+    // Flush pending sync queue — retry transaksi yang sebelumnya gagal tersync
+    await flushPendingQueue();
     // Re-render halaman yang sedang aktif
     if (window._currentPage === 'laporan') renderLaporan();
     else if (window._currentPage === 'riwayat') renderRiwayat();
@@ -6186,14 +6207,40 @@ async function pullAllFromSupabase() {
 }
 
 // ── AUTO-SYNC after key operations ───────────────────────────────────────────
-async function sbSyncTransaction(trx) {
+// ── Pending sync queue (transaksi yang gagal sync ke Supabase) ──────────────
+var PENDING_SYNC_KEY = 'wkpos_pending_sync_';
+function getPendingKey() { return PENDING_SYNC_KEY + (CFG.restaurantId||'default'); }
+function loadPendingQueue() {
+  try { return JSON.parse(localStorage.getItem(getPendingKey())||'[]'); } catch(e){ return []; }
+}
+function savePendingQueue(q) {
+  try { localStorage.setItem(getPendingKey(), JSON.stringify(q)); } catch(e){}
+}
+function addToPendingQueue(trx) {
+  var q = loadPendingQueue();
+  if (!q.find(function(x){ return x.id===trx.id; })) { q.push(trx); savePendingQueue(q); }
+}
+function removeFromPendingQueue(trxId) {
+  var q = loadPendingQueue().filter(function(x){ return x.id!==trxId; });
+  savePendingQueue(q);
+}
+async function flushPendingQueue() {
   if (!_sb || !CFG.restaurantId) return;
+  var q = loadPendingQueue();
+  if (!q.length) return;
+  console.log('[WarungKu] Memproses ' + q.length + ' transaksi dari pending queue...');
+  for (var i = 0; i < q.length; i++) {
+    var ok = await _doSyncTrxToSupabase(q[i]);
+    if (ok) removeFromPendingQueue(q[i].id);
+  }
+}
+async function _doSyncTrxToSupabase(trx) {
   var rid = CFG.restaurantId;
   try {
     var data = {
       restaurant_id: rid,
       trx_code: trx.id,
-      shift_code: ST.currentShift ? ST.currentShift.id : null,
+      shift_code: trx.shiftId || (ST.currentShift ? ST.currentShift.id : null),
       meja: trx.table||'',
       subtotal: trx.subtotal||0,
       disc_pct: trx.disc||0,
@@ -6208,12 +6255,27 @@ async function sbSyncTransaction(trx) {
       voided: trx.voided||false,
       void_alasan: trx.voidAlasan||''
     };
+    // Coba upsert dulu (update jika sudah ada, insert jika belum)
     var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code,restaurant_id'});
-    if (res.error) {
-      // Fallback: insert baru jika upsert gagal
-      await _sb.from('transactions').insert(data);
-    }
-  } catch(e) { console.warn('sbSyncTransaction:', e.message); }
+    if (!res.error) return true;
+    // Jika upsert gagal karena constraint belum ada, coba insert biasa
+    var res2 = await _sb.from('transactions').insert(data);
+    if (!res2.error) return true;
+    console.warn('sbSync gagal (' + trx.id + '):', res2.error.message);
+    return false;
+  } catch(e) {
+    console.warn('sbSyncTransaction error (' + trx.id + '):', e.message);
+    return false;
+  }
+}
+async function sbSyncTransaction(trx) {
+  if (!_sb || !CFG.restaurantId) { addToPendingQueue(trx); return; }
+  var ok = await _doSyncTrxToSupabase(trx);
+  if (ok) {
+    removeFromPendingQueue(trx.id); // hapus dari pending jika sebelumnya gagal
+  } else {
+    addToPendingQueue(trx); // simpan ke queue untuk retry nanti
+  }
 }
 
 async function sbSyncShift(sh) {
