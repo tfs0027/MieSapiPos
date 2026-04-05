@@ -869,6 +869,13 @@ tr:hover td{background:rgba(108,92,231,.03)}
       </div>
 
       <div class="page" id="page-online-order">
+        <!-- Tab bar -->
+        <div style="display:flex;gap:4px;margin-bottom:12px">
+          <button class="shift-tab active" id="otmain-tab-order" onclick="switchOnlineTab('order',this)">📋 Pesanan</button>
+          <button class="shift-tab" id="otmain-tab-setting" onclick="switchOnlineTab('setting',this)">⚙️ Pengaturan Pesanan Online</button>
+        </div>
+        <!-- TAB: Pesanan -->
+        <div id="online-main-order">
         <!-- Open/Close toggle card -->
         <div class="card" style="margin-bottom:12px">
           <div class="card-hd"><span class="card-title">🛵 Status Warung Online</span></div>
@@ -938,6 +945,76 @@ tr:hover td{background:rgba(108,92,231,.03)}
           </div>
           <div id="online-orders-list"><div style="text-align:center;color:var(--txt3);font-size:12px;padding:24px">Klik Refresh untuk memuat pesanan</div></div>
         </div>
+
+        </div><!-- end online-main-order -->
+
+        <!-- TAB: Pengaturan Pesanan Online -->
+        <div id="online-main-setting" style="display:none">
+          <div class="g2">
+            <div>
+          <div class="card" style="margin-bottom:10px">
+            <div class="card-hd"><span class="card-title">🏍️ Ongkos Kirim</span></div>
+            <div style="font-size:11px;color:var(--txt2);margin-bottom:12px;line-height:1.7">Dihitung otomatis dari jarak GPS pelanggan ke koordinat toko. <b>Pastikan koordinat toko sudah diset di Pengaturan Toko → Koordinat Toko.</b></div>
+            <div class="frow">
+              <div class="form-group"><label class="form-lbl">Tarif per km (Rp)</label><input class="fi" id="cfg-ongkir-per-km" type="number" min="0" step="500" placeholder="3000" oninput="updateOngkirPreview()"></div>
+              <div class="form-group"><label class="form-lbl">Jarak minimum ditagih (km)</label><input class="fi" id="cfg-ongkir-min-km" type="number" min="0" step="0.5" placeholder="2" oninput="updateOngkirPreview()"></div>
+            </div>
+            <div class="form-group"><label class="form-lbl">Gratis ongkir jika subtotal ≥ (Rp, 0 = tidak ada)</label>
+              <input class="fi" id="cfg-ongkir-free" type="number" min="0" step="1000" placeholder="0" oninput="updateOngkirPreview()">
+            </div>
+            <div id="ongkir-preview-txt" style="font-size:11px;color:var(--txt2);background:var(--bg2);border-radius:8px;padding:8px 12px;margin-bottom:12px;line-height:1.7"></div>
+            <button class="btn btn-primary" style="width:100%" onclick="saveOngkirCfg()">💾 Simpan & Sync ke Supabase</button>
+          </div>
+          <div class="card" style="margin-bottom:10px">
+            <div class="card-hd"><span class="card-title">🛵 Biaya Layanan</span></div>
+            <div class="form-group"><div style="display:flex;gap:12px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-svc-yes"><input type="radio" name="enableService" id="cfg-enable-service-1" value="1" onchange="toggleServiceFields()"> ✅ Aktif</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-svc-no"><input type="radio" name="enableService" id="cfg-enable-service-0" value="0" onchange="toggleServiceFields()" checked> ❌ Tidak Aktif</label>
+            </div></div>
+            <div id="service-fields" style="display:none">
+              <div class="frow">
+                <div class="form-group"><label class="form-lbl">Nama Biaya</label><input class="fi" id="cfg-service-nm" value="Biaya Layanan"></div>
+                <div class="form-group"><label class="form-lbl">Tipe</label><select class="fi" id="cfg-service-tipe" onchange="toggleServiceTipe()"><option value="pct">Persentase (%)</option><option value="flat">Nominal Tetap (Rp)</option></select></div>
+              </div>
+              <div class="frow">
+                <div class="form-group" id="service-pct-group"><label class="form-lbl">Persentase (%)</label><input class="fi" id="cfg-service-pct" type="number" value="5" min="0" max="100"></div>
+                <div class="form-group" id="service-flat-group" style="display:none"><label class="form-lbl">Nominal Tetap (Rp)</label><input class="fi" id="cfg-service-flat" type="number" value="0" min="0"></div>
+              </div>
+            </div>
+            <button class="btn btn-primary" style="width:100%" onclick="saveServiceCfg()">💾 Simpan Biaya Layanan</button>
+          </div>
+          <div class="card">
+            <div class="card-hd"><span class="card-title">🎟️ Voucher & Kode Diskon</span></div>
+            <div id="voucher-list-cfg" style="margin-bottom:10px"></div>
+            <button class="btn" style="width:100%;margin-bottom:8px" onclick="tambahVoucher()">➕ Tambah Voucher</button>
+            <button class="btn btn-primary" style="width:100%" onclick="saveVoucherCfg()">💾 Simpan Voucher</button>
+          </div>
+            </div>
+            <div>
+          <div class="card" style="margin-bottom:10px">
+            <div class="card-hd"><span class="card-title">🔔 Notifikasi Pesanan Online</span></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-sound" onchange="saveNotifCfg()"> 🔊 Bunyi saat pesanan masuk</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-browser" onchange="saveNotifCfg()"> 💬 Push notifikasi browser</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="cfg-notif-repeat" onchange="toggleNotifRepeat();saveNotifCfg()"> 🔁 Bunyi berulang sampai dikonfirmasi</label>
+            <div class="frow" style="margin-top:8px">
+              <div class="form-group"><label class="form-lbl">Volume</label><input class="fi" id="cfg-notif-volume" type="range" min="0.1" max="1" step="0.1" value="0.8" oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'" style="padding:6px 0"><span style="font-size:11px;color:var(--txt2);margin-left:4px">80%</span></div>
+            </div>
+            <div id="notif-repeat-fields" style="display:none"><div class="form-group"><label class="form-lbl">Interval Pengulangan (detik)</label><input class="fi" id="cfg-notif-interval" type="number" value="30" min="10" max="300"></div></div>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <button class="btn" style="flex:1" id="btn-test-beep" onclick="testBeepStart()">🔊 Test Bunyi</button>
+              <button class="btn btn-primary" style="flex:1;display:none" id="btn-stop-beep" onclick="testBeepStop()">⏹️ Selesai</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-hd"><span class="card-title">🛵 Manajemen Kurir</span></div>
+            <div style="font-size:11px;color:var(--txt2);margin-bottom:10px">Daftar kurir untuk pengiriman pesanan online.</div>
+            <div id="kurir-list-cfg" style="margin-bottom:10px"></div>
+            <button class="btn" style="width:100%;margin-bottom:6px" onclick="tambahKurir()">➕ Tambah Kurir</button>
+            <button class="btn btn-primary" style="width:100%" onclick="saveKurirCfg()">💾 Simpan Daftar Kurir</button>
+          </div>
+            </div>
+          </div>
+        </div><!-- end online-main-setting -->
       </div>
 
       <div class="page" id="page-settings">
@@ -1071,107 +1148,8 @@ tr:hover td{background:rgba(108,92,231,.03)}
               <button class="btn btn-primary" style="width:100%" onclick="saveCfgPajak()">💾 Simpan Pengaturan Pajak</button>
             </div>
 
-            <!-- ═══ PENGATURAN PESANAN ONLINE ═══ -->
-            <div style="margin:12px 0 6px;padding:6px 12px;background:linear-gradient(90deg,var(--blue-bg),transparent);border-left:3px solid var(--blue-dk);border-radius:0 var(--radius) var(--radius) 0"><span style="font-size:11px;font-weight:700;color:var(--blue-dk)">🛵 Pengaturan Khusus Pesanan Online</span></div>
-            <div class="card">
-              <div class="card-hd"><span class="card-title">🛵 Biaya Layanan <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
-              <div class="form-group">
-                <label class="form-lbl">Status Biaya Layanan</label>
-                <div style="display:flex;gap:12px">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-svc-yes">
-                    <input type="radio" name="enableService" id="cfg-enable-service-1" value="1" onchange="toggleServiceFields()"> ✅ Aktif
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 12px;border:1.5px solid var(--brd);border-radius:var(--radius)" id="lbl-svc-no">
-                    <input type="radio" name="enableService" id="cfg-enable-service-0" value="0" onchange="toggleServiceFields()" checked> ❌ Tidak Aktif
-                  </label>
-                </div>
-              </div>
-              <div id="service-fields" style="display:none">
-                <div class="frow">
-                  <div class="form-group">
-                    <label class="form-lbl">Nama Biaya</label>
-                    <input class="fi" id="cfg-service-nm" value="Biaya Layanan" placeholder="Biaya Layanan">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-lbl">Tipe Perhitungan</label>
-                    <select class="fi" id="cfg-service-tipe" onchange="toggleServiceTipe()">
-                      <option value="pct">Persentase (%)</option>
-                      <option value="flat">Nominal Tetap (Rp)</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="frow">
-                  <div class="form-group" id="service-pct-group">
-                    <label class="form-lbl">Persentase (%)</label>
-                    <input class="fi" id="cfg-service-pct" type="number" value="5" min="0" max="100" placeholder="mis: 5">
-                  </div>
-                  <div class="form-group" id="service-flat-group" style="display:none">
-                    <label class="form-lbl">Nominal Tetap (Rp)</label>
-                    <input class="fi" id="cfg-service-flat" type="number" value="0" min="0" placeholder="mis: 5000">
-                  </div>
-                </div>
-                <div style="font-size:10px;color:var(--txt2);margin-bottom:10px">Dihitung dari subtotal pesanan, tampil di ringkasan order pelanggan.</div>
-              </div>
-              <button class="btn btn-primary" style="width:100%" onclick="saveServiceCfg()">💾 Simpan Biaya Layanan</button>
-            </div>
+            <!-- online settings moved to Pesanan Online tab -->
 
-            <div class="card" style="margin-top:10px">
-              <div class="card-hd"><span class="card-title">🎟️ Voucher & Kode Diskon <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
-              <div style="font-size:11px;color:var(--txt2);margin-bottom:10px;line-height:1.6">
-                Buat kode voucher yang bisa digunakan pelanggan saat checkout di halaman order online.
-              </div>
-
-              <!-- Voucher list -->
-              <div id="voucher-list-cfg" style="margin-bottom:10px"></div>
-
-              <button class="btn" style="width:100%;margin-bottom:8px" onclick="tambahVoucher()">➕ Tambah Voucher / Kode Diskon</button>
-              <button class="btn btn-primary" style="width:100%" onclick="saveVoucherCfg()">💾 Simpan Voucher</button>
-            </div>
-          </div>
-
-          <div>
-            <div class="card">
-              <div class="card-hd"><span class="card-title">🔔 Notifikasi Pesanan Online <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
-              <div class="form-group">
-                <label class="form-lbl" style="margin-bottom:8px">Jenis Notifikasi</label>
-                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-sound" onchange="saveNotifCfg()"> 🔊 Bunyi saat pesanan masuk</label>
-                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="cfg-notif-browser" onchange="saveNotifCfg()"> 💬 Push notifikasi browser</label>
-                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="cfg-notif-repeat" onchange="toggleNotifRepeat();saveNotifCfg()"> 🔁 Bunyi berulang sampai dikonfirmasi</label>
-              </div>
-              <div class="frow" style="margin-top:4px">
-                <div class="form-group"><label class="form-lbl">Volume Bunyi</label><input class="fi" id="cfg-notif-volume" type="range" min="0.1" max="1" step="0.1" value="0.8" oninput="this.nextElementSibling.textContent=Math.round(this.value*100)+'%'" style="padding:6px 0"><span style="font-size:11px;color:var(--txt2);margin-left:4px">80%</span></div>
-              </div>
-              <div class="form-group" style="margin-top:4px">
-                <label class="form-lbl">🎵 Audio Kustom (MP3/WAV, maks 500KB)</label>
-                <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
-                  <label class="btn btn-sm" style="cursor:pointer">📂 Upload Audio<input type="file" accept="audio/*" style="display:none" onchange="uploadNotifAudio(this)"></label>
-                  <button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusNotifAudio()">🗑️</button>
-                </div>
-                <div id="notif-audio-name" style="font-size:11px;color:var(--txt2);margin-top:5px">Menggunakan bunyi default</div>
-              </div>
-              <div id="notif-repeat-fields" style="display:none">
-                <div class="form-group"><label class="form-lbl">Interval Pengulangan (detik)</label><input class="fi" id="cfg-notif-interval" type="number" value="30" min="10" max="300" placeholder="30"></div>
-              </div>
-              <div class="form-group" style="margin-top:4px">
-                <label class="form-lbl">Izin Push Notifikasi Browser</label>
-                <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-                  <button class="btn btn-sm" onclick="requestNotifPermission()">🔔 Minta Izin Notifikasi</button>
-                  <span id="notif-perm-status" style="font-size:11px;color:var(--txt2)">—</span>
-                </div>
-              </div>
-              <div style="display:flex;gap:8px;margin-top:6px">
-                <button class="btn" style="flex:1" id="btn-test-beep" onclick="testBeepStart()">🔊 Test Bunyi</button>
-                <button class="btn btn-primary" style="flex:1;display:none" id="btn-stop-beep" onclick="testBeepStop()">⏹️ Selesai</button>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-hd"><span class="card-title">🛵 Manajemen Kurir <span style="font-size:9px;background:var(--blue-dk);color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;vertical-align:middle">Online</span></span></div>
-              <div style="font-size:11px;color:var(--txt2);margin-bottom:10px">Daftar kurir yang bisa di-assign untuk pengiriman pesanan online.</div>
-              <div id="kurir-list-cfg" style="margin-bottom:10px"></div>
-              <button class="btn" style="width:100%;margin-bottom:6px" onclick="tambahKurir()">➕ Tambah Kurir</button>
-              <button class="btn btn-primary" style="width:100%" onclick="saveKurirCfg()">💾 Simpan Daftar Kurir</button>
-            </div>
 
             <div class="card">
               <div class="card-hd"><span class="card-title">🧾 Tampilan Struk</span></div>
@@ -1927,6 +1905,9 @@ let CFG = {
   alamatOnline:'', // alamat khusus untuk pesanan online (kosong = pakai alamat utama)
   lat: null,  // koordinat toko (digunakan untuk hitung jarak ongkir)
   lng: null,
+  ongkirPerKm: 3000,    // ongkos kirim per km
+  ongkirMinKm: 2,       // jarak minimum yang ditagih (km)
+  ongkirBebasAbove: 0,  // gratis ongkir jika subtotal >= nilai ini (0 = tidak ada)
   telp:'0851-xxxx-xxxx', wa:'6285xxxxxxxx', sosmed:'@warungku',
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
@@ -2126,9 +2107,11 @@ const NAV_ITEMS = [
   {id:'settings',label:'Pengaturan Toko',icon:'⚙️',perm:'settings',sec:null},
 ];
 const PAGE_TITLES = {
-  order:'Kasir & Order',meja:'Manajemen Meja',shift:'Buka / Tutup Kasir',
-  menu:'Menu & Harga',stok:'Stok Bahan Baku',laporan:'Laporan Penjualan',
-  riwayat:'Riwayat Transaksi','online-order':'Pesanan Online',rekrutmen:'Rekrutmen & Pelamar',users:'Manajemen User',settings:'Pengaturan Toko',locked:'Akses Ditolak'
+  order:'🛒 Kasir & Order', meja:'🪑 Manajemen Meja', shift:'🔓 Buka / Tutup Kasir',
+  menu:'🍽️ Menu & Harga', stok:'📦 Stok Bahan Baku', laporan:'📊 Laporan Penjualan',
+  riwayat:'📋 Riwayat Transaksi', 'online-order':'🛵 Pesanan Online',
+  rekrutmen:'📝 Rekrutmen & Pelamar', users:'👥 Manajemen User',
+  settings:'⚙️ Pengaturan Toko', locked:'🔒 Akses Ditolak'
 };
 
 
@@ -8050,6 +8033,81 @@ function showSubscriptionExpired(sub) {
   }
 }
 
+function switchOnlineTab(tab, btn) {
+  document.querySelectorAll('[id^="otmain-tab-"]').forEach(function(b){b.classList.remove('active');});
+  if(btn) btn.classList.add('active');
+  var order = document.getElementById('online-main-order');
+  var setting = document.getElementById('online-main-setting');
+  if(order) order.style.display = tab==='order' ? '' : 'none';
+  if(setting) setting.style.display = tab==='setting' ? '' : 'none';
+  if(tab==='setting') renderOnlineSettings();
+}
+
+function renderOnlineSettings() {
+  var okm = document.getElementById('cfg-ongkir-per-km');
+  var omk = document.getElementById('cfg-ongkir-min-km');
+  var ofe = document.getElementById('cfg-ongkir-free');
+  if(okm) okm.value = CFG.ongkirPerKm||3000;
+  if(omk) omk.value = CFG.ongkirMinKm||2;
+  if(ofe) ofe.value = CFG.ongkirBebasAbove||0;
+  updateOngkirPreview();
+  // Load existing online settings
+  renderVoucherList();
+  renderKurirList();
+  var ns = document.getElementById('cfg-notif-sound'); if(ns) ns.checked = CFG.notifSound !== false;
+  var nb = document.getElementById('cfg-notif-browser'); if(nb) nb.checked = CFG.notifBrowser !== false;
+  var nr = document.getElementById('cfg-notif-repeat'); if(nr) nr.checked = !!CFG.notifRepeat;
+  var se1 = document.getElementById('cfg-enable-service-1'); if(se1) se1.checked = !!CFG.enableService;
+  var se0 = document.getElementById('cfg-enable-service-0'); if(se0) se0.checked = !CFG.enableService;
+  var sf = document.getElementById('service-fields'); if(sf) sf.style.display=CFG.enableService?'block':'none';
+  var snm = document.getElementById('cfg-service-nm'); if(snm) snm.value=CFG.serviceNama||'Biaya Layanan';
+  var spct = document.getElementById('cfg-service-pct'); if(spct) spct.value=CFG.service||5;
+  var sflat = document.getElementById('cfg-service-flat'); if(sflat) sflat.value=CFG.serviceFlat||0;
+  var stipe = document.getElementById('cfg-service-tipe'); if(stipe){ stipe.value=CFG.serviceTipe||'pct'; toggleServiceTipe(); }
+  var nv = document.getElementById('cfg-notif-volume'); if(nv){ nv.value=CFG.notifVolume||0.8; var sp=nv.nextElementSibling; if(sp) sp.textContent=Math.round((CFG.notifVolume||0.8)*100)+'%'; }
+  var rf = document.getElementById('notif-repeat-fields'); if(rf) rf.style.display=CFG.notifRepeat?'block':'none';
+  var an = document.getElementById('notif-audio-name'); if(an) an.textContent=CFG.notifAudioData?'✅ Audio kustom terpasang':'Menggunakan bunyi default';
+}
+
+function updateOngkirPreview() {
+  var perKm = parseFloat((document.getElementById('cfg-ongkir-per-km')||{value:3000}).value)||3000;
+  var minKm = parseFloat((document.getElementById('cfg-ongkir-min-km')||{value:2}).value)||2;
+  var free  = parseFloat((document.getElementById('cfg-ongkir-free')||{value:0}).value)||0;
+  var el = document.getElementById('ongkir-preview-txt'); if(!el) return;
+  var lines = [
+    '📍 Tarif: Rp '+perKm.toLocaleString('id-ID')+'/km',
+    '📏 Minimum ditagih: '+minKm+' km (jarak < '+minKm+' km tetap ditagih '+minKm+' km)',
+    'Contoh 3 km → Rp '+(perKm*3).toLocaleString('id-ID')+' · 5 km → Rp '+(perKm*5).toLocaleString('id-ID'),
+    free>0 ? '🎁 Gratis ongkir jika belanja ≥ Rp '+free.toLocaleString('id-ID') : '🎁 Tidak ada gratis ongkir'
+  ];
+  el.textContent = lines.join(' · ');
+}
+
+async function saveOngkirCfg() {
+  CFG.ongkirPerKm = parseFloat((document.getElementById('cfg-ongkir-per-km')||{value:3000}).value)||3000;
+  CFG.ongkirMinKm = parseFloat((document.getElementById('cfg-ongkir-min-km')||{value:2}).value)||2;
+  CFG.ongkirBebasAbove = parseFloat((document.getElementById('cfg-ongkir-free')||{value:0}).value)||0;
+  saveCFG();
+  updateOngkirPreview();
+  // Sync ke Supabase restaurants table (halaman order membaca dari sini)
+  if (_sb && CFG.restaurantId) {
+    try {
+      await _sb.from('restaurants').update({
+        ongkir_per_km: CFG.ongkirPerKm,
+        ongkir_min_km: CFG.ongkirMinKm,
+        ongkir_free_above: CFG.ongkirBebasAbove,
+        lat: CFG.lat || null,
+        lng: CFG.lng || null
+      }).eq('id', CFG.restaurantId);
+      showNotif('✅ Ongkir tersimpan & tersync ke Supabase', '#00B894');
+    } catch(e) {
+      showNotif('Tersimpan lokal · Sync gagal: '+e.message, '#F59E0B');
+    }
+  } else {
+    showNotif('✅ Ongkir disimpan', '#00B894');
+  }
+}
+
 function getOrderUrl() {
   if (!CFG.restaurantId) return '';
   if (CFG.orderPageUrl) {
@@ -8543,7 +8601,13 @@ if (CFG.sbUrl && CFG.sbKey) { initSupabase(); startRealtimeOrders(); }
     if (!u) return;
     // Restore shift data
     loadShiftLocal();
-    // Auto login
+    // Jika tidak ada shift aktif, jangan auto-login — require fresh login
+    if (!ST.currentShift || ST.currentShift.status !== 'open') {
+      localStorage.removeItem(SESSION_KEY);
+      console.log('Session cleared: no active shift');
+      return;
+    }
+    // Auto login hanya jika ada shift aktif
     doLogin(u);
   } catch(e) { console.warn('restoreSession:', e); }
 })();
