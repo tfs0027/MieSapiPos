@@ -2006,7 +2006,11 @@ function saveShiftLocal() {
 function loadShiftLocal() {
   try {
     var s = localStorage.getItem(getShiftKey());
+    // Migrasi: jika key baru kosong, coba baca key lama
+    if (!s) s = localStorage.getItem('wkpos_shift');
     if (!s) return;
+    // Simpan ke key baru agar migrasi permanen
+    try { localStorage.setItem(getShiftKey(), s); } catch(e){}
     var d = JSON.parse(s);
     if (d.currentShift) ST.currentShift = d.currentShift;
     if (d.shifts) ST.shifts = d.shifts;
@@ -2080,22 +2084,15 @@ function doLogin(u) {
   // Auto-pull dari Supabase jika terkonfigurasi
   if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) {
     setTimeout(function() {
-      pullAllFromSupabase().then(function() {
-        showNotif('✅ Data tersinkronisasi dari Supabase', '#00B894');
-        renderLaporan && nav && window._currentPage==='laporan' && renderLaporan();
-      }).catch(function(e) {
-        console.warn('Auto-pull on login failed:', e.message);
-      });
       loadSubscription();
-    loadSystemConfig(); // fetch URLs from system_config
-    checkForceLogout(); // cek force_logout dari admin
-    startRealtimeOrders(); // pastikan polling + realtime aktif setelah login
-    fetchLaporanFromSupabase(); // ambil data laporan dari Supabase saat login
-    // Show ID toko immediately without waiting for sub
-    var rEl = document.getElementById('sb-sub-rid');
-    if (rEl) { rEl.textContent = 'ID: ' + (CFG.restaurantId||'—'); }
-    var strip = document.getElementById('sb-sub-strip');
-    if (strip && CFG.restaurantId) strip.style.display = 'block';
+      loadSystemConfig();
+      checkForceLogout();
+      startRealtimeOrders();
+      fetchLaporanFromSupabase(); // ambil transaksi dari Supabase berdasarkan restaurantId
+      var rEl = document.getElementById('sb-sub-rid');
+      if (rEl) rEl.textContent = 'ID: ' + (CFG.restaurantId||'—');
+      var strip = document.getElementById('sb-sub-strip');
+      if (strip && CFG.restaurantId) strip.style.display = 'block';
     }, 800);
   }
 }
@@ -4092,54 +4089,67 @@ async function fetchLaporanFromSupabase() {
   _fetchingLapTrx = true;
   var rid = CFG.restaurantId;
   try {
-    // Ambil transaksi kasir 30 hari terakhir
-    var d30 = new Date(); d30.setDate(d30.getDate() - 30);
+    // Ambil online_orders (delivered) — sumber utama laporan online
+    var d90 = new Date(); d90.setDate(d90.getDate() - 90);
+    var onlineRes = await _sb.from('online_orders')
+      .select('order_code,total,ongkir,subtotal,pay_method,nama_pemesan,created_at,status,kurir_nama')
+      .eq('restaurant_id', rid)
+      .eq('status', 'delivered')
+      .gte('created_at', d90.toISOString())
+      .order('created_at', {ascending: false});
+    if (!onlineRes.error && onlineRes.data && onlineRes.data.length) {
+      // Masukkan ke currentShift.onlineOrders agar tampil di laporan
+      if (!ST.currentShift) {
+        // Buat placeholder shift untuk menampung data online
+        if (!ST._onlineOrdersCache) ST._onlineOrdersCache = [];
+        ST._onlineOrdersCache = onlineRes.data.map(function(o) {
+          return {
+            id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
+            subtotal: o.subtotal||0, pay: o.pay_method, nama: o.nama_pemesan,
+            time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
+            created_at: o.created_at
+          };
+        });
+      } else {
+        ST.currentShift.onlineOrders = onlineRes.data.map(function(o) {
+          return {
+            id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
+            subtotal: o.subtotal||0, pay: o.pay_method, nama: o.nama_pemesan,
+            time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
+            created_at: o.created_at
+          };
+        });
+      }
+    }
+    // Coba ambil transaksi kasir dari tabel transactions (jika ada)
     var trxRes = await _sb.from('transactions')
       .select('*').eq('restaurant_id', rid)
-      .gte('created_at', d30.toISOString()).order('created_at');
+      .gte('created_at', d90.toISOString())
+      .order('created_at', {ascending: false});
     if (!trxRes.error && trxRes.data && trxRes.data.length) {
       ST.transactions = trxRes.data.map(function(t) {
+        var dt = t.created_at ? new Date(t.created_at) : new Date();
+        var jam = dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+        var tgl = dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
         return {
-          id: t.trx_code, time: t.created_at ? t.created_at.substr(11,5) : '',
-          date: t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '',
-          table: t.meja||'',"items": (function(){ try{ return t.items_json ? JSON.parse(t.items_json) : []; }catch(e){return [];} })(),
+          id: t.trx_code||t.id, time: jam, date: tgl,
+          table: t.meja||'',
+          items: (function(){ try{ return t.items_json ? JSON.parse(t.items_json) : []; }catch(e){return [];} })(),
           subtotal: t.subtotal||0, disc: t.disc_pct||0, discAmt: t.disc_amt||0,
           tax: t.tax||0, total: t.total||0, pay: t.pay_method,
           splitPay: t.split_pay, kasir: t.kasir_nama||'Kasir',
-          voided: t.voided||false, voidAlasan: t.void_alasan||'',"orderNote": t.order_note||'',"shiftId": t.shift_id||''
+          voided: t.voided||false, voidAlasan: t.void_alasan||'',
+          orderNote: t.order_note||'', shiftId: t.shift_id||''
         };
       });
       saveShiftLocal();
     }
-    // Ambil shifts untuk rekap
-    var shiftRes = await _sb.from('shifts')
-      .select('*').eq('restaurant_id', rid)
-      .order('created_at', {ascending: false}).limit(50);
-    if (!shiftRes.error && shiftRes.data && shiftRes.data.length) {
-      // Merge dengan ST.shifts — update yang sudah ada, tambah yang baru
-      shiftRes.data.forEach(function(sh) {
-        var existing = ST.shifts.find(function(s){ return s.id === sh.shift_code; });
-        if (!existing && sh.status === 'closed') {
-          ST.shifts.push({
-            id: sh.shift_code, kasir: sh.kasir_nama||'Kasir',
-            tanggal: sh.tanggal||'', status: sh.status,
-            modalAwal: sh.modal_awal||0,
-            totalPenjualan: sh.total_penjualan||0,
-            totalPengeluaran: sh.total_pengeluaran||0,
-            labaBersih: (sh.total_penjualan||0)-(sh.total_pengeluaran||0),
-            tunai: sh.tunai||0, qris: sh.qris||0, transfer: sh.transfer||0,
-            ekspektasiKas: sh.ekspektasi_kas||0, kasFisik: sh.kas_fisik||0,
-            selisih: sh.selisih||0, waktuBuka: sh.waktu_buka||'—',
-            waktuTutup: sh.waktu_tutup||'—', pengeluaran: [], transaksi: []
-          });
-        }
-      });
-      saveShiftLocal();
-    }
+    // Render laporan dengan data terbaru
     renderLaporan();
-    renderShiftPage();
   } catch(e) {
-    console.warn('fetchLaporanFromSupabase:', e.message);
+    console.warn('fetchLaporanFromSupabase error:', e.message);
+    // Tetap render dengan data lokal
+    renderLaporan();
   } finally {
     _fetchingLapTrx = false;
   }
@@ -4160,6 +4170,19 @@ function renderLaporan() {
   var onlineTrxCount = 0;
   var onlineOrders = [];
   var allShifts = ST.shifts.concat(ST.currentShift ? [ST.currentShift] : []);
+  // Tambahkan online orders dari cache Supabase jika ada
+  var _cachedOnline = ST._onlineOrdersCache || [];
+  // Hitung dari cache Supabase (fetch langsung, tidak tergantung shift)
+  if (_cachedOnline.length) {
+    _cachedOnline.forEach(function(o) {
+      var oDate = o.created_at ? new Date(o.created_at) : null;
+      var inRange = true;
+      if (ST.lapPreset !== 'semua' && dari && sampai && oDate) {
+        inRange = oDate >= dari && oDate < sampai;
+      }
+      if (inRange) { onlineTotal += o.total||0; onlineTrxCount++; onlineOrders.push(o); }
+    });
+  } else {
   allShifts.forEach(function(s) {
     // Old platform system (manual input)
     if (s.onlinePlatforms) s.onlinePlatforms.forEach(function(pl){ onlineTotal+=pl.jumlah; });
@@ -4178,6 +4201,7 @@ function renderLaporan() {
       }
     });
   });
+  } // end else (_cachedOnline)
   // Also fetch delivered orders from Supabase for current period (more reliable)
   if (_sb && CFG.restaurantId && !_lapOnlineFetching) {
     _lapOnlineFetching = true;
