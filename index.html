@@ -3527,9 +3527,14 @@ function parseTrxDate(dateStr, timeStr) {
       d = new Date(str);
     }
   }
-  if (timeStr && timeStr.includes(':')) {
-    var tp = timeStr.split(':');
-    d.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0);
+  if (isNaN(d)) d = new Date();
+  // FIX: Indonesian locale menggunakan titik (.) sebagai pemisah jam — handle keduanya
+  if (timeStr) {
+    var sep = timeStr.includes(':') ? ':' : (timeStr.includes('.') ? '.' : null);
+    if (sep) {
+      var tp = timeStr.split(sep);
+      d.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0, 0, 0);
+    }
   }
   return d;
 }
@@ -4289,13 +4294,15 @@ async function fetchLaporanFromSupabase() {
       .eq('restaurant_id', rid)
       .gte('created_at', iso90)
       .order('created_at', {ascending: false});
-    if (!trxRes.error && trxRes.data && trxRes.data.length) {
-      ST.transactions = trxRes.data.map(function(t) {
+    if (!trxRes.error && trxRes.data) {
+      var sbMapped2 = trxRes.data.map(function(t) {
         var dt = t.created_at ? new Date(t.created_at) : new Date();
+        // FIX: gunakan tanggal lokal bukan UTC
+        var localDate2 = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
         return {
           id: t.trx_code||t.id,
           time: dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
-          date: dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}),
+          date: localDate2,
           table: t.meja||'', subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0,
           tax: t.tax||0, total: t.total||0, pay: t.pay_method,
@@ -4305,6 +4312,21 @@ async function fetchLaporanFromSupabase() {
           voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
         };
       });
+      // FIX: Merge — jangan replace penuh, pertahankan transaksi lokal yg belum tersync
+      var sbCodes2 = sbMapped2.map(function(t){ return t.id; });
+      var localUnsync2 = ST.transactions.filter(function(t){ return !sbCodes2.includes(t.id); });
+      ST.transactions = sbMapped2;
+      if (localUnsync2.length) {
+        localUnsync2.forEach(function(trx) {
+          ST.transactions.unshift(trx);
+          setTimeout(function(){ sbSyncTransaction(trx); }, 600);
+        });
+      }
+      // Update trxCounter agar tidak bentrok
+      var maxNum2 = ST.transactions.reduce(function(mx,t){
+        var n=parseInt((t.id||'').replace('TRX-',''))||0; return Math.max(mx,n);
+      }, 0);
+      if (maxNum2 >= ST.trxCounter) ST.trxCounter = maxNum2 + 1;
     }
 
     // 2. Online orders (delivered)
