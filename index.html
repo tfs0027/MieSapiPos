@@ -2790,6 +2790,8 @@ function processPayment() {
   clearCartMember();
   showNotif('✅ ' + id + ' berhasil!', '#00B894');
   sbSyncTransaction(trx);
+  saveShiftLocal(); // simpan ke localStorage agar laporan bisa baca
+  if (window._currentPage === 'laporan') renderLaporan();
   showReceipt(trx);
 }
 
@@ -3695,6 +3697,8 @@ function processPaymentSplit() {
   renderShiftPage();
   showNotif('✅ Split '+id+' berhasil!','#00B894');
   sbSyncTransaction(trx);
+  saveShiftLocal();
+  if (window._currentPage === 'laporan') renderLaporan();
   showReceipt(trx);
   ST.splitPay = null;
 }
@@ -4853,8 +4857,9 @@ function prosesBukaKasir() {
   };
   closeModal('buka-modal'); updateShiftTopbar(); renderShiftPage();
   showNotif('✅ Kasir dibuka — ' + shiftId, '#00B894');
-  cancelAutoLogoutTimer(); // kasir dibuka — batalkan timer auto-logout
+  cancelAutoLogoutTimer();
   saveShiftLocal();
+  if (window._currentPage === 'laporan') renderLaporan();
   // Warung online otomatis BUKA saat kasir dibuka
   CFG.isOpen = true;
   saveCFG();
@@ -5003,6 +5008,8 @@ function prosesTutupKasir() {
   syncRestoStatusToSupabase();
   renderRestoStatusUI();
   sbSyncShift(closed);
+  saveShiftLocal();
+  if (window._currentPage === 'laporan') renderLaporan();
   // Auto-logout timer: jika tidak ada shift baru dibuka dalam 30 menit
   cancelAutoLogoutTimer();
   _autoLogoutTimer = setTimeout(function() {
@@ -5193,7 +5200,10 @@ function tambahPengeluaran() {
   // Sync ke Supabase
   sbSyncExpense(entry);
   ['pn','pa','pket','pref'].forEach(x => $(x).value='');
-  renderShiftPage(); showNotif('✅ Pengeluaran dicatat','#E17055');
+  saveShiftLocal();
+  renderShiftPage();
+  if (window._currentPage === 'laporan') renderLaporan();
+  showNotif('✅ Pengeluaran dicatat','#E17055');
 }
 
 async function sbSyncExpense(peng) {
@@ -5269,7 +5279,10 @@ function setPengFilter(val) { ST.pengFilter = val||null; renderPengList(); }
 function hapusPeng(id) {
   if (!ST.currentShift) return;
   ST.currentShift.pengeluaran = ST.currentShift.pengeluaran.filter(p=>p.id!==id);
-  renderShiftPage(); showNotif('Pengeluaran dihapus','#A8A5BE');
+  saveShiftLocal();
+  renderShiftPage();
+  if (window._currentPage === 'laporan') renderLaporan();
+  showNotif('Pengeluaran dihapus','#A8A5BE');
 }
 
 function renderShiftTrx() {
