@@ -5118,7 +5118,7 @@ async function showTutupModal() {
   // Fetch online orders untuk shift ini langsung dari Supabase (paling akurat)
   await fetchShiftOnlineOrders(sh);
   const totalPenjualan = sh.transaksi.reduce((a,t)=>a+t.total,0);
-  const totalGrand = totalPenjualan + filterOnlineByShift(sh.onlineOrders||[], sh).reduce(function(a,o){return a+o.total;},0);
+  const totalGrand = totalPenjualan + (sh.onlineOrders||[]).reduce(function(a,o){return a+o.total;},0);
   const totalPengeluaran = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
   const labaBersih = totalGrand-totalPengeluaran;
   // Split payment: distribute to each method proportionally
@@ -5148,8 +5148,8 @@ async function showTutupModal() {
   },0);
   const nonTunai = qris + transfer;
   const trxCount = sh.transaksi.length;
-  // Re-filter onlineOrders berdasarkan waktu shift ini (safety net)
-  const onlineOrders = filterOnlineByShift(sh.onlineOrders || [], sh);
+  // onlineOrders sudah terfilter per shift oleh fetchShiftOnlineOrders
+  const onlineOrders = sh.onlineOrders || [];
   const onlineTotal = onlineOrders.reduce(function(a,o){return a+o.total;},0);
   const onlineCount = onlineOrders.length;
   // Split online orders by payment method
@@ -9874,26 +9874,32 @@ function filterOnlineByShift(orders, shift) {
 async function fetchShiftOnlineOrders(shift) {
   if (!_sb || !CFG.restaurantId || !shift) return;
   try {
-    // Tentukan batas waktu shift — isoOpen adalah sumber paling akurat
+    var now = new Date();
+
+    // === Tentukan isoFrom (waktu buka shift) ===
     var isoFrom = shift.isoOpen || null;
-    // Fallback: bangun dari tanggal + waktuBuka
+
+    // Fallback 1: bangun dari tanggal + waktuBuka
     if (!isoFrom && shift.tanggal && shift.waktuBuka) {
       var ts = parseTanggalShift(shift.tanggal);
       if (ts) {
         var dFrom = new Date(ts);
-        var tp = (shift.waktuBuka||'00:00').replace(/\./g, ':').split(':');
+        var tp = (shift.waktuBuka||'00:00').replace(/[.:]/g, ':').split(':');
         dFrom.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0, 0, 0);
-        isoFrom = dFrom.toISOString();
+        if (!isNaN(dFrom)) isoFrom = dFrom.toISOString();
       }
     }
-    // Batas akhir: isoClose jika shift sudah tutup, atau sekarang
-    var isoTo = shift.isoClose || new Date().toISOString();
 
+    // Fallback 2 (KRITIS): jika masih null, pakai awal hari ini
+    // Ini mencegah seluruh 90 hari data ikut terhitung
     if (!isoFrom) {
-      // Tidak bisa tentukan waktu buka — jangan filter, pakai data cache yang ada
-      console.warn('[WarungKu] fetchShiftOnlineOrders: isoFrom tidak bisa ditentukan, skip fetch');
-      return;
+      var startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      isoFrom = startOfDay.toISOString();
+      console.warn('[WarungKu] fetchShiftOnlineOrders: isoFrom fallback ke awal hari ini:', isoFrom);
     }
+
+    // === Tentukan isoTo (waktu tutup shift / sekarang) ===
+    var isoTo = shift.isoClose || now.toISOString();
 
     var q = _sb.from('online_orders')
       .select('order_code,total,ongkir,subtotal,pay_method,pay_status,nama_pemesan,created_at,catatan,order_type')
