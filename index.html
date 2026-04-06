@@ -7438,7 +7438,8 @@ async function updateOrderStatus(orderId, status, ket, btn){
   if(!_sb) return;
   if(btn){btn.disabled=true;btn.textContent='⏳';}
   try{
-    var upRes = await _sb.from('online_orders').update({status:status}).eq('id',orderId).select('id');
+    var upRes = await _sb.from('online_orders').update({status:status})
+      .eq('id',orderId).eq('restaurant_id',CFG.restaurantId).select('id');
     if(upRes.error) throw upRes.error;
     await _sb.from('order_status_log').insert({order_id:orderId,status:status,keterangan:ket,by_role:'warung'});
     // If delivered, add to shift onlineOrders for reporting
@@ -8122,10 +8123,11 @@ async function prosesAssignKurir() {
       kurir_nama: kurir.nama,
       kurir_hp: kurir.hp || '',
       kurir_berangkat: waktu || ''
-    }).eq('id', _assignKurirOrderId);
+    }).eq('id', _assignKurirOrderId).eq('restaurant_id', CFG.restaurantId);
     // If columns don't exist, fallback update without them
     if (up.error && up.error.message && up.error.message.indexOf('column') >= 0) {
-      await _sb.from('online_orders').update({status: 'on_delivery'}).eq('id', _assignKurirOrderId);
+      await _sb.from('online_orders').update({status: 'on_delivery'})
+        .eq('id', _assignKurirOrderId).eq('restaurant_id', CFG.restaurantId);
     }
     await _sb.from('order_status_log').insert({
       order_id: _assignKurirOrderId, status: 'on_delivery', keterangan: ket, by_role: 'warung'
@@ -8586,7 +8588,8 @@ function renderPelamarList() {
 async function ubahStatusPelamar(id, status) {
   if (!_sb) return;
   try {
-    await _sb.from('applicants').update({status:status}).eq('id',id);
+    await _sb.from('applicants').update({status:status})
+      .eq('id',id).eq('restaurant_id', CFG.restaurantId);
     var idx = _pelamarData.findIndex(function(a){ return a.id===id; });
     if (idx>=0) _pelamarData[idx].status = status;
     renderPelamarList();
@@ -8665,7 +8668,8 @@ function lihatDetailPelamar(id) {
 
 async function simpanCatatanPelamar(id) {
   var catatan = ($('catatan-pelamar-input')||{value:''}).value.trim();
-  var cRes = await _sb.from('applicants').update({catatan_admin:catatan}).eq('id',id);
+  var cRes = await _sb.from('applicants').update({catatan_admin:catatan})
+    .eq('id',id).eq('restaurant_id', CFG.restaurantId);
   if (cRes.error) { showNotif('Gagal simpan catatan: '+(cRes.error.message||'Cek RLS'),'#E17055'); return; }
   var idx = _pelamarData.findIndex(function(a){ return a.id===id; });
   if (idx>=0) _pelamarData[idx].catatan_admin = catatan;
