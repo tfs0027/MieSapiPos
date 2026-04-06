@@ -5672,12 +5672,42 @@ function lihatLaporanShift(id) {
   html += '<div class="r-r"><span>Total Penjualan</span><span class="r-income">+' + fmt(sh.totalPenjualan) + '</span></div>';
   html += '<div class="r-r"><span>Total Pengeluaran</span><span class="r-expense">−' + fmt(sh.totalPengeluaran) + '</span></div>';
   html += '<div style="background:' + (sh.labaBersih>=0?'var(--green-bg)':'var(--red-bg)') + ';border-radius:6px;padding:5px 9px;margin:4px 0;display:flex;justify-content:space-between;font-weight:700;color:' + (sh.labaBersih>=0?'var(--green-dk)':'var(--red-dk)') + '"><span>LABA BERSIH SHIFT</span><span>' + (sh.labaBersih>=0?'+':'') + fmt(sh.labaBersih) + '</span></div>';
+  // Tampilkan ringkasan online orders jika ada
+  var _shOnline = sh.onlineOrders || [];
+  var _shOnlineDigital = sh.totalOnlineDigital || _shOnline.reduce(function(a,o){return a+o.total;},0);
+  if (_shOnlineDigital > 0 || (sh.onlinePlatforms && sh.onlinePlatforms.length > 0)) {
+    var _shOnlineCod2 = sh.onlineCod || _shOnline.filter(function(o){return (o.pay||'cod')==='cod';}).reduce(function(a,o){return a+o.total;},0);
+    var _shOnlineQris2 = sh.onlineQris || _shOnline.filter(function(o){return (o.pay||'qris')==='qris';}).reduce(function(a,o){return a+o.total;},0);
+    var _shOnlineTrf2 = sh.onlineTransfer || _shOnline.filter(function(o){return (o.pay||'cod')==='transfer';}).reduce(function(a,o){return a+o.total;},0);
+    html += '<hr class="r-d"><div class="r-c r-b">REKAP PENJUALAN ONLINE</div><hr class="r-d">';
+    html += '<div class="r-r"><span>Jumlah Pesanan</span><span>' + _shOnline.length + ' order</span></div>';
+    if (_shOnlineCod2 > 0) html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— COD (masuk kas)</span><span>+' + fmt(_shOnlineCod2) + '</span></div>';
+    if (_shOnlineQris2 > 0) html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— QRIS</span><span>' + fmt(_shOnlineQris2) + '</span></div>';
+    if (_shOnlineTrf2 > 0) html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— Transfer</span><span>' + fmt(_shOnlineTrf2) + '</span></div>';
+    html += '<div class="r-r r-b" style="color:var(--blue-dk)"><span>Total Online</span><span>' + fmt(_shOnlineDigital) + '</span></div>';
+    html += '<div class="r-r" style="color:var(--green-dk);font-weight:700"><span>Total Gabungan (Kasir+Online)</span><span>' + fmt((sh.totalPenjualan||0)+_shOnlineDigital) + '</span></div>';
+  }
+  // Hitung ekspektasi kas: modal + tunai kasir + COD online (gunakan sh.onlineCod jika ada)
+  var _onlineCodShift = sh.onlineCod || 0;
+  var _ekspektasiRecalc = sh.modalAwal + (sh.tunai||0) + _onlineCodShift;
+  // Jika ekspektasiKas tersimpan sudah include onlineCod (shift baru), pakai langsung
+  // Jika tidak (shift lama tanpa onlineCod), pakai hasil rekalkkulasi
+  var _ekspDisplay = (_onlineCodShift > 0 || sh.ekspektasiKas === (sh.modalAwal + sh.tunai))
+    ? _ekspektasiRecalc
+    : sh.ekspektasiKas;
+  var _selisihRecalc = (sh.kasFisik||0) - _ekspDisplay;
+  var _sc = _selisihRecalc===0?'var(--green-dk)':_selisihRecalc>0?'var(--blue-dk)':'var(--red-dk)';
+  var _st = _selisihRecalc===0?'Pas ✓':_selisihRecalc>0?'+'+fmt(_selisihRecalc)+' (Lebih)':fmt(_selisihRecalc)+' (Kurang)';
   html += '<hr class="r-d"><div class="r-c r-b">POSISI KAS TUNAI</div><hr class="r-d">';
   html += '<div class="r-r"><span>Modal Awal</span><span>' + fmt(sh.modalAwal) + '</span></div>';
-  html += '<div class="r-r"><span>+ Penerimaan Tunai</span><span>' + fmt(sh.tunai) + '</span></div>';
-  html += '<div class="r-r r-b"><span>= Ekspektasi Kas</span><span>' + fmt(sh.ekspektasiKas) + '</span></div>';
-  html += '<div class="r-r"><span>Kas Fisik Dihitung</span><span>' + fmt(sh.kasFisik) + '</span></div>';
-  html += '<div style="background:' + (sh.selisih===0?'var(--green-bg)':sh.selisih>0?'var(--blue-bg)':'var(--red-bg)') + ';border-radius:6px;padding:5px 9px;margin-top:4px;display:flex;justify-content:space-between;font-weight:700;color:' + sc + '"><span>Selisih Kas</span><span>' + st + '</span></div>';
+  html += '<div class="r-r"><span>+ Penerimaan Tunai Kasir</span><span>+' + fmt(sh.tunai||0) + '</span></div>';
+  if (_onlineCodShift > 0) {
+    var _onlineCodCount = sh.onlineOrders ? sh.onlineOrders.filter(function(o){return (o.pay||'cod')==='cod';}).length : '?';
+    html += '<div class="r-r"><span>+ COD Online (' + _onlineCodCount + ' order)</span><span>+' + fmt(_onlineCodShift) + '</span></div>';
+  }
+  html += '<div class="r-r r-b"><span>= Ekspektasi Kas</span><span>' + fmt(_ekspDisplay) + '</span></div>';
+  html += '<div class="r-r"><span>Kas Fisik Dihitung</span><span>' + fmt(sh.kasFisik||0) + '</span></div>';
+  html += '<div style="background:' + (_selisihRecalc===0?'var(--green-bg)':_selisihRecalc>0?'var(--blue-bg)':'var(--red-bg)') + ';border-radius:6px;padding:5px 9px;margin-top:4px;display:flex;justify-content:space-between;font-weight:700;color:' + _sc + '"><span>Selisih Kas</span><span>' + _st + '</span></div>';
   if (sh.catatanTutup) html += '<hr class="r-d"><div class="r-r"><span>Ket. Tutup</span><span>' + sh.catatanTutup + '</span></div>';
   if (sh.onlinePlatforms && sh.onlinePlatforms.length) {
     html += '<hr class="r-d"><div class="r-c r-b">PENJUALAN ONLINE</div><hr class="r-d">';
