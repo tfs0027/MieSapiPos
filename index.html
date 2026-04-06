@@ -3071,9 +3071,13 @@ function renderMenuTable() {
 
 function toggleMenuStatus(id) {
   const m = ST.menus.find(x => x.id===id);
+  if (!m) return;
   m.status = m.status==='available' ? 'out' : 'available';
-  renderMenuTable(); renderMenuGrid();
-  showNotif('Status ' + m.name + ' diubah');
+  renderMenuTable(); renderMenuGrid(); buildCatTabs();
+  // Sync ke Supabase agar halaman order pelanggan langsung update
+  sbSyncMenu(m);
+  var label = m.status==='available' ? '✅ Diaktifkan' : '❌ Dinonaktifkan';
+  showNotif(label + ': ' + m.name, m.status==='available'?'#00B894':'#E17055');
 }
 
 function renderFmCatSelect(selectedCat) {
@@ -3321,7 +3325,15 @@ function saveMenu() {
   if (!name||!price) { showNotif('Nama & harga wajib diisi','#E17055'); return; }
   const validOpts = _fmOpts.filter(g => g.label.trim() && g.choices.filter(ch=>ch.trim()).length > 0)
     .map(g => ({...g, label:g.label.trim(), choices:g.choices.map(ch=>ch.trim()).filter(ch=>ch)}));
-  const data = {name,price,cat:$('fm-cat').value,emoji:$('fm-emoji').value||'🍽️',status:$('fm-status').value,opts:validOpts,img:_fmImgData||null};
+  // Preserve foto yang sudah ada jika tidak ada foto baru
+  var existingImg = ST.editMenuId ? (ST.menus.find(function(m){return m.id===ST.editMenuId;})||{}).img : null;
+  var existingUrutan = ST.editMenuId ? (ST.menus.find(function(m){return m.id===ST.editMenuId;})||{}).urutan : null;
+  const data = {
+    name, price, cat:$('fm-cat').value, emoji:$('fm-emoji').value||'🍽️',
+    status:$('fm-status').value, opts:validOpts,
+    img: _fmImgData || existingImg || null,  // FIX: jangan hapus foto lama
+    urutan: existingUrutan || 0,
+  };
   // Log price change
   if (ST.editMenuId) {
     var existing = ST.menus.find(function(m){return m.id===ST.editMenuId;});
@@ -3332,7 +3344,7 @@ function saveMenu() {
     }
   }
   if (ST.editMenuId) Object.assign(ST.menus.find(m=>m.id===ST.editMenuId), data);
-  else ST.menus.push({...data,id:Date.now(),sold:0});
+  else ST.menus.push({...data, id: Date.now(), sold:0, sbId: null}); // sbId akan diisi setelah sync Supabase
   closeModal('menu-modal'); renderMenuTable(); renderMenuGrid(); buildCatTabs();
   var savedMenu = ST.editMenuId ? ST.menus.find(function(m){return m.id===ST.editMenuId;}) : ST.menus[ST.menus.length-1];
   if (savedMenu) sbSyncMenu(savedMenu);
@@ -6680,13 +6692,26 @@ async function sbSyncMenu(m) {
   if (!_sb || !CFG.restaurantId) return;
   var rid = CFG.restaurantId;
   try {
-    await _sb.from('menus').upsert({
-      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'menu'+m.id+m.name), restaurant_id: rid,
+    var menuData = {
+      restaurant_id: rid,
       nama: m.name, harga: m.price, emoji: m.emoji||'🍽️',
       kategori: m.cat||'Menu', foto_url: m.img||null,
       urutan: m.urutan||0,
-      status: m.status, opts: m.opts||[], terjual: m.sold||0,
-    }, {onConflict:'id'});
+      status: m.status||'available', opts: m.opts||[], terjual: m.sold||0,
+    };
+    if (m.sbId) {
+      // FIX: Menu sudah ada di Supabase — update langsung by sbId
+      menuData.id = m.sbId;
+      var res = await _sb.from('menus').upsert(menuData, {onConflict:'id'});
+      if (res.error) throw res.error;
+    } else {
+      // Menu baru — insert dan simpan sbId yang dikembalikan
+      var res2 = await _sb.from('menus').insert(menuData).select('id').single();
+      if (res2.error) throw res2.error;
+      if (res2.data && res2.data.id) {
+        m.sbId = res2.data.id; // simpan sbId ke lokal agar update berikutnya benar
+      }
+    }
   } catch(e) { console.warn('sbSyncMenu:', e.message); }
 }
 
