@@ -3061,8 +3061,9 @@ function renderMenuTable() {
     '<td style="display:flex;gap:5px">' +
     (m.opts&&m.opts.length ? '<span class="badge b-purple" style="font-size:9px" title="' + m.opts.map(g=>g.label).join(', ') + '">' + m.opts.length + ' varian</span>' : '') +
     (can('edit_harga') ?
-      '<button class="btn btn-sm" onclick="openMenuModal(' + m.id + ')">Edit</button>' +
-      '<button class="btn btn-sm" style="color:' + (m.status==='available'?'var(--red-dk)':'var(--green-dk)') + '" onclick="toggleMenuStatus(' + m.id + ')">' + (m.status==='available'?'Nonaktifkan':'Aktifkan') + '</button>'
+      '<button class="btn btn-sm" onclick="openMenuModal(' + m.id + ')">✏️</button>' +
+      '<button class="btn btn-sm" style="color:' + (m.status==='available'?'var(--red-dk)':'var(--green-dk)') + '" onclick="toggleMenuStatus(' + m.id + ')">' + (m.status==='available'?'Nonaktifkan':'Aktifkan') + '</button>' +
+      '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusMenu(' + m.id + ')">🗑️</button>'
       : '<span style="font-size:11px;color:var(--txt3)">Hanya lihat</span>') +
     '</td></tr>'
   ).join('');
@@ -3078,6 +3079,28 @@ function toggleMenuStatus(id) {
   sbSyncMenu(m);
   var label = m.status==='available' ? '✅ Diaktifkan' : '❌ Dinonaktifkan';
   showNotif(label + ': ' + m.name, m.status==='available'?'#00B894':'#E17055');
+}
+
+function hapusMenu(id) {
+  var m = ST.menus.find(function(x){ return x.id===id; });
+  if (!m) return;
+  if (!confirm('Hapus menu "' + m.name + '"?\nAksi ini tidak dapat dibatalkan.')) return;
+  // Hapus dari Supabase
+  if (_sb && CFG.restaurantId && m.sbId) {
+    _sb.from('menus').delete().eq('id', m.sbId).then(function(res) {
+      if (res.error) console.warn('hapusMenu Supabase:', res.error.message);
+    });
+  } else if (_sb && CFG.restaurantId && m.name) {
+    // Fallback: hapus by nama + restaurant_id
+    _sb.from('menus').delete().eq('restaurant_id', CFG.restaurantId).eq('nama', m.name).then(function(res) {
+      if (res.error) console.warn('hapusMenu Supabase (by name):', res.error.message);
+    });
+  }
+  // Hapus dari lokal
+  var idx = ST.menus.findIndex(function(x){ return x.id===id; });
+  if (idx > -1) ST.menus.splice(idx, 1);
+  renderMenuTable(); renderMenuGrid(); buildCatTabs();
+  showNotif('✅ Menu "' + m.name + '" dihapus', '#00B894');
 }
 
 function renderFmCatSelect(selectedCat) {
@@ -4339,6 +4362,8 @@ async function autoSyncFromSupabase() {
           if (cfg.qrisImg) CFG.qrisImg = cfg.qrisImg;
           if (cfg.qrisNama) CFG.qrisNama = cfg.qrisNama;
           if (cfg.qrisId) CFG.qrisId = cfg.qrisId;
+          // FIX Task 3: load kurirList dari Supabase (per toko)
+          if (cfg.kurirList) CFG.kurirList = cfg.kurirList;
         }
         saveCFG();
         var sn = document.getElementById('sb-name-el');
@@ -7086,6 +7111,7 @@ async function syncRestoStatusToSupabase(){
       service: CFG.service||0,
       serviceFlat: CFG.serviceFlat||0,
       serviceNama: CFG.serviceNama||'Biaya Layanan',
+      kurirList: CFG.kurirList||[],  // FIX Task 3: simpan kurir per toko di Supabase
     };
     await _sb.from('restaurants').update({cfg: cfgToSync}).eq('id',CFG.restaurantId);
   }catch(e){ console.warn('syncRestoStatus:', e.message); }
@@ -7959,6 +7985,8 @@ function saveKurirCfg() {
     };
   }).filter(function(k){ return k.nama; });
   saveCFG();
+  // Sync kurir list ke Supabase agar sesuai per toko
+  syncRestoStatusToSupabase();
   showNotif('✅ Daftar kurir disimpan', '#00B894');
   renderKurirList();
 }
@@ -7966,9 +7994,31 @@ function saveKurirCfg() {
 function openAssignKurirModal(orderId, orderCode) {
   _assignKurirOrderId = orderId;
   _assignKurirOrderCode = orderCode;
-  // Fill order info
+  // Fill order info + ambil alamat untuk maps
   var info = $('assign-order-info');
   if (info) info.textContent = '📦 Pesanan ' + orderCode + ' siap dikirim';
+  // Ambil detail order untuk tampilkan info alamat + maps di modal
+  if (_sb) {
+    _sb.from('online_orders').select('*').eq('id', orderId).single().then(function(res) {
+      var o = res.data || {};
+      if (o.delivery_addr_id) {
+        _sb.from('delivery_addresses').select('*').eq('id', o.delivery_addr_id).single().then(function(aRes) {
+          var addr = aRes.data || {};
+          var mapsUrl = '';
+          if (addr.lat && addr.lng) mapsUrl = 'https://www.google.com/maps?q=' + addr.lat + ',' + addr.lng;
+          else if (addr.alamat_lengkap) mapsUrl = 'https://www.google.com/maps/search/' + encodeURIComponent(addr.alamat_lengkap);
+          if (info) {
+            info.innerHTML = '📦 <b>' + orderCode + '</b> · ' + (o.nama_pemesan||'-') +
+              '<br><span style="font-size:11px;color:var(--txt2)">📍 ' + (addr.alamat_lengkap||'-') + '</span>' +
+              (mapsUrl ? '<br><a href="' + mapsUrl + '" target="_blank" style="font-size:11px;color:var(--blue-dk);font-weight:600">🗺️ Buka Google Maps</a>' : '');
+          }
+          _assignKurirMapsUrl = mapsUrl;
+          _assignKurirOrder = o;
+          _assignKurirAddr = addr;
+        });
+      }
+    });
+  }
   // Set current time
   var now = new Date();
   var t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
@@ -7992,6 +8042,9 @@ function openAssignKurirModal(orderId, orderCode) {
 }
 
 var _selectedKurirIdx = null;
+var _assignKurirMapsUrl = '';
+var _assignKurirOrder = {};
+var _assignKurirAddr = {};
 function pilihKurirCard(i) {
   _selectedKurirIdx = i;
   document.querySelectorAll('[id^="kurir-card-"]').forEach(function(el, idx) {
@@ -8088,6 +8141,14 @@ async function kirimWAKurir(kurir, orderId, orderCode, waktu, note) {
 
     // Build WA message
     var warungNama = CFG.nama || 'WarungKu';
+    // Buat link Google Maps dari koordinat pelanggan
+    var mapsLink = '';
+    if (addr.lat && addr.lng) {
+      mapsLink = 'https://www.google.com/maps?q=' + addr.lat + ',' + addr.lng;
+    } else if (addr.alamat_lengkap) {
+      mapsLink = 'https://www.google.com/maps/search/' + encodeURIComponent(addr.alamat_lengkap);
+    }
+
     var msg = [
       '🛵 *DETAIL PENGANTARAN - ' + warungNama + '*',
       '',
@@ -8095,6 +8156,7 @@ async function kirimWAKurir(kurir, orderId, orderCode, waktu, note) {
       '👤 *Penerima:* ' + (o.nama_pemesan || '-'),
       '📞 *HP Penerima:* ' + (o.hp_pemesan || '-'),
       '📍 *Alamat:* ' + (addr.alamat_lengkap || '-'),
+      (mapsLink ? '🗺️ *Maps:* ' + mapsLink : ''),
       '🍱 *Menu:* ' + (items || '-'),
       '💰 *Total:* Rp ' + ((o.total||0).toLocaleString('id-ID')),
       '💵 *Pembayaran:* ' + ({cod:'COD (bayar di tempat)',qris:'QRIS (sudah dibayar)',transfer:'Transfer (sudah dibayar)'}[o.pay_method] || o.pay_method || '-'),
