@@ -2241,6 +2241,9 @@ function doLogin(u) {
   // Auto-pull dari Supabase jika terkonfigurasi
   if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) {
     setTimeout(function() {
+      // Pastikan data lokal sudah di-load sebelum autoSync
+      // agar merge tidak kehilangan transaksi lokal yang belum tersync ke Supabase
+      if (!ST.transactions.length) loadShiftLocal();
       loadSubscription();
       loadSystemConfig();
       checkForceLogout();
@@ -9589,6 +9592,11 @@ document.addEventListener('visibilitychange', function() {
 // ── Restore session on page load ──────────────────────────────────────────
 (function restoreSession() {
   try {
+    // FIX: loadShiftLocal() harus SELALU dipanggil pertama
+    // agar ST.transactions terisi dari localStorage sebelum apapun berjalan
+    // Ini penting agar merge di autoSyncFromSupabase tidak kehilangan data lokal
+    loadShiftLocal();
+
     var sess = localStorage.getItem(SESSION_KEY);
     if (!sess) return;
     var d = JSON.parse(sess);
@@ -9597,17 +9605,44 @@ document.addEventListener('visibilitychange', function() {
       localStorage.removeItem(SESSION_KEY);
       return;
     }
+    // USERS mungkin kosong saat ini (diisi dari Supabase nanti)
+    // Jangan return hanya karena USERS belum terisi
     var u = USERS.find(function(x){ return x.id === d.userId; });
-    if (!u) return;
-    // Restore shift data
-    loadShiftLocal();
     // Jika tidak ada shift aktif, jangan auto-login — require fresh login
     if (!ST.currentShift || ST.currentShift.status !== 'open') {
       localStorage.removeItem(SESSION_KEY);
       console.log('Session cleared: no active shift');
       return;
     }
-    // Auto login hanya jika ada shift aktif
+    // Auto login hanya jika ada shift aktif DAN user ditemukan
+    if (!u) {
+      // USERS belum diload — coba fetch dari Supabase lalu auto-login
+      if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) {
+        var sbTmpR = window.supabase.createClient(CFG.sbUrl, CFG.sbKey);
+        sbTmpR.from('users').select('*').eq('restaurant_id', CFG.restaurantId).then(function(res) {
+          if (!res.error && res.data && res.data.length) {
+            USERS.length = 0;
+            res.data.forEach(function(usr, i) {
+              var colors = [{bg:'#A29BFE',tc:'#3C3489'},{bg:'#00B894',tc:'#007A63'},{bg:'#FDCB6E',tc:'#9A7D1A'},{bg:'#74B9FF',tc:'#1A5FA5'}];
+              var c = colors[i % colors.length];
+              USERS.push({id: i+1, name: usr.nama, role: usr.role, pin: usr.pin_hash,
+                avatar: usr.nama.split(' ').map(function(w){return w[0];}).join('').substr(0,2).toUpperCase(),
+                bg: c.bg, tc: c.tc, perms: usr.perms||{}});
+            });
+            // Coba auto-login dengan userId dari session
+            var uFound = USERS.find(function(x){ return x.id === d.userId; }) || USERS[0];
+            if (uFound && ST.currentShift && ST.currentShift.status === 'open') {
+              doLogin(uFound);
+            } else {
+              renderLogin(); // show login screen dengan users yang sudah diload
+            }
+          } else {
+            renderLogin();
+          }
+        }).catch(function() { renderLogin(); });
+      }
+      return;
+    }
     doLogin(u);
   } catch(e) { console.warn('restoreSession:', e); }
 })();
