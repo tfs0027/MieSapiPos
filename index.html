@@ -4374,6 +4374,17 @@ async function autoSyncFromSupabase() {
           if (cfg.qrisNama) CFG.qrisNama = cfg.qrisNama;
           if (cfg.qrisId) CFG.qrisId = cfg.qrisId;
           if (cfg.kurirList) CFG.kurirList = cfg.kurirList;
+          // FIX: load pengaturan tambahan dari Supabase per toko
+          if (cfg.enablePajak !== undefined) CFG.enablePajak = cfg.enablePajak;
+          if (cfg.pajak) CFG.pajak = cfg.pajak;
+          if (cfg.pajakNm) CFG.pajakNm = cfg.pajakNm;
+          if (cfg.discMax) CFG.discMax = cfg.discMax;
+          if (cfg.rekrutmen) CFG.rekrutmen = cfg.rekrutmen;
+          if (cfg.alamat) CFG.alamat = cfg.alamat;
+          if (cfg.tagline) CFG.tagline = cfg.tagline;
+          if (cfg.telp) CFG.telp = cfg.telp;
+          if (cfg.wa) CFG.wa = cfg.wa;
+          if (cfg.orderPageUrl) CFG.orderPageUrl = cfg.orderPageUrl;
           // FIX: load meja & stok dari Supabase per toko
           if (cfg.tables && cfg.tables.length) {
             // Hanya replace jika dari toko yang sama dan data lokal belum ada
@@ -5035,7 +5046,8 @@ function renderUsers() {
   const PERM_LABELS = {
     order:'Kasir & Order',meja:'Manajemen Meja',shift:'Buka/Tutup Kasir',
     menu:'Kelola Menu',stok:'Stok Bahan',laporan:'Laporan',riwayat:'Riwayat Transaksi',
-    users:'Manajemen User',settings:'Pengaturan Toko',diskon:'Beri Diskon',void_trx:'Void Transaksi',edit_harga:'Edit Harga'
+    'online-order':'Pesanan Online',rekrutmen:'Rekrutmen SDM',
+    users:'Manajemen User',settings:'Pengaturan Toko',diskon:'Beri Diskon',void_trx:'Void Transaksi',edit_harga:'Edit Harga/Menu'
   };
   $('user-list-el').innerHTML = USERS.map(u =>
     '<div class="user-card">' +
@@ -5060,7 +5072,15 @@ function togglePerm(uid, perm) {
   const u = USERS.find(x=>x.id===uid); if(!u) return;
   u.perms[perm] = u.perms[perm] ? 0 : 1;
   if (uid===ST.cu.id) { ST.cu.perms[perm]=u.perms[perm]; buildSidebar(); }
-  renderUsers(); showNotif('Izin "' + perm + '" ' + (u.perms[perm]?'diaktifkan':'dinonaktifkan'));
+  renderUsers();
+  showNotif('Izin "' + perm + '" ' + (u.perms[perm]?'diaktifkan':'dinonaktifkan'));
+  // Sync permission ke Supabase by restaurant_id + nama (karena local id bisa beda)
+  if (_sb && CFG.restaurantId) {
+    _sb.from('users').update({perms: u.perms})
+      .eq('restaurant_id', CFG.restaurantId)
+      .eq('nama', u.name)
+      .then(function(r){ if(r.error) console.warn('sync perm:', r.error.message); });
+  }
 }
 
 function deleteUser(uid) {
@@ -5070,7 +5090,14 @@ function deleteUser(uid) {
   if (!confirm('Hapus user ' + u.name + '?\n\nAksi ini tidak bisa dibatalkan.')) return;
   const idx = USERS.findIndex(function(x){return x.id===uid;});
   if (idx>-1) USERS.splice(idx,1);
-  renderUsers(); showNotif('User ' + u.name + ' dihapus','#A8A5BE');
+  renderUsers(); showNotif('🗑️ User ' + u.name + ' dihapus','#A8A5BE');
+  // Hapus dari Supabase
+  if (_sb && CFG.restaurantId) {
+    _sb.from('users').delete()
+      .eq('restaurant_id', CFG.restaurantId)
+      .eq('nama', u.name)
+      .then(function(r){ if(r.error) console.warn('delete user Supabase:', r.error.message); });
+  }
 }
 
 function openUserModal() {
@@ -7149,13 +7176,23 @@ async function syncRestoStatusToSupabase(){
       serviceFlat: CFG.serviceFlat||0,
       serviceNama: CFG.serviceNama||'Biaya Layanan',
       kurirList: CFG.kurirList||[],
-      // FIX: simpan meja & stok per toko ke Supabase
+      // FIX: simpan meja, stok, pajak, rekrutmen per toko ke Supabase
       tables: ST.tables ? ST.tables.map(function(t){
         return {id:t.id,num:t.num,capacity:t.capacity,status:t.status==='occupied'?'available':t.status,order:null};
       }) : [],
       stocks: ST.stocks ? ST.stocks.map(function(s){
         return {id:s.id,name:s.name,cat:s.cat,qty:s.qty,unit:s.unit,min:s.min,cost:s.cost||0};
       }) : [],
+      enablePajak: CFG.enablePajak||0,
+      pajak: CFG.pajak||11,
+      pajakNm: CFG.pajakNm||'PPN',
+      discMax: CFG.discMax||100,
+      rekrutmen: CFG.rekrutmen||{},
+      alamat: CFG.alamat||'',
+      tagline: CFG.tagline||'',
+      telp: CFG.telp||'',
+      wa: CFG.wa||'',
+      orderPageUrl: CFG.orderPageUrl||'',
     };
     await _sb.from('restaurants').update({cfg: cfgToSync}).eq('id',CFG.restaurantId);
   }catch(e){ console.warn('syncRestoStatus:', e.message); }
@@ -8769,6 +8806,7 @@ function saveRekSetting() {
   }).filter(function(q){ return q.label; });
   saveCFG();
   syncRekrutmenToSupabase();
+  syncRestoStatusToSupabase();
   showNotif('✅ Pengaturan rekrutmen disimpan','#00B894');
 }
 
@@ -9442,10 +9480,28 @@ function saveCfgToko() {
   var latEl = $('cfg-lat'), lngEl = $('cfg-lng');
   if(latEl && latEl.value) CFG.lat = parseFloat(latEl.value);
   if(lngEl && lngEl.value) CFG.lng = parseFloat(lngEl.value);
-  // Push lat/lng to Supabase restaurants
-  if (_sb && CFG.restaurantId && CFG.lat && CFG.lng) {
-    _sb.from('restaurants').update({lat: CFG.lat, lng: CFG.lng}).eq('id', CFG.restaurantId)
-      .catch(function(e){ console.warn('save lat/lng:', e.message); });
+  // Push seluruh info toko ke Supabase restaurants (per id toko)
+  if (_sb && CFG.restaurantId) {
+    var tokoData = {
+      nama: CFG.nama,
+      cfg: Object.assign({}, (function(){
+        // Merge cfg lama dengan field baru
+        var c = {};
+        c.alamat = CFG.alamat||'';
+        c.tagline = CFG.tagline||'';
+        c.telp = CFG.telp||'';
+        c.wa = CFG.wa||'';
+        c.sosmed = CFG.sosmed||'';
+        c.f1 = CFG.f1||'';
+        c.f2 = CFG.f2||'';
+        c.orderPageUrl = CFG.orderPageUrl||'';
+        return c;
+      })())
+    };
+    if (CFG.lat) tokoData.lat = CFG.lat;
+    if (CFG.lng) tokoData.lng = CFG.lng;
+    _sb.from('restaurants').update(tokoData).eq('id', CFG.restaurantId)
+      .then(function(r){ if(r.error) console.warn('save toko Supabase:', r.error.message); });
   }
   $('sb-icon').textContent = CFG.logo;
   $('sb-name-el').textContent = CFG.nama + ' POS';
@@ -9467,6 +9523,8 @@ function saveCfgPajak() {
   renderStrukPreview();
   const taxRow = $('cart-tax-row');
   if (taxRow) taxRow.style.display = CFG.enablePajak ? '' : 'none';
+  // Sync pajak ke Supabase (dalam cfg)
+  syncRestoStatusToSupabase();
   showNotif('✅ Pengaturan pajak disimpan','#00B894');
 }
 
