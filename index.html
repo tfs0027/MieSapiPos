@@ -419,6 +419,57 @@ tr:hover td{background:rgba(108,92,231,.03)}
       <div class="pin-pad" id="pin-pad"></div>
       <div class="pin-err" id="pin-err" style="display:none">PIN salah, coba lagi</div>
     </div>
+    <!-- Tombol setup awal — hanya muncul saat USERS kosong -->
+    <div id="login-setup-btn-wrap" style="display:none;margin-top:14px;text-align:center">
+      <button onclick="openLoginSetupModal()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+        ⚙️ Setup Awal — Buat Akun Admin
+      </button>
+      <div style="font-size:11px;color:var(--txt3);margin-top:8px">Belum ada kasir terdaftar untuk toko ini</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Setup Awal dari Login Screen -->
+<div id="login-setup-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg2);border-radius:20px;padding:28px;width:360px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:17px;font-weight:800">⚙️ Setup Awal</div>
+        <div style="font-size:12px;color:var(--txt2);margin-top:2px">Buat akun admin pertama untuk toko ini</div>
+      </div>
+      <span onclick="closeLoginSetupModal()" style="font-size:20px;color:var(--txt3);cursor:pointer;line-height:1;padding:4px">✕</span>
+    </div>
+
+    <!-- Info toko -->
+    <div id="lsm-toko-info" style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--txt2)">
+      <span id="lsm-toko-nama" style="font-weight:700;color:var(--txt)">Memuat info toko...</span>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px">
+      <label style="font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nama Admin</label>
+      <input class="fi" id="lsm-nama" placeholder="Contoh: Budi Santoso">
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="form-group">
+        <label style="font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">PIN (4 digit)</label>
+        <input class="fi" id="lsm-pin" type="tel" maxlength="4" placeholder="••••" style="letter-spacing:8px;font-size:18px;text-align:center">
+      </div>
+      <div class="form-group">
+        <label style="font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Konfirmasi PIN</label>
+        <input class="fi" id="lsm-pin2" type="tel" maxlength="4" placeholder="••••" style="letter-spacing:8px;font-size:18px;text-align:center">
+      </div>
+    </div>
+
+    <div id="lsm-err" style="background:var(--red-bg);color:var(--red-dk);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px;display:none"></div>
+
+    <button id="lsm-btn" onclick="loginSetupSimpan()" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">
+      ✅ Buat Akun &amp; Mulai POS
+    </button>
+
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--brd);font-size:11px;color:var(--txt3);text-align:center;line-height:1.6">
+      Akun ini akan disimpan ke Supabase.<br>Kasir tambahan bisa ditambah dari ⚙️ Pengaturan setelah login.
+    </div>
   </div>
 </div>
 
@@ -2075,16 +2126,25 @@ function renderLogin() {
           });
           renderLogin();
         } else {
-          $('user-pick').innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--red-dk)">⚠️ Belum ada kasir terdaftar.<br>Hubungi admin untuk setup akun.</div>';
+          // Tidak ada kasir — tampilkan tombol setup awal
+          $('user-pick').innerHTML = '<div style="text-align:center;padding:12px 6px;color:var(--txt3);font-size:13px">Belum ada kasir terdaftar.</div>';
+          var wrap = document.getElementById('login-setup-btn-wrap');
+          if (wrap) wrap.style.display = 'block';
+          // Load info toko untuk modal
+          var tokoNama = document.getElementById('lsm-toko-nama');
+          if (tokoNama) tokoNama.textContent = CFG.nama ? (CFG.logo||'🍜') + ' ' + CFG.nama : 'ID: ' + CFG.restaurantId;
         }
       }).catch(function() {
-        $('user-pick').innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--red-dk)">❌ Gagal memuat kasir. Cek koneksi.</div>';
+        $('user-pick').innerHTML = '<div style="text-align:center;padding:12px;color:var(--red-dk);font-size:12px">❌ Gagal memuat kasir. Cek koneksi internet.</div>';
       });
     } else {
-      $('user-pick').innerHTML = '<div style="text-align:center;padding:16px;font-size:12px;color:var(--red-dk)">⚠️ Kode toko belum dikonfigurasi.</div>';
+      $('user-pick').innerHTML = '<div style="text-align:center;padding:12px;color:var(--red-dk);font-size:12px">⚠️ Kode toko belum dikonfigurasi.</div>';
     }
     return;
   }
+  // Sembunyikan tombol setup saat ada users
+  var setupWrap = document.getElementById('login-setup-btn-wrap');
+  if (setupWrap) setupWrap.style.display = 'none';
   $('user-pick').innerHTML = USERS.map(u =>
     '<div class="user-opt' + (ST.selId===u.id?' sel':'') + '" onclick="selectUser(' + u.id + ')">' +
     '<div class="u-ava" style="background:' + u.bg + ';color:' + u.tc + ';width:38px;height:38px">' + u.avatar + '</div>' +
@@ -9574,6 +9634,100 @@ async function setupSimpanAdmin() {
     if (btn) { btn.disabled = false; btn.textContent = '✅ Simpan & Mulai POS'; }
   }
 }
+
+// ═══════════════════════════════════════════════
+// SETUP AWAL DARI LOGIN SCREEN
+// ═══════════════════════════════════════════════
+function openLoginSetupModal() {
+  var modal = document.getElementById('login-setup-modal');
+  if (modal) modal.style.display = 'flex';
+  // Pre-fill info toko
+  var tokoNama = document.getElementById('lsm-toko-nama');
+  if (tokoNama) tokoNama.textContent = (CFG.logo||'🍜') + ' ' + (CFG.nama||'Toko') + ' · ID: ' + (CFG.restaurantId||'-');
+  // Reset form
+  ['lsm-nama','lsm-pin','lsm-pin2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var errEl = document.getElementById('lsm-err');
+  if (errEl) errEl.style.display = 'none';
+  setTimeout(function(){ var el=document.getElementById('lsm-nama'); if(el) el.focus(); }, 100);
+}
+
+function closeLoginSetupModal() {
+  var modal = document.getElementById('login-setup-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function loginSetupSimpan() {
+  var nama = (document.getElementById('lsm-nama')||{}).value.trim();
+  var pin1 = (document.getElementById('lsm-pin')||{}).value.trim();
+  var pin2 = (document.getElementById('lsm-pin2')||{}).value.trim();
+  var errEl = document.getElementById('lsm-err');
+  var btn = document.getElementById('lsm-btn');
+
+  function showErr(msg) {
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  }
+
+  if (!nama) { showErr('Nama admin wajib diisi'); return; }
+  if (!pin1 || pin1.length !== 4 || !/^[0-9]{4}$/.test(pin1)) {
+    showErr('PIN harus tepat 4 digit angka'); return;
+  }
+  if (pin1 !== pin2) { showErr('Konfirmasi PIN tidak cocok'); return; }
+  if (!CFG.restaurantId) { showErr('Kode toko tidak ditemukan. Refresh dan coba lagi.'); return; }
+
+  if (errEl) errEl.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+
+  try {
+    if (!CFG.sbUrl) {
+      CFG.sbUrl = 'https://lztdvlrunspmcoewfjcg.supabase.co';
+      CFG.sbKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4';
+    }
+    var sb2 = window.supabase.createClient(CFG.sbUrl, CFG.sbKey);
+
+    // Hash PIN dengan SHA-256
+    var enc = new TextEncoder().encode(pin1);
+    var buf = await crypto.subtle.digest('SHA-256', enc);
+    var pinHash = Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+
+    var initials = nama.split(' ').map(function(w){ return w[0]||''; }).join('').substr(0,2).toUpperCase();
+    var allPerms = {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1};
+
+    var res = await sb2.from('users').insert({
+      restaurant_id: CFG.restaurantId,
+      nama: nama,
+      role: 'admin',
+      pin_hash: pinHash,
+      perms: allPerms
+    }).select('id').single();
+
+    if (res.error) throw res.error;
+
+    // Tutup modal
+    closeLoginSetupModal();
+
+    // Tambah ke USERS lokal dan render login
+    USERS.length = 0;
+    USERS.push({ id:1, name:nama, role:'admin', pin:pinHash,
+      avatar:initials, bg:'#A29BFE', tc:'#3C3489', perms:allPerms });
+
+    // Sembunyikan tombol setup
+    var wrap = document.getElementById('login-setup-btn-wrap');
+    if (wrap) wrap.style.display = 'none';
+
+    renderLogin();
+    showNotif('✅ Akun admin "' + nama + '" berhasil dibuat! Silakan login.', '#00B894');
+
+  } catch(e) {
+    showErr('Gagal menyimpan: ' + (e.message||'Cek koneksi internet'));
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Buat Akun & Mulai POS'; }
+  }
+}
+
+// Tutup modal setup saat klik di luar
+document.addEventListener('click', function(e) {
+  var modal = document.getElementById('login-setup-modal');
+  if (modal && e.target === modal) closeLoginSetupModal();
+});
 </script>
 
 
