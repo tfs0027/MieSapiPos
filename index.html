@@ -2174,17 +2174,50 @@ function renderPinDots() {
 
 function pinKey(k) {
   $('pin-err').style.display = 'none';
-  if (k === '←') ST.pin = ST.pin.slice(0,-1);
-  else if (k === '✓') checkPin();
-  else if (ST.pin.length < 4) ST.pin += k;
+  if (k === '←') { ST.pin = ST.pin.slice(0,-1); renderPinDots(); return; }
+  if (k === '✓') { checkPin(); return; }
+  if (ST.pin.length < 4) ST.pin += k;
   renderPinDots();
-  if (ST.pin.length === 4 && k !== '✓') checkPin();
+  // Auto-check hanya setelah digit ke-4 selesai ditambahkan
+  if (ST.pin.length === 4) {
+    // Delay kecil agar titik ke-4 sempat muncul sebelum proses
+    setTimeout(checkPin, 120);
+  }
 }
 
-function checkPin() {
-  const u = USERS.find(x => x.id === ST.selId);
-  if (u && ST.pin === u.pin) doLogin(u);
-  else { ST.pin = ''; renderPinDots(); $('pin-err').style.display = 'block'; }
+async function checkPin() {
+  var u = USERS.find(function(x){ return x.id === ST.selId; });
+  if (!u) { $('pin-err').style.display = 'block'; ST.pin = ''; renderPinDots(); return; }
+
+  var inputPin = ST.pin;
+  var storedPin = u.pin || '';
+
+  // Deteksi apakah pin tersimpan sebagai hash SHA-256 (64 hex chars) atau plain
+  var isHashed = /^[0-9a-f]{64}$/.test(storedPin);
+  var match = false;
+
+  if (isHashed) {
+    // Hash input PIN lalu bandingkan
+    try {
+      var enc = new TextEncoder().encode(inputPin);
+      var buf = await crypto.subtle.digest('SHA-256', enc);
+      var inputHash = Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+      match = (inputHash === storedPin);
+    } catch(e) {
+      match = false;
+    }
+  } else {
+    // Fallback: bandingkan langsung (PIN plain, untuk kompatibilitas)
+    match = (inputPin === storedPin);
+  }
+
+  if (match) {
+    doLogin(u);
+  } else {
+    ST.pin = '';
+    renderPinDots();
+    $('pin-err').style.display = 'block';
+  }
 }
 
 function doLogin(u) {
@@ -4945,7 +4978,7 @@ function renderUsers() {
     '<div style="flex:1"><div style="font-size:14px;font-weight:700">' + u.name + '</div>' +
     '<div style="display:flex;align-items:center;gap:7px;margin-top:3px">' +
     '<span class="badge ' + (u.role==='admin'?'b-purple':'b-green') + '">' + (u.role==='admin'?'👑 Admin':'🧾 Kasir') + '</span>' +
-    '<span style="font-size:10px;color:var(--txt3)">PIN: ' + '●'.repeat(u.pin.length) + '</span></div></div>' +
+    '<span style="font-size:10px;color:var(--txt3)">PIN: ●●●●</span></div></div>' +
     (u.id!==ST.cu.id ? '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="deleteUser('+u.id+')">Hapus</button>' : '') +
     '</div>' +
     '<div class="tog-wrap">' +
@@ -4979,19 +5012,45 @@ function openUserModal() {
   ['fu-name','fu-pin'].forEach(x=>$(x).value='');
 }
 
-function saveUser() {
+async function saveUser() {
   const name = $('fu-name').value.trim();
   const pin = String($('fu-pin').value).slice(0,4);
-  if (!name||pin.length!==4) { showNotif('Nama & PIN 4 digit wajib diisi','#E17055'); return; }
+  if (!name || pin.length !== 4 || !/^[0-9]{4}$/.test(pin)) {
+    showNotif('Nama & PIN 4 digit angka wajib diisi','#E17055'); return;
+  }
   const role = $('fu-role').value;
   const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
   const colors = {admin:{bg:'#A29BFE',tc:'#3C3489'},kasir:{bg:'#00B894',tc:'#007A63'}};
-  const c = colors[role];
+  const c = colors[role] || colors.kasir;
   const defaultPerms = role==='admin'
-    ? {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1}
+    ? {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1}
     : {order:1,meja:1,shift:1,menu:0,stok:0,laporan:0,riwayat:1,users:0,settings:0,diskon:1,void_trx:0,edit_harga:0};
-  USERS.push({id:Date.now(),name,pin,role,avatar:initials,bg:c.bg,tc:c.tc,perms:{...defaultPerms}});
-  closeModal('user-modal'); renderUsers(); showNotif('User ' + name + ' ditambahkan');
+
+  // Hash PIN sebelum simpan
+  let pinHash = pin;
+  try {
+    const enc = new TextEncoder().encode(pin);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    pinHash = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  } catch(e) { console.warn('Hash PIN gagal, simpan plain'); }
+
+  const newUser = {id:Date.now(), name, pin:pinHash, role, avatar:initials, bg:c.bg, tc:c.tc, perms:{...defaultPerms}};
+  USERS.push(newUser);
+
+  // Sync ke Supabase jika terhubung
+  if (_sb && CFG.restaurantId) {
+    try {
+      await _sb.from('users').insert({
+        restaurant_id: CFG.restaurantId,
+        nama: name, role: role,
+        pin_hash: pinHash, perms: defaultPerms
+      });
+    } catch(e) { console.warn('Sync user ke Supabase gagal:', e.message); }
+  }
+
+  closeModal('user-modal');
+  renderUsers();
+  showNotif('✅ ' + name + ' berhasil ditambahkan', '#00B894');
 }
 
 // ═══════════════════════════════
