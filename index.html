@@ -5236,9 +5236,22 @@ async function prosesTutupKasir() {
   await fetchShiftOnlineOrders(sh);
   const totalPenjualan = sh.transaksi.reduce((a,t)=>a+t.total,0);
   const totalPengeluaran = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
-  const tunai = sh.transaksi.filter(t=>t.pay==='cash').reduce((a,t)=>a+t.total,0);
-  const qris = sh.transaksi.filter(t=>t.pay==='qris').reduce((a,t)=>a+t.total,0);
-  const transfer = sh.transaksi.filter(t=>t.pay==='transfer').reduce((a,t)=>a+t.total,0);
+
+  // FIX: hitung tunai/qris/transfer dengan benar termasuk split payment
+  function getPayAmount(trx, method) {
+    if (trx.pay === method) return trx.total;
+    if (trx.pay === 'split' && trx.splitPay) {
+      var sp = trx.splitPay;
+      var amt = 0;
+      if (sp.m1 === method) amt += Math.min(sp.a1||0, trx.total);
+      if (sp.m2 === method) amt += Math.min(sp.a2||0, trx.total);
+      return amt;
+    }
+    return 0;
+  }
+  const tunai    = sh.transaksi.reduce((a,t)=>a+getPayAmount(t,'cash'),0);
+  const qris     = sh.transaksi.reduce((a,t)=>a+getPayAmount(t,'qris'),0);
+  const transfer = sh.transaksi.reduce((a,t)=>a+getPayAmount(t,'transfer'),0);
   // Hitung onlineCod dari shift ini (sudah di-fetch oleh fetchShiftOnlineOrders)
   const onlineOrdersShift = sh.onlineOrders || [];
   const onlineCodShift = onlineOrdersShift.filter(function(o){
@@ -5636,6 +5649,24 @@ function renderShiftHist() {
 
 function lihatLaporanShift(id) {
   const sh = ST.shifts.find(s=>s.id===id); if(!sh) return;
+
+  // FIX: rekalkkulasi tunai/qris/transfer dari data transaksi (include split payment)
+  function _getPayAmt(trx, method) {
+    if (trx.pay === method) return trx.total;
+    if (trx.pay === 'split' && trx.splitPay) {
+      var sp = trx.splitPay, amt = 0;
+      if (sp.m1 === method) amt += Math.min(sp.a1||0, trx.total);
+      if (sp.m2 === method) amt += Math.min(sp.a2||0, trx.total);
+      return amt;
+    }
+    return 0;
+  }
+  var _trx = sh.transaksi || [];
+  var _tunai    = _trx.length ? _trx.reduce(function(a,t){return a+_getPayAmt(t,'cash');},0)    : (sh.tunai||0);
+  var _qris     = _trx.length ? _trx.reduce(function(a,t){return a+_getPayAmt(t,'qris');},0)    : (sh.qris||0);
+  var _transfer = _trx.length ? _trx.reduce(function(a,t){return a+_getPayAmt(t,'transfer');},0): (sh.transfer||0);
+  var _splitCount = _trx.filter(function(t){return t.pay==='split';}).length;
+
   const sc = sh.selisih===0?'var(--green-dk)':sh.selisih>0?'var(--blue-dk)':'var(--red-dk)';
   const st = sh.selisih===0?'Pas ✓':sh.selisih>0?'+'+fmt(sh.selisih)+' (Lebih)':fmt(sh.selisih)+' (Kurang)';
   const catMap={};sh.pengeluaran.forEach(p=>{catMap[p.kategori]=(catMap[p.kategori]||0)+p.nominal;});
@@ -5652,9 +5683,9 @@ function lihatLaporanShift(id) {
   html += '<hr class="r-d"><div class="r-c r-b">RINGKASAN PENJUALAN</div><hr class="r-d">';
   html += '<div class="r-r"><span>Jumlah Transaksi</span><b>' + sh.transaksi.length + ' trx</b></div>';
   html += '<div class="r-r r-income r-b"><span>Total Penjualan</span><span>+' + fmt(sh.totalPenjualan) + '</span></div>';
-  html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— Tunai</span><span>' + fmt(sh.tunai) + '</span></div>';
-  html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— QRIS</span><span>' + fmt(sh.qris) + '</span></div>';
-  html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— Transfer</span><span>' + fmt(sh.transfer) + '</span></div>';
+  html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— Tunai</span><span>' + fmt(_tunai) + '</span></div>';
+  html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— QRIS</span><span>' + fmt(_qris) + '</span></div>';
+  html += '<div class="r-r" style="padding-left:12px;color:var(--txt2)"><span>— Transfer</span><span>' + fmt(_transfer) + '</span></div>';
   html += '<hr class="r-d"><div class="r-c r-b">REKAP PENGELUARAN</div><hr class="r-d">';
   if (sh.pengeluaran.length) {
     sh.pengeluaran.forEach(p => {
@@ -5689,7 +5720,7 @@ function lihatLaporanShift(id) {
   }
   // Hitung ekspektasi kas: modal + tunai kasir + COD online (gunakan sh.onlineCod jika ada)
   var _onlineCodShift = sh.onlineCod || 0;
-  var _ekspektasiRecalc = sh.modalAwal + (sh.tunai||0) + _onlineCodShift;
+  var _ekspektasiRecalc = sh.modalAwal + _tunai + _onlineCodShift;
   // Jika ekspektasiKas tersimpan sudah include onlineCod (shift baru), pakai langsung
   // Jika tidak (shift lama tanpa onlineCod), pakai hasil rekalkkulasi
   var _ekspDisplay = (_onlineCodShift > 0 || sh.ekspektasiKas === (sh.modalAwal + sh.tunai))
@@ -5700,7 +5731,7 @@ function lihatLaporanShift(id) {
   var _st = _selisihRecalc===0?'Pas ✓':_selisihRecalc>0?'+'+fmt(_selisihRecalc)+' (Lebih)':fmt(_selisihRecalc)+' (Kurang)';
   html += '<hr class="r-d"><div class="r-c r-b">POSISI KAS TUNAI</div><hr class="r-d">';
   html += '<div class="r-r"><span>Modal Awal</span><span>' + fmt(sh.modalAwal) + '</span></div>';
-  html += '<div class="r-r"><span>+ Penerimaan Tunai Kasir</span><span>+' + fmt(sh.tunai||0) + '</span></div>';
+  html += '<div class="r-r"><span>+ Penerimaan Tunai Kasir</span><span>+' + fmt(_tunai) + '</span></div>';
   if (_onlineCodShift > 0) {
     var _onlineCodCount = sh.onlineOrders ? sh.onlineOrders.filter(function(o){return (o.pay||'cod')==='cod';}).length : '?';
     html += '<div class="r-r"><span>+ COD Online (' + _onlineCodCount + ' order)</span><span>+' + fmt(_onlineCodShift) + '</span></div>';
