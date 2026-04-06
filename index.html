@@ -2822,9 +2822,9 @@ function simpanEditMeja() {
   t.capacity = cap;
   t.status = $('em-status').value;
   closeModal('edit-meja-modal');
-  renderMeja();
-  updateMejaSelect();
-  showNotif('Meja ' + num + ' diperbarui');
+  renderMeja(); updateMejaSelect();
+  syncRestoStatusToSupabase();
+  showNotif('✅ Meja ' + num + ' diperbarui');
 }
 
 function hapusMeja() {
@@ -2834,16 +2834,17 @@ function hapusMeja() {
   if (!confirm('Hapus Meja ' + t.num + '?')) return;
   ST.tables = ST.tables.filter(function(x){return x.id!==_editMejaId;});
   closeModal('edit-meja-modal');
-  renderMeja();
-  updateMejaSelect();
-  showNotif('Meja ' + t.num + ' dihapus','#A8A5BE');
+  renderMeja(); updateMejaSelect();
+  syncRestoStatusToSupabase();
+  showNotif('🗑️ Meja ' + t.num + ' dihapus','#A8A5BE');
 }
 
 function addMeja() {
   const num = String(ST.tables.length+1).padStart(2,'0');
   ST.tables.push({id:Date.now(),num,status:'available',capacity:4,order:null});
-  renderMeja();
-  showNotif('Meja ' + num + ' ditambahkan');
+  renderMeja(); updateMejaSelect();
+  syncRestoStatusToSupabase();
+  showNotif('✅ Meja ' + num + ' ditambahkan');
 }
 
 function updateMejaSelect() {
@@ -3445,6 +3446,7 @@ function openRestokModal(id) {
   s.qty += jumlah;
   addStokLog(s.id, s.name, 'masuk', jumlah, s.unit, sblm, s.qty, 'Restock manual');
   renderStok();
+  syncRestoStatusToSupabase();
   showNotif(s.name + ': +' + jumlah + ' ' + s.unit, '#00B894');
 }
 
@@ -3461,6 +3463,7 @@ function penyesuaianStok(id) {
     ket + (selisih>=0?' (+'+selisih+')':' ('+selisih+')')
   );
   renderStok();
+  syncRestoStatusToSupabase();
   showNotif('Penyesuaian stok ' + s.name + ': ' + sblm + ' → ' + baru + ' ' + s.unit);
 }
 
@@ -3618,7 +3621,9 @@ function saveStok() {
     ST.stocks.push({...data,id:newId});
     if(newQty>0) addStokLog(newId, name, 'masuk', newQty, data.unit, 0, newQty, 'Stok awal: '+ket);
   }
-  closeModal('stok-modal'); renderStok(); showNotif('Stok disimpan');
+  closeModal('stok-modal'); renderStok();
+  syncRestoStatusToSupabase();
+  showNotif('✅ Stok disimpan');
 }
 
 // ═══════════════════════════════
@@ -4369,6 +4374,18 @@ async function autoSyncFromSupabase() {
           if (cfg.qrisNama) CFG.qrisNama = cfg.qrisNama;
           if (cfg.qrisId) CFG.qrisId = cfg.qrisId;
           if (cfg.kurirList) CFG.kurirList = cfg.kurirList;
+          // FIX: load meja & stok dari Supabase per toko
+          if (cfg.tables && cfg.tables.length) {
+            // Hanya replace jika dari toko yang sama dan data lokal belum ada
+            ST.tables = cfg.tables.map(function(t){
+              return {id:t.id,num:t.num,status:t.status||'available',capacity:t.capacity||4,order:null};
+            });
+          }
+          if (cfg.stocks && cfg.stocks.length) {
+            ST.stocks = cfg.stocks.map(function(s){
+              return {id:s.id,name:s.name,cat:s.cat||'Umum',qty:s.qty||0,unit:s.unit||'pcs',min:s.min||0,cost:s.cost||0};
+            });
+          }
         }
         saveCFG();
         var sn = document.getElementById('sb-name-el');
@@ -7131,7 +7148,14 @@ async function syncRestoStatusToSupabase(){
       service: CFG.service||0,
       serviceFlat: CFG.serviceFlat||0,
       serviceNama: CFG.serviceNama||'Biaya Layanan',
-      kurirList: CFG.kurirList||[],  // FIX Task 3: simpan kurir per toko di Supabase
+      kurirList: CFG.kurirList||[],
+      // FIX: simpan meja & stok per toko ke Supabase
+      tables: ST.tables ? ST.tables.map(function(t){
+        return {id:t.id,num:t.num,capacity:t.capacity,status:t.status==='occupied'?'available':t.status,order:null};
+      }) : [],
+      stocks: ST.stocks ? ST.stocks.map(function(s){
+        return {id:s.id,name:s.name,cat:s.cat,qty:s.qty,unit:s.unit,min:s.min,cost:s.cost||0};
+      }) : [],
     };
     await _sb.from('restaurants').update({cfg: cfgToSync}).eq('id',CFG.restaurantId);
   }catch(e){ console.warn('syncRestoStatus:', e.message); }
