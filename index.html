@@ -2928,7 +2928,7 @@ function processPayment() {
     items: ST.cart.map(c => ({name:c.name, qty:c.qty, price:c.price, note:c.note||'', varLabel:c.varLabel||'', extraPrice:c.extraPrice||0, discPct:c.discPct||0, discAmt:c.discAmt||0})),
     orderNote:ST.orderNote||'',
     subtotal:sub, disc, discAmt, tax, total:grand,
-    pay:ST.payMethod, cashRec, change, kasir:ST.cu.name, shiftId:ST.currentShift.id,
+    pay:ST.payMethod, cashRec, change, kasir:ST.cu.name, userId:ST.cu.id, shiftId:ST.currentShift.id,
     memberId: _cartMemberId || null,
     memberNama: _cartMemberId ? (ST.members.find(function(x){return x.id===_cartMemberId;})||{}).nama || '' : '',
     poinEarned: _cartMemberId ? Math.floor(grand / 1000) * POIN_PER_RUPIAH : 0,
@@ -4349,10 +4349,16 @@ async function autoSyncFromSupabase() {
 
     // 1. Info toko (nama, logo)
     try {
-      var rRes = await _sb.from('restaurants').select('nama,logo,cfg').eq('id', rid).single();
+      var rRes = await _sb.from('restaurants').select('nama,logo,cfg,lat,lng,ongkir_per_km,ongkir_min_km,ongkir_free_above').eq('id', rid).single();
       if (rRes.data) {
         if (rRes.data.nama) { CFG.nama = rRes.data.nama; }
         if (rRes.data.logo) { CFG.logo = rRes.data.logo; }
+        // FIX 1: Load lat/lng & ongkir dari Supabase (lokasi toko per restaurantId)
+        if (rRes.data.lat != null) CFG.lat = rRes.data.lat;
+        if (rRes.data.lng != null) CFG.lng = rRes.data.lng;
+        if (rRes.data.ongkir_per_km != null) CFG.ongkirPerKm = rRes.data.ongkir_per_km;
+        if (rRes.data.ongkir_min_km != null) CFG.ongkirMinKm = rRes.data.ongkir_min_km;
+        if (rRes.data.ongkir_free_above != null) CFG.ongkirBebasAbove = rRes.data.ongkir_free_above;
         // Merge cfg jika ada
         if (rRes.data.cfg) {
           var cfg = rRes.data.cfg;
@@ -4362,7 +4368,6 @@ async function autoSyncFromSupabase() {
           if (cfg.qrisImg) CFG.qrisImg = cfg.qrisImg;
           if (cfg.qrisNama) CFG.qrisNama = cfg.qrisNama;
           if (cfg.qrisId) CFG.qrisId = cfg.qrisId;
-          // FIX Task 3: load kurirList dari Supabase (per toko)
           if (cfg.kurirList) CFG.kurirList = cfg.kurirList;
         }
         saveCFG();
@@ -6637,6 +6642,19 @@ async function flushPendingQueue() {
 async function _doSyncTrxToSupabase(trx) {
   var rid = CFG.restaurantId;
   try {
+    // Konversi tanggal+jam lokal ke ISO timestamp untuk created_at
+    var _trxCreatedAt = (function() {
+      try {
+        if (trx.date && trx.time) {
+          // date: "2025-04-06", time: "14.30" atau "14:30"
+          var sep = trx.time.includes(':') ? ':' : '.';
+          var tp = trx.time.split(sep);
+          var d = new Date(trx.date + 'T' + String(parseInt(tp[0])).padStart(2,'0') + ':' + String(parseInt(tp[1]||0)).padStart(2,'0') + ':00');
+          if (!isNaN(d)) return d.toISOString();
+        }
+      } catch(e) {}
+      return new Date().toISOString();
+    })();
     var data = {
       restaurant_id: rid,
       trx_code: trx.id,
@@ -6650,10 +6668,12 @@ async function _doSyncTrxToSupabase(trx) {
       pay_method: trx.pay==='split'?'split':trx.pay,
       split_pay: trx.splitPay ? JSON.stringify(trx.splitPay) : null,
       kasir_nama: trx.kasir||'',
+      kasir_id: trx.userId || null,
       items_json: trx.items ? JSON.stringify(trx.items) : '[]',
       order_note: trx.orderNote||'',
       voided: trx.voided||false,
-      void_alasan: trx.voidAlasan||''
+      void_alasan: trx.voidAlasan||'',
+      created_at: _trxCreatedAt  // FIX 2: simpan waktu transaksi yang akurat
     };
     // Coba upsert dulu (update jika sudah ada, insert jika belum)
     var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code,restaurant_id'});
