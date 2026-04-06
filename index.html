@@ -1902,7 +1902,7 @@ let CFG = {
   }, // [{id, nama, hp, aktif}]
   isOpen:true, closedNote:'Maaf, warung sedang tutup. Silakan coba lagi nanti.',
   qrisImg:null,
-  sbUrl:'https://lztdvlrunspmcoewfjcg.supabase.co', sbKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4', restaurantId:'49ce0232-ce6d-4b67-bcb6-4e8df70844de',
+  sbUrl:'https://lztdvlrunspmcoewfjcg.supabase.co', sbKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4', restaurantId:'',
   banks:[
     {nama:'Bank BCA', norek:'1234-5678-90', an:''},
     {nama:'Bank BNI', norek:'0987-6543-21', an:''},
@@ -1915,7 +1915,18 @@ let CFG = {
   wifiProto:'raw', escposUrl:'', escposKey:'', btName:'',
   copies:'1', autoprint:'1',
 };
-try { const s = localStorage.getItem(CFG_KEY); if(s) CFG = Object.assign(CFG, JSON.parse(s)); } catch(e){}
+try {
+  const s = localStorage.getItem(CFG_KEY);
+  if (s) {
+    const saved = JSON.parse(s);
+    CFG = Object.assign(CFG, saved);
+    // FIX #4: URL param ?r= selalu menang atas localStorage
+    const _urlR = new URLSearchParams(window.location.search).get('r');
+    if (_urlR && _urlR.length > 10) {
+      CFG.restaurantId = _urlR;
+    }
+  }
+} catch(e){}
 const saveCFG = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch(e){} };
 
 // ═══════════════════════════════
@@ -1949,6 +1960,7 @@ function getShiftKey() {
 function saveShiftLocal() {
   try {
     localStorage.setItem(getShiftKey(), JSON.stringify({
+      restaurantId: CFG.restaurantId || '',  // FIX #3b: simpan restaurantId agar bisa divalidasi saat load
       currentShift: ST.currentShift,
       shifts: ST.shifts,
       trxCounter: ST.trxCounter,
@@ -1960,13 +1972,22 @@ function saveShiftLocal() {
 
 function loadShiftLocal() {
   try {
+    var currentRid = CFG.restaurantId || '';
     var s = localStorage.getItem(getShiftKey());
     // Migrasi: jika key baru kosong, coba baca key lama
     if (!s) s = localStorage.getItem('wkpos_shift');
     if (!s) return;
     // Simpan ke key baru agar migrasi permanen
-    try { localStorage.setItem(getShiftKey(), s); } catch(e){}
+    if (currentRid) { try { localStorage.setItem(getShiftKey(), s); } catch(e){} }
     var d = JSON.parse(s);
+    // FIX #3: Validasi restaurantId — jangan load data toko lain
+    // Cek apakah data lokal berasal dari toko yang sama
+    if (d.restaurantId && currentRid && d.restaurantId !== currentRid) {
+      console.warn('[WarungKu] Data lokal dari toko berbeda (' + d.restaurantId + '), diabaikan.');
+      ST.transactions = [];
+      ST._onlineOrdersCache = [];
+      return;
+    }
     if (d.currentShift) ST.currentShift = d.currentShift;
     if (d.shifts) ST.shifts = d.shifts;
     if (d.trxCounter) ST.trxCounter = d.trxCounter;
@@ -4086,6 +4107,8 @@ async function autoSyncFromSupabase() {
   _autoSyncing = true;
   var rid = CFG.restaurantId;
   try {
+    // FIX #5: Bersihkan cache lama sebelum sync — pastikan tidak ada sisa data toko lain
+    ST._onlineOrdersCache = [];
     var d90 = new Date(); d90.setDate(d90.getDate()-90);
     var iso90 = d90.toISOString();
 
@@ -9209,6 +9232,29 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
+// ── Kode Toko / Restaurant ID Auto-config ─────────────────────────────────
+(function initFromUrl() {
+  // Check URL param ?r=RESTAURANT_ID
+  var params = new URLSearchParams(window.location.search);
+  var rId = params.get('r');
+  if (rId && rId.length > 10) {
+    // Auto-configure from URL
+    CFG.restaurantId = rId;
+    // Also set default SB config if not set
+    if (!CFG.sbUrl) {
+      CFG.sbUrl = 'https://lztdvlrunspmcoewfjcg.supabase.co';
+      CFG.sbKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4';
+    }
+    saveCFG();
+    // Remove ?r= from URL bar (clean URL)
+    try {
+      var cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } catch(e) {}
+    console.log('✅ Restaurant ID configured from URL:', rId);
+  }
+})();
+
 // ── Restore session on page load ──────────────────────────────────────────
 (function restoreSession() {
   try {
@@ -9235,31 +9281,6 @@ document.addEventListener('visibilitychange', function() {
   } catch(e) { console.warn('restoreSession:', e); }
 })();
 checkSplashOrLogin();
-
-
-
-// ── Kode Toko / Restaurant ID Auto-config ─────────────────────────────────
-(function initFromUrl() {
-  // Check URL param ?r=RESTAURANT_ID
-  var params = new URLSearchParams(window.location.search);
-  var rId = params.get('r');
-  if (rId && rId.length > 10) {
-    // Auto-configure from URL
-    CFG.restaurantId = rId;
-    // Also set default SB config if not set
-    if (!CFG.sbUrl) {
-      CFG.sbUrl = 'https://lztdvlrunspmcoewfjcg.supabase.co';
-      CFG.sbKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4';
-    }
-    saveCFG();
-    // Remove ?r= from URL bar (clean URL)
-    try {
-      var cleanUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
-    } catch(e) {}
-    console.log('✅ Restaurant ID configured from URL:', rId);
-  }
-})();
 
 function checkSplashOrLogin() {
   // Already configured → go to login
