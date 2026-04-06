@@ -5112,9 +5112,11 @@ function prosesBukaKasir() {
   sbSyncShift(ST.currentShift);
 }
 
-function showTutupModal() {
+async function showTutupModal() {
   if (!isOpen()) { showNotif('Tidak ada shift aktif','#E17055'); return; }
   const sh = ST.currentShift;
+  // Fetch online orders untuk shift ini langsung dari Supabase (paling akurat)
+  await fetchShiftOnlineOrders(sh);
   const totalPenjualan = sh.transaksi.reduce((a,t)=>a+t.total,0);
   const totalGrand = totalPenjualan + filterOnlineByShift(sh.onlineOrders||[], sh).reduce(function(a,o){return a+o.total;},0);
   const totalPengeluaran = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
@@ -5221,10 +5223,12 @@ function hitungSelisih() {
   else { box.style.background='var(--red-bg)'; box.style.color='var(--red-dk)'; box.innerHTML='<span>Selisih Kas</span><span>' + fmt(selisih) + ' (Kurang)</span>'; }
 }
 
-function prosesTutupKasir() {
+async function prosesTutupKasir() {
   const sh = ST.currentShift;
   const fisik = parseFloat($('kas-fisik').value);
   if (isNaN(fisik)) { showNotif('Masukkan kas fisik','#E17055'); return; }
+  // Fetch ulang online orders shift ini dari Supabase sebelum finalisasi
+  await fetchShiftOnlineOrders(sh);
   const totalPenjualan = sh.transaksi.reduce((a,t)=>a+t.total,0);
   const totalPengeluaran = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
   const tunai = sh.transaksi.filter(t=>t.pay==='cash').reduce((a,t)=>a+t.total,0);
@@ -9814,20 +9818,30 @@ document.addEventListener('click', function(e) {
 // Helper: konversi tanggal shift format lokal ke ISO string untuk query Supabase
 function parseTanggalShift(tanggalStr) {
   if (!tanggalStr) return null;
-  var months = {Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,Jun:5,Jul:6,Agu:7,Sep:8,Okt:9,Nov:10,Des:11};
-  var str = (tanggalStr||'').trim();
-  // ISO format sudah OK
+  // Hapus titik dari singkatan bulan: "Apr." -> "Apr", "Jan." -> "Jan"
+  var str = (tanggalStr||'').trim().replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
+  // ISO format: "2025-04-05"
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str + 'T00:00:00.000Z';
-  // Format "05 Apr 2025"
-  var parts = str.split(' ');
-  if (parts.length === 3) {
+  // Format lokal: "05 Apr 2025" atau "5 Apr 2025"
+  var months = {
+    Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,Jun:5,Jul:6,Agu:7,Sep:8,Okt:9,Nov:10,Des:11,
+    'Januari':0,'Februari':1,'Maret':2,'April':3,'Mei':4,'Juni':5,
+    'Juli':6,'Agustus':7,'September':8,'Oktober':9,'November':10,'Desember':11,
+    'Jan':0,'Feb':1,'Mar':2,'May':4,'Jun':5,'Jul':6,'Aug':7,'Sep':8,'Oct':9,'Nov':10,'Dec':11
+  };
+  var parts = str.split(' ').filter(Boolean);
+  if (parts.length >= 3) {
     var d = parseInt(parts[0]);
-    var m = months[parts[1]];
+    var monthKey = parts[1].replace('.','');
+    var m = months[monthKey];
     var y = parseInt(parts[2]);
     if (!isNaN(d) && m !== undefined && !isNaN(y)) {
       return new Date(y, m, d, 0, 0, 0, 0).toISOString();
     }
   }
+  // Last resort: try native Date parse
+  var native = new Date(str);
+  if (!isNaN(native)) return native.toISOString();
   return null;
 }
 
@@ -9853,6 +9867,66 @@ function filterOnlineByShift(orders, shift) {
     if (close && t > close) return false;
     return true;
   });
+}
+
+// Fetch online orders untuk 1 shift spesifik, langsung dari Supabase
+// Ini SATU-SATUNYA sumber kebenaran untuk rekap tutup kasir
+async function fetchShiftOnlineOrders(shift) {
+  if (!_sb || !CFG.restaurantId || !shift) return;
+  try {
+    // Tentukan batas waktu shift — isoOpen adalah sumber paling akurat
+    var isoFrom = shift.isoOpen || null;
+    // Fallback: bangun dari tanggal + waktuBuka
+    if (!isoFrom && shift.tanggal && shift.waktuBuka) {
+      var ts = parseTanggalShift(shift.tanggal);
+      if (ts) {
+        var dFrom = new Date(ts);
+        var tp = (shift.waktuBuka||'00:00').replace(/\./g, ':').split(':');
+        dFrom.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0, 0, 0);
+        isoFrom = dFrom.toISOString();
+      }
+    }
+    // Batas akhir: isoClose jika shift sudah tutup, atau sekarang
+    var isoTo = shift.isoClose || new Date().toISOString();
+
+    if (!isoFrom) {
+      // Tidak bisa tentukan waktu buka — jangan filter, pakai data cache yang ada
+      console.warn('[WarungKu] fetchShiftOnlineOrders: isoFrom tidak bisa ditentukan, skip fetch');
+      return;
+    }
+
+    var q = _sb.from('online_orders')
+      .select('order_code,total,ongkir,subtotal,pay_method,pay_status,nama_pemesan,created_at,catatan,order_type')
+      .eq('restaurant_id', CFG.restaurantId)
+      .eq('status', 'delivered')
+      .gte('created_at', isoFrom)
+      .lte('created_at', isoTo)
+      .order('created_at', {ascending: false});
+
+    var res = await q;
+    if (res.error) throw res.error;
+
+    var orders = (res.data || []).map(function(o) {
+      return {
+        id: o.order_code, total: o.total||0, ongkir: o.ongkir||0,
+        subtotal: o.subtotal||0,
+        pay: o.pay_method, pay_status: o.pay_status,
+        nama: o.nama_pemesan,
+        time: o.created_at ? new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-',
+        created_at: o.created_at,
+        catatan: o.catatan||'',
+        order_type: o.order_type||'delivery'
+      };
+    });
+
+    // Update shift dengan data yang sudah terfilter dengan benar
+    shift.onlineOrders = orders;
+    console.log('[WarungKu] fetchShiftOnlineOrders:', orders.length, 'order dari', isoFrom, 'sampai', isoTo);
+  } catch(e) {
+    console.warn('[WarungKu] fetchShiftOnlineOrders error:', e.message);
+    // Fallback ke filter client-side jika Supabase gagal
+    shift.onlineOrders = filterOnlineByShift(ST._onlineOrdersCache || [], shift);
+  }
 }
 </script>
 
