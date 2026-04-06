@@ -2359,7 +2359,7 @@ function nav(p) {
   if (p === 'laporan') {
     renderLaporan();
     // Auto-fetch dari Supabase berdasarkan restaurant_id (tanpa confirm)
-    if (_sb && CFG.restaurantId) fetchLaporanFromSupabase();
+    if (_sb && CFG.restaurantId && !_autoSyncing) fetchLaporanFromSupabase(); // skip jika autoSync sedang jalan
   }
   if (p === 'riwayat') renderRiwayat();
   if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders();
@@ -2946,8 +2946,8 @@ function processPayment() {
   addPoinAfterTrx(grand, _cartMemberId);
   clearCartMember();
   showNotif('✅ ' + id + ' berhasil!', '#00B894');
-  sbSyncTransaction(trx);
-  saveShiftLocal(); // simpan ke localStorage agar laporan bisa baca
+  saveShiftLocal(); // simpan ke localStorage DULU — pastikan tidak hilang walau Supabase gagal
+  sbSyncTransaction(trx); // lalu sync ke Supabase (async, tidak blocking)
   if (window._currentPage === 'laporan') renderLaporan();
   showReceipt(trx);
 }
@@ -3859,8 +3859,8 @@ function processPaymentSplit() {
   clearCartMember();
   renderShiftPage();
   showNotif('✅ Split '+id+' berhasil!','#00B894');
+  saveShiftLocal(); // simpan ke localStorage DULU
   sbSyncTransaction(trx);
-  saveShiftLocal();
   if (window._currentPage === 'laporan') renderLaporan();
   showReceipt(trx);
   ST.splitPay = null;
@@ -4292,7 +4292,11 @@ var _autoSyncing = false;
 
 async function autoSyncFromSupabase() {
   if (!_sb || !CFG.restaurantId) return;
-  if (_autoSyncing) { resetFetchFlags(); } // FIX F: jangan stuck
+  if (_autoSyncing) {
+    // Sudah ada sync berjalan — tunggu selesai dulu, jangan jalankan paralel
+    console.log('[WarungKu] autoSync sudah berjalan, skip');
+    return;
+  }
   _autoSyncing = true;
   var rid = CFG.restaurantId;
   try {
@@ -5213,6 +5217,7 @@ function hitungSelisih() {
     if(t.pay==='split'&&t.splitPay){var sp=t.splitPay;var nonCash=(sp.m1!=='cash'?sp.a1:0)+(sp.m2!=='cash'?sp.a2:0);return a+Math.max(0,t.total-nonCash);}
     return a;
   },0);
+  // Pakai sh.onlineOrders yang sudah di-fetch saat modal dibuka (fetchShiftOnlineOrders)
   const onlineCodSelisih = (sh.onlineOrders||[]).filter(function(o){return (o.pay||o.pay_method||'cod')==='cod';}).reduce(function(a,o){return a+o.total;},0);
   const ekspKas = sh.modalAwal + tunai + onlineCodSelisih;
   const fisik = parseFloat($('kas-fisik').value)||0;
@@ -5234,17 +5239,34 @@ async function prosesTutupKasir() {
   const tunai = sh.transaksi.filter(t=>t.pay==='cash').reduce((a,t)=>a+t.total,0);
   const qris = sh.transaksi.filter(t=>t.pay==='qris').reduce((a,t)=>a+t.total,0);
   const transfer = sh.transaksi.filter(t=>t.pay==='transfer').reduce((a,t)=>a+t.total,0);
-  const ekspKas = sh.modalAwal+tunai;
+  // Hitung onlineCod dari shift ini (sudah di-fetch oleh fetchShiftOnlineOrders)
+  const onlineOrdersShift = sh.onlineOrders || [];
+  const onlineCodShift = onlineOrdersShift.filter(function(o){
+    return (o.pay||o.pay_method||'cod')==='cod';
+  }).reduce(function(a,o){return a+o.total;},0);
+  const onlineQrisShift = onlineOrdersShift.filter(function(o){
+    return (o.pay||o.pay_method)==='qris';
+  }).reduce(function(a,o){return a+o.total;},0);
+  const onlineTransferShift = onlineOrdersShift.filter(function(o){
+    return (o.pay||o.pay_method)==='transfer';
+  }).reduce(function(a,o){return a+o.total;},0);
+  const onlineTotalShift = onlineOrdersShift.reduce(function(a,o){return a+o.total;},0);
+  // ekspKas = modal + tunai kasir + COD online (COD masuk kas fisik)
+  const ekspKas = sh.modalAwal + tunai + onlineCodShift;
   const now = new Date();
   var validOnline = _onlinePlatforms.filter(function(p){return p.jumlah>0;});
-  var totalOnline = validOnline.reduce(function(a,p){return a+p.jumlah;},0);
+  var totalOnlineManual = validOnline.reduce(function(a,p){return a+p.jumlah;},0);
   const closed = {
     ...sh, waktuTutup:fmtTime(now), status:'closed',
-    isoClose: now.toISOString(),  // FIX: simpan ISO timestamp penutupan shift
+    isoClose: now.toISOString(),
     totalPenjualan, totalPengeluaran, labaBersih:totalPenjualan-totalPengeluaran,
-    tunai, qris, transfer, ekspektasiKas:ekspKas, kasFisik:fisik,
+    tunai, qris, transfer,
+    onlineCod: onlineCodShift, onlineQris: onlineQrisShift, onlineTransfer: onlineTransferShift,
+    totalOnlineDigital: onlineTotalShift,
+    ekspektasiKas:ekspKas, kasFisik:fisik,
     selisih:fisik-ekspKas, catatanTutup:$('tutup-ket').value,
-    onlinePlatforms: validOnline, totalOnline,
+    onlinePlatforms: validOnline, totalOnline: totalOnlineManual,
+    onlineOrders: onlineOrdersShift,  // simpan orders final shift ini
   };
   ST.shifts.unshift(closed); ST.currentShift = null;
   closeModal('tutup-modal'); updateShiftTopbar(); renderShiftPage();
@@ -5309,7 +5331,7 @@ function renderShiftPage() {
       '<div class="metric"><div class="metric-lbl">Total Penjualan</div><div class="metric-val" style="color:var(--green)">' + fmt(totalP) + '</div><div class="metric-sub">' + sh.transaksi.length + ' transaksi</div></div>' +
       '<div class="metric"><div class="metric-lbl">Total Pengeluaran</div><div class="metric-val" style="color:var(--red)">' + fmt(totalK) + '</div><div class="metric-sub">' + sh.pengeluaran.length + ' item</div></div>' +
       '<div class="metric"><div class="metric-lbl">Laba Bersih Shift</div><div class="metric-val" style="color:' + (laba>=0?'var(--green)':'var(--red)') + '">' + fmt(laba) + '</div><div class="metric-sub">' + (laba>=0?'▲ Untung':'▼ Rugi') + '</div></div>' +
-      '<div class="metric"><div class="metric-lbl">Est. Kas Tunai</div><div class="metric-val">' + fmt(sh.modalAwal+tunai) + '</div></div>';
+      '<div class="metric"><div class="metric-lbl">Est. Kas Tunai</div><div class="metric-val">' + fmt(sh.modalAwal+tunai + (sh.onlineOrders||[]).filter(function(o){return (o.pay||'cod')==='cod';}).reduce(function(a,o){return a+o.total;},0)) + '</div><div class="metric-sub">Modal + Tunai + COD Online</div></div>';
     renderPengList(); renderShiftTrx();
   } else {
     bannerEl.innerHTML = '<div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
