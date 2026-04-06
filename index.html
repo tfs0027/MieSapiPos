@@ -4436,7 +4436,7 @@ async function autoSyncFromSupabase() {
             created_at: o.created_at
           };
         });
-        if (ST.currentShift) ST.currentShift.onlineOrders = ST._onlineOrdersCache;
+        if (ST.currentShift) ST.currentShift.onlineOrders = filterOnlineByShift(ST._onlineOrdersCache, ST.currentShift);
       }
     } catch(e) { console.warn('sync online orders:', e.message); }
 
@@ -4561,7 +4561,7 @@ async function fetchLaporanFromSupabase() {
           created_at: o.created_at
         };
       });
-      if (ST.currentShift) ST.currentShift.onlineOrders = ST._onlineOrdersCache;
+      if (ST.currentShift) ST.currentShift.onlineOrders = filterOnlineByShift(ST._onlineOrdersCache, ST.currentShift);
     }
 
     // 3. Pengeluaran dari expenses table
@@ -4657,7 +4657,7 @@ function renderLaporan() {
       });
       // Update cache dan currentShift
       ST._onlineOrdersCache = sbData;
-      if (ST.currentShift) ST.currentShift.onlineOrders = sbData;
+      if (ST.currentShift) ST.currentShift.onlineOrders = filterOnlineByShift(sbData, ST.currentShift);
       renderLaporan();
     });
   }
@@ -5093,6 +5093,8 @@ function prosesBukaKasir() {
   ST.currentShift = {
     id:shiftId, kasir:ST.cu.name, userId:ST.cu.id, modalAwal:modal,
     waktuBuka:fmtTime(now), waktuTutup:null, tanggal:fmtDate(now), status:'open',
+    isoOpen: now.toISOString(),   // FIX: simpan ISO timestamp untuk filter pesanan online
+    isoClose: null,
     pengeluaran:[], transaksi:[], onlineOrders:[], catatanBuka:$('buka-ket').value,
   };
   closeModal('buka-modal'); updateShiftTopbar(); renderShiftPage();
@@ -5100,6 +5102,8 @@ function prosesBukaKasir() {
   cancelAutoLogoutTimer();
   saveShiftLocal();
   if (window._currentPage === 'laporan') renderLaporan();
+  // Refresh pesanan online dengan filter shift baru
+  if (window._currentPage === 'online-order') loadOnlineOrders();
   // Warung online otomatis BUKA saat kasir dibuka
   CFG.isOpen = true;
   saveCFG();
@@ -5112,7 +5116,7 @@ function showTutupModal() {
   if (!isOpen()) { showNotif('Tidak ada shift aktif','#E17055'); return; }
   const sh = ST.currentShift;
   const totalPenjualan = sh.transaksi.reduce((a,t)=>a+t.total,0);
-  const totalGrand = totalPenjualan + (sh.onlineOrders||[]).reduce(function(a,o){return a+o.total;},0);
+  const totalGrand = totalPenjualan + filterOnlineByShift(sh.onlineOrders||[], sh).reduce(function(a,o){return a+o.total;},0);
   const totalPengeluaran = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
   const labaBersih = totalGrand-totalPengeluaran;
   // Split payment: distribute to each method proportionally
@@ -5142,7 +5146,8 @@ function showTutupModal() {
   },0);
   const nonTunai = qris + transfer;
   const trxCount = sh.transaksi.length;
-  const onlineOrders = sh.onlineOrders || [];
+  // Re-filter onlineOrders berdasarkan waktu shift ini (safety net)
+  const onlineOrders = filterOnlineByShift(sh.onlineOrders || [], sh);
   const onlineTotal = onlineOrders.reduce(function(a,o){return a+o.total;},0);
   const onlineCount = onlineOrders.length;
   // Split online orders by payment method
@@ -5231,6 +5236,7 @@ function prosesTutupKasir() {
   var totalOnline = validOnline.reduce(function(a,p){return a+p.jumlah;},0);
   const closed = {
     ...sh, waktuTutup:fmtTime(now), status:'closed',
+    isoClose: now.toISOString(),  // FIX: simpan ISO timestamp penutupan shift
     totalPenjualan, totalPengeluaran, labaBersih:totalPenjualan-totalPengeluaran,
     tunai, qris, transfer, ekspektasiKas:ekspKas, kasFisik:fisik,
     selisih:fisik-ekspKas, catatanTutup:$('tutup-ket').value,
@@ -5241,6 +5247,8 @@ function prosesTutupKasir() {
   showNotif('🔒 Kasir ditutup — ' + closed.id, '#6C5CE7');
   lihatLaporanShift(closed.id);
   saveShiftLocal();
+  // Refresh pesanan online: tab aktif sekarang kosong (shift sudah tutup)
+  if (window._currentPage === 'online-order') loadOnlineOrders();
   // Warung online otomatis TUTUP saat kasir ditutup
   CFG.isOpen = false;
   CFG.closedNote = 'Warung sedang tutup. Silakan coba lagi saat kami buka.';
@@ -7031,14 +7039,29 @@ async function loadOnlineOrders(){
     var q=_sb.from('online_orders').select(selectFields)
       .eq('restaurant_id',CFG.restaurantId)
       .order('created_at',{ascending:false}).limit(200);
-    if(statusFilter==='active') q=q.not('status','in','(delivered,cancelled)');
-    else if(statusFilter==='done') q=q.in('status',['delivered']);
-    else if(statusFilter==='cancelled') q=q.in('status',['cancelled']);
-    // Apply date filter for done/cancelled tabs
-    if(statusFilter!=='active'){
+
+    if(statusFilter==='active'){
+      // Tab Aktif: hanya pesanan sejak shift ini dibuka
+      q=q.not('status','in','(delivered,cancelled)');
+      if(ST.currentShift && ST.currentShift.isoOpen){
+        // Filter: hanya pesanan yang masuk SEJAK shift ini buka
+        q=q.gte('created_at', ST.currentShift.isoOpen);
+      } else if(ST.currentShift && ST.currentShift.tanggal){
+        // Fallback: filter berdasarkan tanggal shift jika isoOpen tidak ada
+        var shiftDateStr = parseTanggalShift(ST.currentShift.tanggal);
+        if(shiftDateStr) q=q.gte('created_at', shiftDateStr);
+      }
+    } else if(statusFilter==='done'){
+      q=q.in('status',['delivered']);
+      // Tab Selesai: filter berdasarkan range tanggal yang dipilih
       var dateRange = getOnlineDateRange();
       if(dateRange.dari) q=q.gte('created_at', dateRange.dari.toISOString());
       if(dateRange.sampai) q=q.lt('created_at', dateRange.sampai.toISOString());
+    } else if(statusFilter==='cancelled'){
+      q=q.in('status',['cancelled']);
+      var dateRange2 = getOnlineDateRange();
+      if(dateRange2.dari) q=q.gte('created_at', dateRange2.dari.toISOString());
+      if(dateRange2.sampai) q=q.lt('created_at', dateRange2.sampai.toISOString());
     }
     var res=await q;
     if(res.error) throw res.error;
@@ -9787,6 +9810,50 @@ document.addEventListener('click', function(e) {
   var modal = document.getElementById('login-setup-modal');
   if (modal && e.target === modal) closeLoginSetupModal();
 });
+
+// Helper: konversi tanggal shift format lokal ke ISO string untuk query Supabase
+function parseTanggalShift(tanggalStr) {
+  if (!tanggalStr) return null;
+  var months = {Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,Jun:5,Jul:6,Agu:7,Sep:8,Okt:9,Nov:10,Des:11};
+  var str = (tanggalStr||'').trim();
+  // ISO format sudah OK
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str + 'T00:00:00.000Z';
+  // Format "05 Apr 2025"
+  var parts = str.split(' ');
+  if (parts.length === 3) {
+    var d = parseInt(parts[0]);
+    var m = months[parts[1]];
+    var y = parseInt(parts[2]);
+    if (!isNaN(d) && m !== undefined && !isNaN(y)) {
+      return new Date(y, m, d, 0, 0, 0, 0).toISOString();
+    }
+  }
+  return null;
+}
+
+// Filter online orders sesuai rentang waktu shift (isoOpen → isoClose atau sekarang)
+function filterOnlineByShift(orders, shift) {
+  if (!shift || !orders || !orders.length) return orders || [];
+  var open = shift.isoOpen ? new Date(shift.isoOpen) : null;
+  // Fallback: bangun dari tanggal + waktuBuka
+  if (!open && shift.tanggal && shift.waktuBuka) {
+    var ts = parseTanggalShift(shift.tanggal);
+    if (ts) {
+      var d = new Date(ts);
+      var tp = (shift.waktuBuka||'00:00').replace('.', ':').split(':');
+      d.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0, 0, 0);
+      open = d;
+    }
+  }
+  var close = shift.isoClose ? new Date(shift.isoClose) : (shift.status === 'open' ? new Date() : null);
+  return orders.filter(function(o) {
+    if (!o.created_at) return true; // tidak bisa filter, include saja
+    var t = new Date(o.created_at);
+    if (open && t < open) return false;
+    if (close && t > close) return false;
+    return true;
+  });
+}
 </script>
 
 
