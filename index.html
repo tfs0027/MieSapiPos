@@ -4440,7 +4440,7 @@ async function autoSyncFromSupabase() {
             created_at: o.created_at
           };
         });
-        if (ST.currentShift) ST.currentShift.onlineOrders = filterOnlineByShift(ST._onlineOrdersCache, ST.currentShift);
+        // onlineOrders di-set hanya oleh fetchShiftOnlineOrders (saat tutup kasir)
       }
     } catch(e) { console.warn('sync online orders:', e.message); }
 
@@ -4478,7 +4478,7 @@ async function autoSyncFromSupabase() {
               transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
               kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
               totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
-              waktuTutup: sh.waktu_tutup||'', pengeluaran: [], transaksi: []
+              waktuTutup: sh.waktu_tutup||'', isoOpen: sh.waktu_buka_iso||null, isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
             });
           }
         });
@@ -4565,7 +4565,7 @@ async function fetchLaporanFromSupabase() {
           created_at: o.created_at
         };
       });
-      if (ST.currentShift) ST.currentShift.onlineOrders = filterOnlineByShift(ST._onlineOrdersCache, ST.currentShift);
+      // onlineOrders di-set hanya oleh fetchShiftOnlineOrders (saat tutup kasir)
     }
 
     // 3. Pengeluaran dari expenses table
@@ -4661,7 +4661,7 @@ function renderLaporan() {
       });
       // Update cache dan currentShift
       ST._onlineOrdersCache = sbData;
-      if (ST.currentShift) ST.currentShift.onlineOrders = filterOnlineByShift(sbData, ST.currentShift);
+      // onlineOrders di-set hanya oleh fetchShiftOnlineOrders (saat tutup kasir)
       renderLaporan();
     });
   }
@@ -6454,7 +6454,7 @@ async function pullAllFromSupabase() {
             transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
             kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
             totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
-            waktuTutup: sh.waktu_tutup||'', pengeluaran: [], transaksi: []
+            waktuTutup: sh.waktu_tutup||'', isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
           });
         }
       });
@@ -6590,6 +6590,8 @@ async function sbSyncShift(sh) {
       tanggal: sh.tanggal||'',
       waktu_buka: sh.waktuBuka||'',
       waktu_tutup: sh.waktuTutup||null,
+      waktu_buka_iso: sh.isoOpen||null,
+      waktu_tutup_iso: sh.isoClose||null,
       catatan_buka: sh.catatanBuka||'',
       catatan_tutup: sh.catatanTutup||'',
       total_penjualan: sh.totalPenjualan||0,
@@ -9912,12 +9914,31 @@ async function fetchShiftOnlineOrders(shift) {
       }
     }
 
-    // Fallback 2 (KRITIS): jika masih null, pakai awal hari ini
-    // Ini mencegah seluruh 90 hari data ikut terhitung
+    // Fallback 2: gunakan waktu TUTUP shift sebelumnya (jauh lebih akurat dari awal hari)
+    if (!isoFrom && ST.shifts && ST.shifts.length > 0) {
+      var prevShift = ST.shifts[0]; // shift terakhir yang ditutup
+      if (prevShift.isoClose) {
+        isoFrom = prevShift.isoClose;
+        console.log('[WarungKu] fetchShiftOnlineOrders: isoFrom dari tutup shift sebelumnya:', isoFrom);
+      } else if (prevShift.tanggal && prevShift.waktuTutup) {
+        var ts3 = parseTanggalShift(prevShift.tanggal);
+        if (ts3) {
+          var dClose = new Date(ts3);
+          var tp3 = (prevShift.waktuTutup||'00:00').replace(/[.:]/g, ':').split(':');
+          dClose.setHours(parseInt(tp3[0])||0, parseInt(tp3[1])||0, 0, 0);
+          if (!isNaN(dClose)) {
+            isoFrom = dClose.toISOString();
+            console.log('[WarungKu] fetchShiftOnlineOrders: isoFrom rebuild dari shift sebelumnya:', isoFrom);
+          }
+        }
+      }
+    }
+
+    // Fallback 3 (last resort): awal hari ini jika benar-benar tidak ada referensi
     if (!isoFrom) {
       var startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
       isoFrom = startOfDay.toISOString();
-      console.warn('[WarungKu] fetchShiftOnlineOrders: isoFrom fallback ke awal hari ini:', isoFrom);
+      console.warn('[WarungKu] fetchShiftOnlineOrders: isoFrom fallback ke awal hari (tidak ada shift sebelumnya):', isoFrom);
     }
 
     // === Tentukan isoTo (waktu tutup shift / sekarang) ===
