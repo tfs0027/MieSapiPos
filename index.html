@@ -5566,12 +5566,16 @@ function simpanManualPengeluaran() {
     sh.labaBersih = (sh.totalPenjualan||0) - sh.totalPengeluaran;
   }
 
-  // Sync ke Supabase
-  sbSyncExpense({
-    id: entry.id, nama: entry.nama, nominal: entry.nominal,
-    kategori: entry.kategori||'Operasional', ket: entry.ket||'',
-    ref: entry.ref||'', waktu: entry.waktu||'',
-  });
+  // Simpan lokal dulu
+  saveShiftLocal();
+  // Sync ke Supabase — kirim shiftId & tanggal yang benar (bukan currentShift)
+  sbSyncExpense(
+    { nama: entry.nama, nominal: entry.nominal, kategori: entry.kategori||'Operasional',
+      ket: entry.ket||'', ref: entry.ref||'', waktu: entry.waktu||'' },
+    shiftId,          // shift yang dipilih di modal (bukan currentShift)
+    tanggal,          // tanggal dalam format YYYY-MM-DD dari input
+    entry.inputBy     // kasir yang input
+  );
   closeModal('manual-peng-modal');
   renderShiftPage();
   renderLaporanPengeluaran();
@@ -5587,38 +5591,65 @@ function tambahPengeluaran() {
     ket:$('pket').value.trim(), ref:$('pref').value.trim(), waktu:fmtTime(new Date())
   };
   ST.currentShift.pengeluaran.push(entry);
-  // Sync ke Supabase
-  sbSyncExpense(entry);
-  ['pn','pa','pket','pref'].forEach(x => $(x).value='');
+  // Simpan lokal DULU agar tidak hilang jika sync gagal
   saveShiftLocal();
+  // Lalu sync ke Supabase dengan shiftId & tanggal eksplisit
+  sbSyncExpense(entry, ST.currentShift.id, ST.currentShift.tanggal, ST.cu ? ST.cu.name : '');
+  ['pn','pa','pket','pref'].forEach(x => $(x).value='');
   renderShiftPage();
   if (window._currentPage === 'laporan') renderLaporan();
   showNotif('✅ Pengeluaran dicatat','#E17055');
 }
 
-async function sbSyncExpense(peng) {
+async function sbSyncExpense(peng, shiftCode, tanggalStr, kasirNama) {
   if (!_sb || !CFG.restaurantId) return;
   try {
+    // Konversi tanggal ke ISO — prioritas: tanggalStr (dari caller) > shift aktif > sekarang
+    var _tanggal = tanggalStr || (ST.currentShift ? ST.currentShift.tanggal : fmtDate(new Date()));
+    var _shiftCode = shiftCode || (ST.currentShift ? ST.currentShift.id : null);
+    var _kasir = kasirNama || (ST.cu ? ST.cu.name : '');
+    // Buat ISO timestamp dari tanggal + waktu
+    var _createdAt = (function() {
+      try {
+        if (peng.waktu) {
+          var ts = parseTanggalShift(_tanggal);
+          if (ts) {
+            var d = new Date(ts);
+            var tp = peng.waktu.replace(/[.:]/g,':').split(':');
+            d.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0, 0, 0);
+            if (!isNaN(d)) return d.toISOString();
+          }
+        }
+      } catch(e){}
+      return new Date().toISOString();
+    })();
+
     var data = {
       restaurant_id: CFG.restaurantId,
+      shift_code: _shiftCode,
       nama: peng.nama,
       nominal: peng.nominal,
-      kategori: peng.kategori||'Operasional'
-    };
-    // Kolom opsional — hanya tambah jika ada di schema
-    var extra = {
-      shift_code: ST.currentShift ? ST.currentShift.id : null,
+      kategori: peng.kategori||'Operasional',
       keterangan: peng.ket||'',
       referensi: peng.ref||'',
       waktu: peng.waktu||'',
-      tanggal: ST.currentShift ? ST.currentShift.tanggal : fmtDate(new Date()),
-      kasir_nama: ST.cu ? ST.cu.name : ''
+      tanggal: _tanggal,
+      kasir_nama: _kasir,
+      created_at: _createdAt
     };
-    var res = await _sb.from('expenses').insert(Object.assign({}, data, extra));
+    var res = await _sb.from('expenses').insert(data);
     if (res.error) {
-      // Fallback: hanya kolom dasar
-      await _sb.from('expenses').insert(data);
+      // Fallback: kolom minimal
+      var minimal = {
+        restaurant_id: CFG.restaurantId,
+        shift_code: _shiftCode,
+        nama: peng.nama,
+        nominal: peng.nominal,
+        kategori: peng.kategori||'Operasional'
+      };
+      await _sb.from('expenses').insert(minimal);
     }
+    console.log('[WarungKu] Pengeluaran sync OK:', peng.nama, peng.nominal);
   } catch(e) { console.warn('sbSyncExpense:', e.message); }
 }
 
@@ -5668,10 +5699,20 @@ function setPengFilter(val) { ST.pengFilter = val||null; renderPengList(); }
 
 function hapusPeng(id) {
   if (!ST.currentShift) return;
-  ST.currentShift.pengeluaran = ST.currentShift.pengeluaran.filter(p=>p.id!==id);
+  var p = ST.currentShift.pengeluaran.find(function(x){ return x.id===id; });
+  ST.currentShift.pengeluaran = ST.currentShift.pengeluaran.filter(function(x){ return x.id!==id; });
   saveShiftLocal();
   renderShiftPage();
   if (window._currentPage === 'laporan') renderLaporan();
+  // Hapus dari Supabase expenses (cari by restaurant_id + shift_code + nama + nominal)
+  if (_sb && CFG.restaurantId && p) {
+    _sb.from('expenses').delete()
+      .eq('restaurant_id', CFG.restaurantId)
+      .eq('shift_code', ST.currentShift.id)
+      .eq('nama', p.nama)
+      .eq('nominal', p.nominal)
+      .then(function(r){ if(r.error) console.warn('hapusPeng Supabase:', r.error.message); });
+  }
   showNotif('Pengeluaran dihapus','#A8A5BE');
 }
 
