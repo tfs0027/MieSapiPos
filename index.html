@@ -1947,14 +1947,7 @@ const CAT_COLORS = {
 const ST = {
   cu: null, selId: null, pin: '',
   menus: [],
-  tables: [
-    {id:1,num:'01',status:'available',capacity:4,order:null},
-    {id:2,num:'02',status:'available',capacity:4,order:null},
-    {id:3,num:'03',status:'available',capacity:6,order:null},
-    {id:4,num:'04',status:'available',capacity:2,order:null},
-    {id:5,num:'05',status:'available',capacity:4,order:null},
-    {id:6,num:'06',status:'available',capacity:8,order:null},
-  ],
+  tables: [], // Dimuat dari Supabase per restaurantId saat login
   stocks: [],
   transactions: [],
   shifts: [],
@@ -1979,14 +1972,14 @@ const SESSION_KEY = 'wkpos_session';
 let CFG = {
   nama:'WarungKu', tagline:'Makan Enak, Harga Bersahabat',
   orderPageUrl:'', // URL lengkap halaman order pelanggan (GitHub Pages)
-  alamat:'Jl. Contoh No.1, Madiun, Jawa Timur',
+  alamat:'',
   alamatOnline:'', // alamat khusus untuk pesanan online (kosong = pakai alamat utama)
   lat: null,  // koordinat toko (digunakan untuk hitung jarak ongkir)
   lng: null,
   ongkirPerKm: 3000,    // ongkos kirim per km
   ongkirMinKm: 2,       // jarak minimum yang ditagih (km)
   ongkirBebasAbove: 0,  // gratis ongkir jika subtotal >= nilai ini (0 = tidak ada)
-  telp:'0851-xxxx-xxxx', wa:'6285xxxxxxxx', sosmed:'@warungku',
+  telp:'', wa:'', sosmed:'',
   f1:'Terima kasih sudah berkunjung!', f2:'Selamat menikmati hidangan Anda \u{1F60A}',
   logo:'\u{1F35C}', logoImg:null,
   poinPerRibu:1, poinNilaiTukar:1000, poinMinRedeem:100,
@@ -2007,10 +2000,7 @@ let CFG = {
   isOpen:true, closedNote:'Maaf, warung sedang tutup. Silakan coba lagi nanti.',
   qrisImg:null,
   sbUrl:'https://lztdvlrunspmcoewfjcg.supabase.co', sbKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dGR2bHJ1bnNwbWNvZXdmamNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODA5MDIsImV4cCI6MjA5MDI1NjkwMn0.fOxpyctLY6k-QjaMIdUdRHJnsGm7FhPozhWTMBSl9-4', restaurantId:'',
-  banks:[
-    {nama:'Bank BCA', norek:'1234-5678-90', an:''},
-    {nama:'Bank BNI', norek:'0987-6543-21', an:''},
-  ],
+  banks:[], // Diisi oleh kasir per toko
   qrisId:'', qrisNama:'',
   pajak:10, pajakNm:'PPN', discMax:100, showPajak:1, enablePajak:1,
   paper:'80',
@@ -2021,14 +2011,38 @@ let CFG = {
 };
 try {
   const s = localStorage.getItem(CFG_KEY);
+  const _urlR = new URLSearchParams(window.location.search).get('r');
   if (s) {
     const saved = JSON.parse(s);
     CFG = Object.assign(CFG, saved);
-    // FIX #4: URL param ?r= selalu menang atas localStorage
-    const _urlR = new URLSearchParams(window.location.search).get('r');
+    // FIX: URL param ?r= selalu menang atas localStorage
     if (_urlR && _urlR.length > 10) {
+      // Jika restaurantId BERUBAH (pindah toko), reset semua data per-toko
+      if (saved.restaurantId && saved.restaurantId !== _urlR) {
+        console.log('[WarungKu] restaurantId berubah:', saved.restaurantId, '->', _urlR, '— reset CFG per-toko');
+        CFG.vouchers = [];
+        CFG.kurirList = [];
+        CFG.banks = [];
+        CFG.isOpen = true;
+        CFG.closedNote = 'Maaf, warung sedang tutup. Silakan coba lagi nanti.';
+        CFG.qrisImg = null;
+        CFG.qrisNama = '';
+        CFG.qrisId = '';
+        CFG.alamatOnline = '';
+        CFG.lat = null;
+        CFG.lng = null;
+        CFG.ongkirPerKm = 3000;
+        CFG.ongkirMinKm = 2;
+        CFG.ongkirBebasAbove = 0;
+        CFG.enableService = false;
+        CFG.service = 0;
+        CFG.serviceFlat = 0;
+        CFG.rekrutmen = {};
+      }
       CFG.restaurantId = _urlR;
     }
+  } else if (_urlR && _urlR.length > 10) {
+    CFG.restaurantId = _urlR;
   }
 } catch(e){}
 const saveCFG = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch(e){} };
@@ -9397,6 +9411,18 @@ function hapusRekeningBank(i) {
 }
 
 function renderSettings() {
+  // Jika terhubung Supabase, reload fresh voucher & kurir per toko
+  if (_sb && CFG.restaurantId) {
+    _sb.from('restaurants').select('cfg').eq('id', CFG.restaurantId).single().then(function(r){
+      if (!r.error && r.data && r.data.cfg) {
+        var cfg = r.data.cfg;
+        if (cfg.vouchers !== undefined) { CFG.vouchers = cfg.vouchers; renderVoucherList(); }
+        if (cfg.kurirList !== undefined) { CFG.kurirList = cfg.kurirList; renderKurirList(); }
+        if (cfg.banks !== undefined) CFG.banks = cfg.banks;
+        saveCFG();
+      }
+    });
+  }
   $('cfg-nama').value = CFG.nama;
   $('cfg-tagline').value = CFG.tagline;
   $('cfg-alamat').value = CFG.alamat;
