@@ -2250,9 +2250,23 @@ function doLogin(u) {
   $('sb-icon').textContent = CFG.logo;
   $('sb-name-el').textContent = CFG.nama + ' POS';
   buildSidebar(); buildCatTabs(); renderMenuGrid(); updateMejaSelect(); updateShiftTopbar();
-  nav('order');
+  // Navigasi ke halaman pertama yang diizinkan (tidak hardcode 'order')
+  var _firstPage = (NAV_ITEMS.find(function(item){ return can(item.perm); }) || {id:'locked'}).id;
+  nav(_firstPage);
   // Simpan session ke localStorage
   try { localStorage.setItem(SESSION_KEY, JSON.stringify({userId: u.id, savedAt: Date.now()})); } catch(e){}
+  // Kirim last_access ke Supabase untuk tracking terakhir aktif
+  if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId && _sb) {
+    try {
+      var _cfgCurrent = {};
+      _sb.from('restaurants').select('cfg').eq('id', CFG.restaurantId).single().then(function(r){
+        if (!r.error && r.data) _cfgCurrent = r.data.cfg || {};
+        _cfgCurrent.lastAccess = new Date().toISOString();
+        _cfgCurrent.lastKasir = u.name || '';
+        _sb.from('restaurants').update({cfg: _cfgCurrent}).eq('id', CFG.restaurantId).then(function(){});
+      });
+    } catch(e) { /* silent */ }
+  }
   // Auto-pull dari Supabase jika terkonfigurasi
   if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) {
     setTimeout(function() {
@@ -2304,17 +2318,17 @@ function doLogout() {
 // SIDEBAR
 // ═══════════════════════════════
 const NAV_ITEMS = [
-  {id:'order',label:'Kasir & Order',icon:'🛒',perm:'order',sec:'Operasional'},
-  {id:'meja',label:'Manajemen Meja',icon:'🪑',perm:'meja',sec:null},
-  {id:'shift',label:'Buka / Tutup Kasir',icon:'🔓',perm:'shift',sec:null},
-  {id:'menu',label:'Menu & Harga',icon:'🍽️',perm:'menu',sec:'Manajemen'},
-  {id:'stok',label:'Stok Bahan Baku',icon:'📦',perm:'stok',sec:null},
-  {id:'laporan',label:'Laporan Penjualan',icon:'📊',perm:'laporan',sec:'Laporan'},
-  {id:'riwayat',label:'Riwayat Transaksi',icon:'📋',perm:'riwayat',sec:null},
-  {id:'online-order',label:'Pesanan Online',icon:'🛵',perm:'shift',sec:'Operasional Online'},
-  {id:'rekrutmen',label:'Rekrutmen',icon:'📝',perm:'users',sec:'SDM & Rekrutmen'},
-  {id:'users',label:'Manajemen User',icon:'👥',perm:'users',sec:'Pengaturan'},
-  {id:'settings',label:'Pengaturan Toko',icon:'⚙️',perm:'settings',sec:null},
+  {id:'order',         label:'Kasir & Order',        icon:'🛒', perm:'order',        sec:'Operasional'},
+  {id:'meja',          label:'Manajemen Meja',        icon:'🪑', perm:'meja',         sec:null},
+  {id:'shift',         label:'Buka / Tutup Kasir',   icon:'🔓', perm:'shift',        sec:null},
+  {id:'menu',          label:'Menu & Harga',          icon:'🍽️', perm:'menu',         sec:'Manajemen'},
+  {id:'stok',          label:'Stok Bahan Baku',       icon:'📦', perm:'stok',         sec:null},
+  {id:'laporan',       label:'Laporan Penjualan',     icon:'📊', perm:'laporan',      sec:'Laporan'},
+  {id:'riwayat',       label:'Riwayat Transaksi',     icon:'📋', perm:'riwayat',      sec:null},
+  {id:'online-order',  label:'Pesanan Online',        icon:'🛵', perm:'online-order', sec:'Operasional Online'},
+  {id:'rekrutmen',     label:'Rekrutmen',             icon:'📝', perm:'rekrutmen',    sec:'SDM & Rekrutmen'},
+  {id:'users',         label:'Manajemen User',        icon:'👥', perm:'users',        sec:'Pengaturan'},
+  {id:'settings',      label:'Pengaturan Toko',       icon:'⚙️', perm:'settings',    sec:null},
 ];
 const PAGE_TITLES = {
   order:'🛒 Kasir & Order', meja:'🪑 Manajemen Meja', shift:'🔓 Buka / Tutup Kasir',
@@ -2366,10 +2380,22 @@ function buildSidebar() {
 }
 
 function nav(p) {
+  // Cek permission sebelum tampilkan halaman
+  var navItem = NAV_ITEMS.find(function(item){ return item.id === p; });
+  if (navItem && !can(navItem.perm)) {
+    p = 'locked'; // redirect ke halaman locked
+  }
   window._currentPage = p;
   document.querySelectorAll('[data-p]').forEach(el => el.classList.toggle('active', el.dataset.p === p));
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-  $('page-' + p).classList.add('active');
+  var targetPage = $('page-' + p);
+  if (!targetPage) { // halaman tidak ada, fallback ke order atau locked
+    targetPage = $('page-order') || $('page-locked');
+    p = targetPage && targetPage.id === 'page-order' ? 'order' : 'locked';
+    if (targetPage) targetPage.classList.add('active');
+  } else {
+    targetPage.classList.add('active');
+  }
   $('page-title').textContent = PAGE_TITLES[p] || p;
   if (p === 'meja') renderMeja();
   if (p === 'menu') renderMenuTable();
@@ -5091,10 +5117,24 @@ function renderUsers() {
 function togglePerm(uid, perm) {
   const u = USERS.find(x=>x.id===uid); if(!u) return;
   u.perms[perm] = u.perms[perm] ? 0 : 1;
-  if (uid===ST.cu.id) { ST.cu.perms[perm]=u.perms[perm]; buildSidebar(); }
+  if (uid===ST.cu.id) {
+    ST.cu.perms[perm] = u.perms[perm];
+    buildSidebar();
+    // Jika halaman aktif sekarang menjadi tidak boleh diakses, redirect
+    if (window._currentPage) {
+      var activeNavItem = NAV_ITEMS.find(function(item){ return item.id === window._currentPage; });
+      if (activeNavItem && !can(activeNavItem.perm)) {
+        showNotif('⚠️ Akses halaman ini dicabut', '#E17055');
+        // Redirect ke halaman pertama yang boleh diakses
+        var firstAllowed = NAV_ITEMS.find(function(item){ return can(item.perm); });
+        if (firstAllowed) setTimeout(function(){ nav(firstAllowed.id); }, 500);
+        else nav('locked');
+      }
+    }
+  }
   renderUsers();
-  showNotif('Izin "' + perm + '" ' + (u.perms[perm]?'diaktifkan':'dinonaktifkan'));
-  // Sync permission ke Supabase by restaurant_id + nama (karena local id bisa beda)
+  showNotif('Izin "' + perm + '" ' + (u.perms[perm]?'✅ diaktifkan':'❌ dinonaktifkan'), u.perms[perm]?'#00B894':'#E17055');
+  // Sync permission ke Supabase
   if (_sb && CFG.restaurantId) {
     _sb.from('users').update({perms: u.perms})
       .eq('restaurant_id', CFG.restaurantId)
@@ -5137,7 +5177,7 @@ async function saveUser() {
   const c = colors[role] || colors.kasir;
   const defaultPerms = role==='admin'
     ? {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1,settings_online:1,settings_rekrutmen:1}
-    : {order:1,meja:1,shift:1,menu:0,stok:0,laporan:0,riwayat:1,users:0,settings:0,diskon:1,void_trx:0,edit_harga:0};
+    : {order:1,meja:1,shift:1,menu:0,stok:0,laporan:0,riwayat:1,'online-order':1,rekrutmen:0,users:0,settings:0,diskon:1,void_trx:0,edit_harga:0,settings_online:0,settings_rekrutmen:0};
 
   // Hash PIN sebelum simpan
   let pinHash = pin;
