@@ -924,6 +924,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         <div style="display:flex;gap:4px;margin-bottom:12px">
           <button class="shift-tab active" id="otmain-tab-order" onclick="switchOnlineTab('order',this)">📋 Pesanan</button>
           <button class="shift-tab" id="otmain-tab-setting" onclick="switchOnlineTab('setting',this)">⚙️ Pengaturan Pesanan Online</button>
+          <!-- Visibilitas tab pengaturan dikontrol JS berdasarkan permission -->
         </div>
         <!-- TAB: Pesanan -->
         <div id="online-main-order">
@@ -2381,7 +2382,11 @@ function nav(p) {
   if (p === 'riwayat') renderRiwayat();
   if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders();
     refreshOrderLink(); // update link display
-    window._initOrderDelegation && window._initOrderDelegation(); }
+    window._initOrderDelegation && window._initOrderDelegation();
+    // Sembunyikan tab setting jika tidak punya permission
+    var onlineSettingTab = $('otmain-tab-setting');
+    if (onlineSettingTab) onlineSettingTab.style.display = can('settings_online') ? '' : 'none';
+  }
   if (p === 'rekrutmen') { renderRekrutmenPage(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
@@ -5061,6 +5066,7 @@ function renderUsers() {
     order:'Kasir & Order',meja:'Manajemen Meja',shift:'Buka/Tutup Kasir',
     menu:'Kelola Menu',stok:'Stok Bahan',laporan:'Laporan',riwayat:'Riwayat Transaksi',
     'online-order':'Pesanan Online',rekrutmen:'Rekrutmen SDM',
+    settings_online:'⚙️ Pengaturan Pesanan Online',settings_rekrutmen:'⚙️ Pengaturan Form Rekrutmen',
     users:'Manajemen User',settings:'Pengaturan Toko',diskon:'Beri Diskon',void_trx:'Void Transaksi',edit_harga:'Edit Harga/Menu'
   };
   $('user-list-el').innerHTML = USERS.map(u =>
@@ -5130,7 +5136,7 @@ async function saveUser() {
   const colors = {admin:{bg:'#A29BFE',tc:'#3C3489'},kasir:{bg:'#00B894',tc:'#007A63'}};
   const c = colors[role] || colors.kasir;
   const defaultPerms = role==='admin'
-    ? {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1}
+    ? {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1,settings_online:1,settings_rekrutmen:1}
     : {order:1,meja:1,shift:1,menu:0,stok:0,laporan:0,riwayat:1,users:0,settings:0,diskon:1,void_trx:0,edit_harga:0};
 
   // Hash PIN sebelum simpan
@@ -7607,6 +7613,7 @@ function hapusQrisImg() {
 // ── Service Charge Settings ────────────────────────────────────────────────
 
 function saveServiceCfg() {
+  if (!can('settings_online')) { showNotif('⛔ Tidak punya akses ke Pengaturan Pesanan Online', '#E17055'); return; }
   CFG.enableService = $('cfg-enable-service-1') && $('cfg-enable-service-1').checked;
   CFG.serviceTipe = ($('cfg-service-tipe')||{value:'pct'}).value || 'pct';
   CFG.service = parseFloat(($('cfg-service-pct')||{}).value)||0;
@@ -7930,6 +7937,7 @@ function hapusVoucher(i) {
 }
 
 function saveVoucherCfg() {
+  if (!can('settings_online')) { showNotif('⛔ Tidak punya akses ke Pengaturan Pesanan Online', '#E17055'); return; }
   var rows = document.querySelectorAll('.voucher-row');
   CFG.vouchers = [];
   rows.forEach(function(row) {
@@ -8113,6 +8121,7 @@ function hapusKurir(i) {
 }
 
 function saveKurirCfg() {
+  if (!can('settings_online')) { showNotif('⛔ Tidak punya akses ke Pengaturan Pesanan Online', '#E17055'); return; }
   var rows = document.querySelectorAll('#kurir-list-cfg > div');
   CFG.kurirList = Array.from(rows).map(function(row) {
     return {
@@ -8523,6 +8532,11 @@ function exportRekapKurir() {
 var _pelamarData = [];
 
 function switchRekTab(tab, btn) {
+  // Cek permission: tab setting perlu perm 'settings_rekrutmen'
+  if (tab === 'setting' && !can('settings_rekrutmen')) {
+    showNotif('⛔ Tidak punya akses ke Pengaturan Form Rekrutmen', '#E17055');
+    return;
+  }
   document.querySelectorAll('[id^="rek-tab-"]').forEach(function(b){b.classList.remove('active');});
   if (btn) btn.classList.add('active');
   $('rek-panel-pelamar').style.display = tab==='pelamar' ? 'block' : 'none';
@@ -8534,6 +8548,9 @@ function switchRekTab(tab, btn) {
 function renderRekrutmenPage() {
   updateRekLink();
   loadPelamar();
+  // Sembunyikan tab setting jika tidak punya permission
+  var settingTab = $('rek-tab-setting');
+  if (settingTab) settingTab.style.display = can('settings_rekrutmen') ? '' : 'none';
 }
 
 function getRekBaseUrl() {
@@ -8827,6 +8844,7 @@ function toggleRekAktif() {
 }
 
 function saveRekSetting() {
+  if (!can('settings_rekrutmen')) { showNotif('⛔ Tidak punya akses ke Pengaturan Form Rekrutmen', '#E17055'); return; }
   if (!CFG.rekrutmen) CFG.rekrutmen = {};
   var ra1 = document.querySelector('input[name="rekAktif"][value="1"]');
   CFG.rekrutmen.aktif = !!(ra1 && ra1.checked);
@@ -9232,6 +9250,11 @@ function showSubscriptionExpired(sub) {
 }
 
 function switchOnlineTab(tab, btn) {
+  // Cek permission: tab setting perlu perm 'settings_online'
+  if (tab === 'setting' && !can('settings_online')) {
+    showNotif('⛔ Tidak punya akses ke Pengaturan Pesanan Online', '#E17055');
+    return;
+  }
   document.querySelectorAll('[id^="otmain-tab-"]').forEach(function(b){b.classList.remove('active');});
   if(btn) btn.classList.add('active');
   var order = document.getElementById('online-main-order');
@@ -9282,6 +9305,7 @@ function updateOngkirPreview() {
 }
 
 async function saveOngkirCfg() {
+  if (!can('settings_online')) { showNotif('⛔ Tidak punya akses ke Pengaturan Pesanan Online', '#E17055'); return; }
   CFG.ongkirPerKm = parseFloat((document.getElementById('cfg-ongkir-per-km')||{value:3000}).value)||3000;
   CFG.ongkirMinKm = parseFloat((document.getElementById('cfg-ongkir-min-km')||{value:2}).value)||2;
   CFG.ongkirBebasAbove = parseFloat((document.getElementById('cfg-ongkir-free')||{value:0}).value)||0;
@@ -10061,7 +10085,7 @@ async function setupSimpanAdmin() {
     var buf = await crypto.subtle.digest('SHA-256', enc);
     var pinHash = Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
     var initials = nama.split(' ').map(function(w){ return w[0]; }).join('').substr(0,2).toUpperCase();
-    var allPerms = {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1};
+    var allPerms = {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1,settings_online:1,settings_rekrutmen:1};
 
     var uRes = await sbTemp2.from('users').insert({
       restaurant_id: _setupRestoId,
@@ -10156,7 +10180,7 @@ async function loginSetupSimpan() {
     var pinHash = Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
 
     var initials = nama.split(' ').map(function(w){ return w[0]||''; }).join('').substr(0,2).toUpperCase();
-    var allPerms = {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1};
+    var allPerms = {order:1,meja:1,shift:1,menu:1,stok:1,laporan:1,riwayat:1,users:1,settings:1,diskon:1,void_trx:1,edit_harga:1,'online-order':1,rekrutmen:1,settings_online:1,settings_rekrutmen:1};
 
     var res = await sb2.from('users').insert({
       restaurant_id: CFG.restaurantId,
