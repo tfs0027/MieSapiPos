@@ -2364,7 +2364,18 @@ nav = function(p) {
 function buildSidebar() {
   let html = '';
   let lastSec = '';
+  // Mapping fitur subscription ke nav id
+  var fiturNavMap = {
+    'order':'kasir','meja':'meja','shift':'shift','menu':'menu',
+    'stok':'stok','laporan':'laporan','riwayat':'riwayat',
+    'online-order':'online_order','rekrutmen':'rekrutmen','users':'multi_user'
+  };
   NAV_ITEMS.forEach(item => {
+    // Cek fitur dari subscription — jika false, sembunyikan sepenuhnya
+    var fiturKey = fiturNavMap[item.id];
+    var blockedByFitur = fiturKey && _fitur[fiturKey] === false;
+    if (blockedByFitur) return; // skip item ini
+
     if (item.sec && item.sec !== lastSec) {
       html += '<div class="nav-section">' + item.sec + '</div>';
       lastSec = item.sec;
@@ -9222,19 +9233,39 @@ function updateSbSubStrip(sub, selesai, now) {
 }
 
 function applyFeatureFlags() {
-  // Hide nav items based on fitur
+  // Mapping: nav item id → fitur key di subscription
+  // Key di FITUR_LIST (admin) → id di NAV_ITEMS (POS)
   var navMap = {
-    'online-order': _fitur.online_order,
-    'rekrutmen': _fitur.rekrutmen,
-    'stok': _fitur.stok,
-    'laporan': _fitur.laporan,
-    'riwayat': _fitur.riwayat,
-    'users': _fitur.multi_user,
+    'order':        _fitur.kasir,          // 🛒 Kasir & Order
+    'meja':         _fitur.meja,           // 🪑 Manajemen Meja
+    'shift':        _fitur.shift,          // 🔓 Buka/Tutup Kasir
+    'menu':         _fitur.menu,           // 🍽️ Menu & Harga
+    'stok':         _fitur.stok,           // 📦 Stok Bahan
+    'laporan':      _fitur.laporan,        // 📊 Laporan
+    'riwayat':      _fitur.riwayat,        // 📋 Riwayat
+    'online-order': _fitur.online_order,   // 🛵 Pesanan Online
+    'rekrutmen':    _fitur.rekrutmen,      // 📝 Rekrutmen
+    'users':        _fitur.multi_user,     // 👥 Multi User
   };
   Object.keys(navMap).forEach(function(navId) {
+    var val = navMap[navId];
+    // undefined = tidak diset di plan (izinkan); false = diblokir
+    var allowed = val !== false;
     var el = document.querySelector('[data-p="'+navId+'"]');
-    if (el) el.style.display = navMap[navId] !== false ? '' : 'none';
+    if (el) el.style.display = allowed ? '' : 'none';
   });
+
+  // Juga paksa redirect jika halaman aktif saat ini diblok oleh fitur
+  if (window._currentPage) {
+    var blocked = navMap[window._currentPage] === false;
+    if (blocked) {
+      var firstAllowed = NAV_ITEMS.find(function(item){
+        return navMap[item.id] !== false && can(item.perm);
+      });
+      if (firstAllowed) nav(firstAllowed.id);
+      else nav('locked');
+    }
+  }
 }
 
 async function perpanjangLangganan() {
