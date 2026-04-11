@@ -7920,9 +7920,11 @@ function renderVoucherList() {
     return;
   }
   el.innerHTML = vouchers.map(function(v, i) {
-    var tipeLabel = v.tipe==='pct' ? v.nilai+'% harga'
-                  : v.tipe==='ongkir' ? (v.nilai>=100 ? 'Gratis Ongkir' : 'Ongkir -'+v.nilai+'%')
-                  : 'Rp '+v.nilai.toLocaleString('id-ID')+' harga';
+    var tipeLabel = v.tipe==='pct'        ? v.nilai+'% harga'
+                  : v.tipe==='flat'       ? 'Rp '+v.nilai.toLocaleString('id-ID')+' harga'
+                  : v.tipe==='ongkir_pct' ? 'Ongkir -'+v.nilai+'%'
+                  : v.tipe==='ongkir_flat'? 'Ongkir -Rp '+v.nilai.toLocaleString('id-ID')
+                  : 'Rp '+v.nilai.toLocaleString('id-ID');
     var statusBadge = v.aktif
       ? '<span style="font-size:9px;background:var(--green-bg);color:var(--green-dk);padding:1px 6px;border-radius:10px;font-weight:700">AKTIF</span>'
       : '<span style="font-size:9px;background:var(--brd);color:var(--txt2);padding:1px 6px;border-radius:10px">NONAKTIF</span>';
@@ -7940,9 +7942,10 @@ function renderVoucherList() {
       '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">' +
         '<div style="flex:1;min-width:90px"><label style="font-size:10px;color:var(--txt2);display:block;margin-bottom:3px">Tipe</label>' +
           '<select class="fi voucher-tipe" style="font-size:11px">' +
-            '<option value="pct"'  + (v.tipe==='pct' ?' selected':'') + '>% Potongan Harga</option>' +
-            '<option value="flat"' + (v.tipe==='flat'?' selected':'') + '>Rp Potongan Harga</option>' +
-            '<option value="ongkir"' + (v.tipe==='ongkir'?' selected':'') + '>Potongan Ongkir</option>' +
+            '<option value="pct"'        + (v.tipe==='pct'        ?' selected':'') + '>% Potongan Harga</option>' +
+            '<option value="flat"'       + (v.tipe==='flat'       ?' selected':'') + '>Rp Potongan Harga</option>' +
+            '<option value="ongkir_pct"' + (v.tipe==='ongkir_pct' ?' selected':'') + '>% Potongan Ongkir</option>' +
+            '<option value="ongkir_flat"'+ (v.tipe==='ongkir_flat'?' selected':'') + '>Rp Potongan Ongkir</option>' +
           '</select>' +
         '</div>' +
         '<div style="flex:1;min-width:80px"><label style="font-size:10px;color:var(--txt2);display:block;margin-bottom:3px">Nilai Diskon</label>' +
