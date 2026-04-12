@@ -9530,7 +9530,7 @@ function deteksiLokasiToko() {
 
       // ── Reverse geocoding → isi alamat online otomatis ──
       if(statusEl) { statusEl.textContent = '📍 Mendapatkan alamat...'; statusEl.style.color='var(--accent)'; }
-      fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lng='+lng+'&zoom=18&addressdetails=1', {
+      fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&zoom=18&addressdetails=1', {
         headers: {'Accept-Language': 'id', 'User-Agent': 'WarungKu-POS/1.0'}
       })
       .then(function(r){ return r.json(); })
@@ -9577,11 +9577,9 @@ function deteksiLokasiToko() {
       .catch(function(err) {
         // Reverse geocoding gagal — tetap simpan koordinat, isi alamat dengan koordinat
         console.warn('Reverse geocoding gagal:', err.message);
-        var coordStr = lat.toFixed(6) + ', ' + lng.toFixed(6);
-        var aoEl = document.getElementById('cfg-alamat-online');
-        if (aoEl && !aoEl.value.trim()) aoEl.value = coordStr;
-        if(statusEl) { statusEl.textContent = '✅ Koordinat tersimpan (lat: '+lat.toFixed(5)+', lng: '+lng.toFixed(5)+')'; statusEl.style.color='var(--green-dk)'; }
-        showNotif('✅ Koordinat disimpan. Isi alamat manual jika perlu.', '#00B894');
+        // Jangan isi field dengan koordinat — biarkan user isi manual
+        if(statusEl) { statusEl.textContent = '✅ Koordinat disimpan · ⚠️ Gagal ambil alamat, isi manual'; statusEl.style.color='var(--amber-dk)'; }
+        showNotif('Koordinat disimpan. Isi alamat untuk pesanan online secara manual.', '#F59E0B');
         if (_sb && CFG.restaurantId) {
           _sb.from('restaurants').update({lat: lat, lng: lng}).eq('id', CFG.restaurantId).then(function(){});
         }
