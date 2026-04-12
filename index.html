@@ -9527,21 +9527,65 @@ function deteksiLokasiToko() {
       CFG.lat = lat;
       CFG.lng = lng;
       saveCFG();
-      // Push to Supabase restaurants table
-      if (_sb && CFG.restaurantId) {
-        _sb.from('restaurants').update({lat: lat, lng: lng}).eq('id', CFG.restaurantId)
-          .then(function(r) {
-            if (r.error) {
-              if(statusEl) { statusEl.textContent = '✅ Disimpan lokal · ⚠️ Supabase: '+r.error.message; statusEl.style.color='var(--amber-dk)'; }
-            } else {
-              if(statusEl) { statusEl.textContent = '✅ Koordinat tersimpan & tersync ke Supabase'; statusEl.style.color='var(--green-dk)'; }
-              showNotif('✅ Koordinat toko disimpan!', '#00B894');
-            }
-          });
-      } else {
-        if(statusEl) { statusEl.textContent = '✅ Koordinat disimpan lokal (lat: '+lat.toFixed(5)+', lng: '+lng.toFixed(5)+')'; statusEl.style.color='var(--green-dk)'; }
-        showNotif('✅ Koordinat toko terdeteksi!', '#00B894');
-      }
+
+      // ── Reverse geocoding → isi alamat online otomatis ──
+      if(statusEl) { statusEl.textContent = '📍 Mendapatkan alamat...'; statusEl.style.color='var(--accent)'; }
+      fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lng='+lng+'&zoom=18&addressdetails=1', {
+        headers: {'Accept-Language': 'id', 'User-Agent': 'WarungKu-POS/1.0'}
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        var addr = data.address || {};
+        var parts = [];
+        // Bangun alamat dari yang paling spesifik ke yang paling umum
+        if (addr.road || addr.pedestrian || addr.street) parts.push(addr.road || addr.pedestrian || addr.street);
+        if (addr.house_number) parts[0] = (parts[0]||'') + ' No. ' + addr.house_number;
+        if (addr.neighbourhood || addr.quarter) parts.push(addr.neighbourhood || addr.quarter);
+        if (addr.village || addr.suburb || addr.hamlet) parts.push(addr.village || addr.suburb || addr.hamlet);
+        if (addr.city_district || addr.district || addr.county) parts.push(addr.city_district || addr.district || addr.county);
+        if (addr.city || addr.town || addr.municipality) parts.push(addr.city || addr.town || addr.municipality);
+        if (addr.state) parts.push(addr.state);
+        if (addr.postcode) parts.push(addr.postcode);
+        var alamatStr = parts.filter(Boolean).join(', ');
+        if (!alamatStr) alamatStr = data.display_name || (lat.toFixed(5) + ', ' + lng.toFixed(5));
+
+        // Isi field alamat online dan alamat utama (jika kosong)
+        var aoEl = document.getElementById('cfg-alamat-online');
+        if (aoEl) { aoEl.value = alamatStr; }
+        var alamatEl = document.getElementById('cfg-alamat');
+        if (alamatEl && !alamatEl.value.trim()) { alamatEl.value = alamatStr; }
+        CFG.alamatOnline = alamatStr;
+        if (!CFG.alamat || !CFG.alamat.trim()) CFG.alamat = alamatStr;
+        saveCFG();
+
+        if(statusEl) {
+          statusEl.innerHTML = '✅ Lokasi terdeteksi · <b>' + alamatStr + '</b>';
+          statusEl.style.color = 'var(--green-dk)';
+        }
+        showNotif('✅ Lokasi & alamat terisi otomatis!', '#00B894');
+
+        // Sync ke Supabase
+        if (_sb && CFG.restaurantId) {
+          var updateData = {lat: lat, lng: lng};
+          if (alamatStr) updateData.alamat = alamatStr;
+          _sb.from('restaurants').update(updateData).eq('id', CFG.restaurantId)
+            .then(function(r) {
+              if (r.error) console.warn('sync lokasi:', r.error.message);
+            });
+        }
+      })
+      .catch(function(err) {
+        // Reverse geocoding gagal — tetap simpan koordinat, isi alamat dengan koordinat
+        console.warn('Reverse geocoding gagal:', err.message);
+        var coordStr = lat.toFixed(6) + ', ' + lng.toFixed(6);
+        var aoEl = document.getElementById('cfg-alamat-online');
+        if (aoEl && !aoEl.value.trim()) aoEl.value = coordStr;
+        if(statusEl) { statusEl.textContent = '✅ Koordinat tersimpan (lat: '+lat.toFixed(5)+', lng: '+lng.toFixed(5)+')'; statusEl.style.color='var(--green-dk)'; }
+        showNotif('✅ Koordinat disimpan. Isi alamat manual jika perlu.', '#00B894');
+        if (_sb && CFG.restaurantId) {
+          _sb.from('restaurants').update({lat: lat, lng: lng}).eq('id', CFG.restaurantId).then(function(){});
+        }
+      });
     },
     function(err) {
       var msg = {1:'Izin lokasi ditolak — aktifkan di pengaturan browser', 2:'Lokasi tidak tersedia', 3:'Timeout'}[err.code] || err.message;
