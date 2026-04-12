@@ -2048,6 +2048,29 @@ try {
 } catch(e){}
 const saveCFG = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch(e){} };
 
+// Bersihkan semua cache shift/session dari restaurantId yang berbeda
+(function cleanStaleLocalStorage() {
+  try {
+    var curRid = CFG.restaurantId;
+    if (!curRid) return;
+    // Hapus key shift toko lain (format: wkpos_shift_<id>)
+    var keysToRemove = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var key = localStorage.key(i);
+      if (key && key.startsWith('wkpos_shift_') && key !== 'wkpos_shift_' + curRid) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(function(k) {
+      try { localStorage.removeItem(k); } catch(e){}
+      console.log('[WarungKu] Hapus data toko lain:', k);
+    });
+    // Hapus key lama tanpa restaurantId
+    try { localStorage.removeItem('wkpos_shift'); } catch(e){}
+    try { localStorage.removeItem('wkpos_shift_default'); } catch(e){}
+  } catch(e) {}
+})();
+
 // ═══════════════════════════════
 // HELPERS
 // ═══════════════════════════════
@@ -2243,6 +2266,13 @@ async function checkPin() {
 }
 
 function doLogin(u) {
+  // Reset shift/trx jika restaurantId berubah sejak terakhir login
+  var _lastRid = (function(){ try{ var s=localStorage.getItem(SESSION_KEY); return s?JSON.parse(s).restaurantId||'':''; }catch(e){return '';} })();
+  if (_lastRid && CFG.restaurantId && _lastRid !== CFG.restaurantId) {
+    console.log('[WarungKu] doLogin: toko berubah, reset state');
+    ST.transactions = []; ST.shifts = []; ST.currentShift = null; ST.cart = [];
+    try { localStorage.removeItem('wkpos_shift_' + _lastRid); } catch(e){}
+  }
   ST.cu = u;
   $('login-screen').style.display = 'none';
   $('app').style.display = 'flex';
@@ -9965,9 +9995,25 @@ document.addEventListener('visibilitychange', function() {
 // ── Restore session on page load ──────────────────────────────────────────
 (function restoreSession() {
   try {
-    // FIX: loadShiftLocal() harus SELALU dipanggil pertama
-    // agar ST.transactions terisi dari localStorage sebelum apapun berjalan
-    // Ini penting agar merge di autoSyncFromSupabase tidak kehilangan data lokal
+    // ── Bersihkan state jika restaurantId berubah (pindah toko) ──
+    try {
+      var _savedSess = localStorage.getItem(SESSION_KEY);
+      if (_savedSess) {
+        var _sd = JSON.parse(_savedSess);
+        var _savedRid = _sd.restaurantId || '';
+        var _curRid = CFG.restaurantId || '';
+        if (_savedRid && _curRid && _savedRid !== _curRid) {
+          console.log('[WarungKu] Toko berubah (' + _savedRid + ' → ' + _curRid + '), bersihkan semua state lokal');
+          // Hapus data shift toko lama
+          try { localStorage.removeItem('wkpos_shift_' + _savedRid); } catch(e){}
+          try { localStorage.removeItem('wkpos_shift_default'); } catch(e){}
+          localStorage.removeItem(SESSION_KEY);
+          ST.transactions = []; ST.shifts = []; ST.currentShift = null; ST.cart = [];
+        }
+      }
+    } catch(e) {}
+
+    // loadShiftLocal hanya load data toko ini (sudah divalidasi via restaurantId)
     loadShiftLocal();
 
     var sess = localStorage.getItem(SESSION_KEY);
