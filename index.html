@@ -2077,9 +2077,10 @@ function getShiftKey() {
 }
 
 function saveShiftLocal() {
+  if (!CFG.restaurantId) { console.warn('[WarungKu] saveShiftLocal: restaurantId kosong, skip'); return; }
   try {
     localStorage.setItem(getShiftKey(), JSON.stringify({
-      restaurantId: CFG.restaurantId || '',  // FIX #3b: simpan restaurantId agar bisa divalidasi saat load
+      restaurantId: CFG.restaurantId,  // wajib ada untuk validasi lintas toko
       currentShift: ST.currentShift,
       shifts: ST.shifts,
       trxCounter: ST.trxCounter,
@@ -2093,18 +2094,24 @@ function loadShiftLocal() {
   try {
     var currentRid = CFG.restaurantId || '';
     var s = localStorage.getItem(getShiftKey());
-    // Migrasi: jika key baru kosong, coba baca key lama
-    if (!s) s = localStorage.getItem('wkpos_shift');
-    if (!s) return;
-    // Simpan ke key baru agar migrasi permanen
-    if (currentRid) { try { localStorage.setItem(getShiftKey(), s); } catch(e){} }
+    if (!s) return; // Tidak ada data lokal untuk toko ini
     var d = JSON.parse(s);
-    // FIX #3: Validasi restaurantId — jangan load data toko lain
-    // Cek apakah data lokal berasal dari toko yang sama
+    // Validasi restaurantId — WAJIB cocok, tidak ada fallback ke toko lain
     if (d.restaurantId && currentRid && d.restaurantId !== currentRid) {
-      console.warn('[WarungKu] Data lokal dari toko berbeda (' + d.restaurantId + '), diabaikan.');
+      console.warn('[WarungKu] Data lokal dari toko berbeda (' + d.restaurantId + '), dihapus.');
+      // Bersihkan data toko lain dari localStorage
+      try { localStorage.removeItem(getShiftKey()); } catch(e){}
       ST.transactions = [];
-      ST._onlineOrdersCache = [];
+      ST.shifts = [];
+      ST.currentShift = null;
+      return;
+    }
+    // Jika tidak ada restaurantId di data lama, tolak (data tidak bisa diverifikasi)
+    if (!d.restaurantId && currentRid) {
+      console.warn('[WarungKu] Data lokal tidak punya restaurantId, dihapus.');
+      try { localStorage.removeItem(getShiftKey()); } catch(e){}
+      ST.transactions = [];
+      ST.shifts = [];
       return;
     }
     if (d.currentShift) {
@@ -2254,7 +2261,7 @@ function doLogin(u) {
   var _firstPage = (NAV_ITEMS.find(function(item){ return can(item.perm); }) || {id:'locked'}).id;
   nav(_firstPage);
   // Simpan session ke localStorage
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify({userId: u.id, savedAt: Date.now()})); } catch(e){}
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({userId: u.id, restaurantId: CFG.restaurantId||'', savedAt: Date.now()})); } catch(e){}
   // Kirim last_access ke Supabase untuk tracking terakhir aktif
   if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId && _sb) {
     try {
@@ -4532,18 +4539,20 @@ async function autoSyncFromSupabase() {
             voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
           };
         });
-        // FIX: Jangan replace penuh — merge data lokal yang belum tersync ke Supabase
-        var sbCodes = sbMapped.map(function(t){ return t.id; });
-        var localUnsync = ST.transactions.filter(function(t){ return !sbCodes.includes(t.id); });
-        // Gabungkan: Supabase (terpercaya) + lokal yang belum ada di Supabase
+        // Supabase = sumber kebenaran, langsung set (bukan merge)
         ST.transactions = sbMapped;
+        // Cari transaksi lokal yang belum ada di Supabase — hanya dari shift aktif
+        var sbCodes = sbMapped.map(function(t){ return t.id; });
+        var localUnsync = (ST.currentShift && ST.currentShift.transaksi || [])
+          .filter(function(t){ return !sbCodes.includes(t.id); });
         if (localUnsync.length) {
           localUnsync.forEach(function(trx) {
-            ST.transactions.unshift(trx); // tambahkan ke depan
-            // Retry sync ke Supabase untuk transaksi yang belum masuk
-            setTimeout(function(){ sbSyncTransaction(trx); }, 500);
+            if (!ST.transactions.find(function(t){ return t.id===trx.id; })) {
+              ST.transactions.unshift(trx);
+              setTimeout(function(){ sbSyncTransaction(trx); }, 500);
+            }
           });
-          console.log('[WarungKu] Ditemukan ' + localUnsync.length + ' transaksi lokal yg belum tersync, mencoba ulang sync...');
+          console.log('[WarungKu] Retry sync ' + localUnsync.length + ' transaksi shift aktif...');
         }
         // FIX: Update trxCounter agar tidak bentrok dengan data yang sudah ada
         var maxNum = ST.transactions.reduce(function(mx, t) {
@@ -4595,11 +4604,14 @@ async function autoSyncFromSupabase() {
       var shRes = await _sb.from('shifts').select('*')
         .eq('restaurant_id', rid).gte('created_at', iso90)
         .order('created_at', {ascending:false});
-      if (!shRes.error && shRes.data && shRes.data.length) {
-        var existCodes = ST.shifts.map(function(s){return s.id;});
-        shRes.data.forEach(function(sh) {
-          if (!existCodes.includes(sh.shift_code) && sh.status==='closed') {
-            ST.shifts.push({
+      if (!shRes.error && shRes.data) {
+        // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
+        // Simpan shift aktif (open) yang mungkin belum tersync
+        var openShift = ST.currentShift && ST.currentShift.status === 'open' ? ST.currentShift : null;
+        ST.shifts = shRes.data
+          .filter(function(sh){ return sh.status === 'closed'; })
+          .map(function(sh){
+            return {
               id: sh.shift_code, kasir: sh.kasir_nama||'', status: sh.status,
               tanggal: sh.tanggal||'', modalAwal: sh.modal_awal||0,
               totalPenjualan: sh.total_penjualan||0, totalPengeluaran: sh.total_pengeluaran||0,
@@ -4607,10 +4619,10 @@ async function autoSyncFromSupabase() {
               transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
               kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
               totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
-              waktuTutup: sh.waktu_tutup||'', isoOpen: sh.waktu_buka_iso||null, isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
-            });
-          }
-        });
+              waktuTutup: sh.waktu_tutup||'', isoOpen: sh.waktu_buka_iso||null,
+              isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
+            };
+          });
       }
     } catch(e) { console.warn('sync shifts:', e.message); }
 
