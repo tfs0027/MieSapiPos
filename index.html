@@ -2733,19 +2733,16 @@ function updateTotals() {
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
   const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
   const disc = parseFloat($('disc-pct').value) || 0;
-  const discAmt = (sub - itemDiscTotal) * disc / 100;
-  const taxable = sub - discAmt;
-  const tax = CFG.enablePajak ? taxable * (CFG.pajak/100) : 0;
+  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem * (CFG.poinNilaiTukar||1000) : 0;
+  const net2 = Math.max(0, sub - itemDiscTotal - poinDiskon);  // setelah item disc + poin
+  const discAmt = net2 * disc / 100;
+  const taxable = net2 - discAmt;
+  const tax = CFG.enablePajak ? Math.round(taxable * (CFG.pajak/100)) : 0;
   var service = 0;
   if (CFG.enableService) {
-    if (CFG.serviceTipe === 'flat') {
-      service = CFG.serviceFlat || 0;
-    } else {
-      service = Math.round(taxable * (CFG.service/100));
-    }
+    service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable * (CFG.service/100));
   }
-  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem * (CFG.poinNilaiTukar||1000) : 0;
-  const grand = Math.max(0, Math.round(taxable + tax + service - poinDiskon));
+  const grand = Math.max(0, Math.round(taxable + tax + service));
   $('c-sub').textContent = fmt(sub - itemDiscTotal);
   var itemDiscRow = $('cart-item-disc-row'); if(itemDiscRow){itemDiscRow.style.display=itemDiscTotal>0?'':'none'; var ide=$('c-item-disc');if(ide)ide.textContent='-'+fmt(itemDiscTotal);}
   $('c-tax').textContent = fmt(tax);
@@ -2977,15 +2974,16 @@ function openPay(method) {
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
   const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
   const disc = parseFloat($('disc-pct').value) || 0;
-  const discAmt = (sub - itemDiscTotal) * disc / 100;
-  const taxable = sub - itemDiscTotal - discAmt;
-  const tax = CFG.enablePajak ? taxable*(CFG.pajak/100) : 0;
+  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
+  const net2 = Math.max(0, sub - itemDiscTotal - poinDiskon);
+  const discAmt = net2 * disc / 100;
+  const taxable = net2 - discAmt;
+  const tax = CFG.enablePajak ? Math.round(taxable*(CFG.pajak/100)) : 0;
   var service = 0;
   if (CFG.enableService) {
     service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable*(CFG.service/100));
   }
-  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
-  const grand = Math.max(0, Math.round(taxable + tax + service - poinDiskon));
+  const grand = Math.max(0, Math.round(taxable + tax + service));
   const suggested = Math.ceil(grand/1000)*1000;
   const icons = {cash:'💵',qris:'📱',transfer:'🏦'};
   const labels = {cash:'Tunai',qris:'QRIS',transfer:'Transfer Bank'};
@@ -3032,15 +3030,16 @@ function processPayment() {
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
   const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
   const disc = parseFloat($('disc-pct').value) || 0;
-  const discAmt = (sub - itemDiscTotal) * disc / 100;
-  const taxable = sub - itemDiscTotal - discAmt;
-  const tax = CFG.enablePajak ? taxable*(CFG.pajak/100) : 0;
+  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
+  const net2 = Math.max(0, sub - itemDiscTotal - poinDiskon);
+  const discAmt = net2 * disc / 100;
+  const taxable = net2 - discAmt;
+  const tax = CFG.enablePajak ? Math.round(taxable*(CFG.pajak/100)) : 0;
   var service = 0;
   if (CFG.enableService) {
     service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable*(CFG.service/100));
   }
-  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
-  const grand = Math.max(0, Math.round(taxable + tax + service - poinDiskon));
+  const grand = Math.max(0, Math.round(taxable + tax + service));
   const mejaVal = $('cart-meja').value;
   const cashRec = ST.payMethod==='cash' ? (parseFloat($('cash-inp') ? $('cash-inp').value : grand)||grand) : grand;
   const change = ST.payMethod==='cash' ? Math.max(0, Math.round(cashRec-grand)) : 0;
@@ -3966,8 +3965,13 @@ function openSplitModal() {
   var discAmt = (sub-itemDiscTotal)*disc/100;
   var taxable = sub - itemDiscTotal - discAmt;
   var poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000):0;
-  var tax = CFG.enablePajak ? taxable*(CFG.pajak/100):0;
-  var grand = Math.max(0, Math.round(taxable+tax-poinDiskon));
+  var net2 = Math.max(0, taxable - poinDiskon);
+  var discAmt2 = net2 * disc / 100;
+  var taxable2 = net2 - discAmt2;
+  var tax = CFG.enablePajak ? Math.round(taxable2*(CFG.pajak/100)):0;
+  var svc2 = 0;
+  if (CFG.enableService) svc2 = CFG.serviceTipe==='flat'?(CFG.serviceFlat||0):Math.round(taxable2*(CFG.service/100));
+  var grand = Math.max(0, Math.round(taxable2+tax+svc2));
   $('split-grand').textContent = fmt(grand);
   $('split-sub').textContent = 'Total: ' + fmt(grand);
   $('split-amt1').value = '';
@@ -4021,7 +4025,7 @@ function processPaymentSplit() {
   var taxable = sub - itemDiscTotal - discAmt;
   var poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000):0;
   var tax = CFG.enablePajak ? taxable*(CFG.pajak/100):0;
-  var grand = Math.max(0, Math.round(taxable+tax-poinDiskon));
+  var grand = Math.max(0, Math.round(taxable+tax)); // poinDiskon sudah di-apply ke taxable
   var mejaVal = $('cart-meja').value;
   var id = 'TRX-'+String(ST.trxCounter).padStart(3,'0'); ST.trxCounter++;
   var now = new Date();
