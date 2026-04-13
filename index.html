@@ -2620,17 +2620,28 @@ function addToCart(id) {
 function openVarModal(menu) {
   _varMenu = menu;
   $('var-modal-title').textContent = menu.emoji + ' ' + menu.name;
-  $('var-modal-price').textContent = fmt(menu.price);
+  var priceLabel = 'Rp ' + menu.price.toLocaleString('id-ID');
+  var hasVariantPrice = (menu.opts||[]).some(function(g){
+    return (g.choices||[]).some(function(ch){ return typeof ch==='object' && ch.price > 0; });
+  });
+  $('var-modal-price').textContent = hasVariantPrice ? 'Harga sesuai varian' : priceLabel;
   const el = $('var-opts-body');
-  el.innerHTML = menu.opts.map((g, gi) =>
-    '<div class="var-group">' +
-    '<div class="var-group-lbl">' + g.label + (g.required?' <span style="color:var(--red-dk)">*wajib</span>':'') + '</div>' +
-    '<div class="var-chips">' +
-    g.choices.map((ch, ci) =>
-      '<div class="var-chip" id="vc-' + gi + '-' + ci + '" onclick="selectVar(' + gi + ',' + ci + ',this)">' + ch + '</div>'
-    ).join('') +
-    '</div></div>'
-  ).join('');
+  el.innerHTML = menu.opts.map(function(g, gi) {
+    return '<div class="var-group">' +
+      '<div class="var-group-lbl">' + g.label + (g.required?' <span style="color:var(--red-dk)">*wajib</span>':'') + '</div>' +
+      '<div class="var-chips">' +
+      g.choices.map(function(ch, ci) {
+        var chLabel = typeof ch === 'object' ? (ch.label||'') : ch;
+        var chPrice = typeof ch === 'object' ? (ch.price||0) : 0;
+        var priceHtml = chPrice > 0
+          ? ' <span style="font-size:10px;opacity:.75">+'+fmt(chPrice)+'</span>'
+          : chPrice < 0
+            ? ' <span style="font-size:10px;opacity:.75">-'+fmt(Math.abs(chPrice))+'</span>'
+            : '';
+        return '<div class="var-chip" id="vc-' + gi + '-' + ci + '" onclick="selectVar(' + gi + ',' + ci + ',this)">' + chLabel + priceHtml + '</div>';
+      }).join('') +
+      '</div></div>';
+  }).join('');
   $('var-note').value = '';
   $('var-modal').classList.add('open');
 }
@@ -2652,13 +2663,15 @@ function confirmVar() {
     const chosen = parent ? parent.querySelector('.var-chip.sel') : null;
     if (!chosen && g.required) { showNotif('Pilih ' + g.label + ' terlebih dahulu','#E17055'); valid=false; return; }
     if (chosen) {
-      const txt = chosen.textContent;
-      selections[g.label] = txt;
-      const priceMatch = txt.match(/(\+|-)Rp\s?([\d.]+)/);
-      if (priceMatch) {
-        const sign = priceMatch[1]==='+' ? 1 : -1;
-        const val = parseInt(priceMatch[2].replace(/\./g,''));
-        extraPrice += sign * val;
+      const ci = parseInt(chosen.id.split('-')[2]);
+      const ch = g.choices[ci];
+      const chLabel = typeof ch === 'object' ? (ch.label||'') : (chosen.textContent||'');
+      const chPrice = typeof ch === 'object' ? (ch.price||0) : 0;
+      selections[g.label] = chLabel;
+      // chPrice > 0: harga jual penuh untuk varian ini → extraPrice = selisih dari base
+      // chPrice = 0: tidak ada penambahan harga
+      if (chPrice > 0) {
+        extraPrice += (chPrice - menu.price); // override harga total
       }
     }
   });
@@ -3323,12 +3336,22 @@ function renderFmOpts() {
     '<button class="btn btn-sm" style="color:var(--red-dk);flex-shrink:0" onclick="hapusOptGroup(' + gi + ')">✕</button>' +
     '</div>' +
     '<div class="var-chips" id="chips-' + gi + '">' +
-    g.choices.map((ch, ci) =>
-      '<div style="display:flex;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--brd);border-radius:20px;padding:2px 6px 2px 10px">' +
-      '<input style="border:none;background:transparent;font-size:11px;width:' + Math.max(60,(ch.length*7)) + 'px;outline:none;color:var(--txt)" value="' + ch + '" oninput="_fmOpts[' + gi + '].choices[' + ci + ']=this.value;this.style.width=Math.max(60,(this.value.length*7))+\'px\'">' +
-      '<button style="border:none;background:none;cursor:pointer;color:var(--txt3);font-size:12px;padding:0 2px" onclick="hapusChoice(' + gi + ',' + ci + ')">×</button>' +
-      '</div>'
-    ).join('') +
+    g.choices.map((ch, ci) => {
+      var chLabel = typeof ch === 'object' ? (ch.label||'') : ch;
+      var chPrice = typeof ch === 'object' ? (ch.price||0) : 0;
+      // Migrasi string lama ke objek
+      if (typeof _fmOpts[gi].choices[ci] !== 'object') _fmOpts[gi].choices[ci] = {label:chLabel, price:0};
+      return '<div style="display:flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--radius);padding:4px 6px 4px 8px;margin-bottom:3px">' +
+        '<input style="border:none;background:transparent;font-size:11px;width:90px;outline:none;color:var(--txt)" value="' + chLabel + '" placeholder="Nama" ' +
+          'oninput="_fmOpts[' + gi + '].choices[' + ci + '].label=this.value">' +
+        '<span style="font-size:10px;color:var(--txt3);flex-shrink:0">Rp</span>' +
+        '<input type="number" style="border:none;background:transparent;font-size:11px;width:72px;outline:none;color:var(--accent);font-weight:700" ' +
+          'value="' + chPrice + '" placeholder="0 = harga dasar" min="0" ' +
+          'title="Harga jual varian ini. 0 = pakai harga dasar menu" ' +
+          'oninput="_fmOpts[' + gi + '].choices[' + ci + '].price=parseFloat(this.value)||0">' +
+        '<button style="border:none;background:none;cursor:pointer;color:var(--txt3);font-size:13px;padding:0 2px" onclick="hapusChoice(' + gi + ',' + ci + ')">×</button>' +
+      '</div>';
+    }).join('') +
     '<button class="var-chip" onclick="tambahChoice(' + gi + ')" style="font-size:11px">+ Pilihan</button>' +
     '</div>' +
     '</div>'
@@ -3336,7 +3359,7 @@ function renderFmOpts() {
 }
 
 function tambahOptGroup() {
-  _fmOpts.push({id:Date.now(),label:'',required:0,choices:['Pilihan 1','Pilihan 2']});
+  _fmOpts.push({id:Date.now(),label:'',required:0,type:'extra', choices:[{label:'Pilihan 1',price:0},{label:'Pilihan 2',price:0}]});
   renderFmOpts();
 }
 
@@ -3346,7 +3369,7 @@ function hapusOptGroup(gi) {
 }
 
 function tambahChoice(gi) {
-  _fmOpts[gi].choices.push('Pilihan baru');
+  _fmOpts[gi].choices.push({label:'Pilihan baru', price:0});
   renderFmOpts();
 }
 
@@ -3365,7 +3388,15 @@ function openMenuModal(id) {
     $('fm-name').value = m.name; $('fm-price').value = m.price;
     renderFmCatSelect(m.cat);
     $('fm-emoji').value = m.emoji; $('fm-status').value = m.status;
-    _fmOpts = JSON.parse(JSON.stringify(m.opts||[]));
+    var rawOpts = JSON.parse(JSON.stringify(m.opts||[]));
+    // Migrasi: jika choices masih berupa string, convert ke objek
+    _fmOpts = rawOpts.map(function(g){
+      return Object.assign({}, g, {
+        choices: (g.choices||[]).map(function(ch){
+          return typeof ch === 'object' ? ch : {label: ch, price: 0};
+        })
+      });
+    });
     _fmImgData = m.img || null;
     setMenuImgPreview(_fmImgData);
   } else {
