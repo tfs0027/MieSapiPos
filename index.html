@@ -2732,7 +2732,7 @@ function changeQty(i, d) {
 function updateTotals() {
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
   const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
-  const disc = parseFloat($('disc-pct').value) || 0;
+  const disc = parseFloat(($('disc-pct')||{value:'0'}).value) || 0;
   const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem * (CFG.poinNilaiTukar||1000) : 0;
   const net2 = Math.max(0, sub - itemDiscTotal - poinDiskon);  // setelah item disc + poin
   const discAmt = net2 * disc / 100;
@@ -2743,14 +2743,14 @@ function updateTotals() {
     service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable * (CFG.service/100));
   }
   const grand = Math.max(0, Math.round(taxable + tax + service));
-  $('c-sub').textContent = fmt(sub - itemDiscTotal);
+  if($('c-sub')) $('c-sub').textContent = fmt(sub - itemDiscTotal);
   var itemDiscRow = $('cart-item-disc-row'); if(itemDiscRow){itemDiscRow.style.display=itemDiscTotal>0?'':'none'; var ide=$('c-item-disc');if(ide)ide.textContent='-'+fmt(itemDiscTotal);}
-  $('c-tax').textContent = fmt(tax);
-  $('c-grand').textContent = fmt(grand);
+  if($('c-tax')) $('c-tax').textContent = fmt(tax);
+  if($('c-grand')) $('c-grand').textContent = fmt(grand);
   var poinRow = $('cart-poin-row');
   if (poinRow) { poinRow.style.display = poinDiskon>0 ? '' : 'none'; }
   var poinDiskonEl = $('c-poin-diskon'); if(poinDiskonEl) poinDiskonEl.textContent = '-Rp '+poinDiskon.toLocaleString('id-ID');
-  $('pajak-label').textContent = CFG.pajak;
+  if($('pajak-label')) $('pajak-label').textContent = CFG.pajak;
   const taxRow = $('cart-tax-row');
   if (taxRow) taxRow.style.display = CFG.enablePajak ? '' : 'none';
   var svcEl = $('c-service'); if(svcEl) svcEl.textContent = fmt(service);
@@ -2973,7 +2973,7 @@ function openPay(method) {
   ST.payMethod = method;
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
   const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
-  const disc = parseFloat($('disc-pct').value) || 0;
+  const disc = parseFloat(($('disc-pct')||{value:'0'}).value) || 0;
   const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
   const net2 = Math.max(0, sub - itemDiscTotal - poinDiskon);
   const discAmt = net2 * disc / 100;
@@ -3029,7 +3029,7 @@ function calcChange(grand) {
 function processPayment() {
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
   const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
-  const disc = parseFloat($('disc-pct').value) || 0;
+  const disc = parseFloat(($('disc-pct')||{value:'0'}).value) || 0;
   const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
   const net2 = Math.max(0, sub - itemDiscTotal - poinDiskon);
   const discAmt = net2 * disc / 100;
@@ -4848,7 +4848,7 @@ async function fetchLaporanFromSupabase() {
 function renderLaporan() {
   var trxs = getLapFilteredTrx();
   var totalRev = trxs.reduce(function(a,t){return a+t.total;},0);
-  const totalItems = trxs.reduce((a,t)=>a+t.items.reduce((b,i)=>b+i.qty,0),0);
+  const totalItems = trxs.reduce(function(a,t){return a+((t.items||[]).reduce(function(b,i){return b+(i.qty||0);},0));},0);
   // Date range for filtering
   var now2 = new Date(), dari = null, sampai = null;
   if (ST.lapPreset==='hari'){ dari=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()); sampai=new Date(dari); sampai.setDate(sampai.getDate()+1); }
