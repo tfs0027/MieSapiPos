@@ -2138,13 +2138,13 @@ function loadShiftLocal() {
       ST.currentShift = null;
       return;
     }
-    // Jika tidak ada restaurantId di data lama, tolak (data tidak bisa diverifikasi)
+    // Jika tidak ada restaurantId di data lama → migrasi: tandai dengan restaurantId saat ini
+    // Jangan hapus — key localStorage sudah per-restoran (wkpos_shift_<rid>)
     if (!d.restaurantId && currentRid) {
-      console.warn('[WarungKu] Data lokal tidak punya restaurantId, dihapus.');
-      try { localStorage.removeItem(getShiftKey()); } catch(e){}
-      ST.transactions = [];
-      ST.shifts = [];
-      return;
+      console.log('[WarungKu] Data lama tanpa restaurantId, migrasi ke restoran:', currentRid);
+      d.restaurantId = currentRid;
+      try { localStorage.setItem(getShiftKey(), JSON.stringify(d)); } catch(e){}
+      // Lanjut load data ini
     }
     if (d.currentShift) {
       ST.currentShift = d.currentShift;
@@ -2313,11 +2313,13 @@ function doLogin(u) {
       });
     } catch(e) { /* silent */ }
   }
-  // Auto-pull dari Supabase jika terkonfigurasi
+  // Auto-pull dari Supabase SELALU saat login (bukan hanya auto-login)
+  // Ini memastikan data segar dari Supabase setelah buka browser
   if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) {
     setTimeout(function() {
-      // Pastikan data lokal sudah di-load sebelum autoSync
-      // agar merge tidak kehilangan transaksi lokal yang belum tersync ke Supabase
+      // Load dari localStorage terlebih dahulu (penting saat login manual setelah browser ditutup)
+      loadShiftLocal();
+      // Lalu sync dari Supabase untuk mendapatkan data terbaru
       if (!ST.transactions.length) loadShiftLocal();
       loadSubscription();
       loadSystemConfig();
