@@ -2975,11 +2975,17 @@ function openPay(method) {
   closeModal('receipt-modal');
   ST.payMethod = method;
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
+  const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
   const disc = parseFloat($('disc-pct').value) || 0;
-  const discAmt = sub*disc/100;
-  const taxable = sub-discAmt;
+  const discAmt = (sub - itemDiscTotal) * disc / 100;
+  const taxable = sub - itemDiscTotal - discAmt;
   const tax = CFG.enablePajak ? taxable*(CFG.pajak/100) : 0;
-  const grand = Math.round(taxable+tax);
+  var service = 0;
+  if (CFG.enableService) {
+    service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable*(CFG.service/100));
+  }
+  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
+  const grand = Math.max(0, Math.round(taxable + tax + service - poinDiskon));
   const suggested = Math.ceil(grand/1000)*1000;
   const icons = {cash:'💵',qris:'📱',transfer:'🏦'};
   const labels = {cash:'Tunai',qris:'QRIS',transfer:'Transfer Bank'};
@@ -3024,11 +3030,17 @@ function calcChange(grand) {
 
 function processPayment() {
   const sub = ST.cart.reduce((a,c) => a+c.price*c.qty, 0);
+  const itemDiscTotal = ST.cart.reduce(function(a,c){return a+(c.discAmt||0)*c.qty;},0);
   const disc = parseFloat($('disc-pct').value) || 0;
-  const discAmt = sub*disc/100;
-  const taxable = sub-discAmt;
+  const discAmt = (sub - itemDiscTotal) * disc / 100;
+  const taxable = sub - itemDiscTotal - discAmt;
   const tax = CFG.enablePajak ? taxable*(CFG.pajak/100) : 0;
-  const grand = Math.round(taxable+tax);
+  var service = 0;
+  if (CFG.enableService) {
+    service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable*(CFG.service/100));
+  }
+  const poinDiskon = _cartPoinRedeem ? _cartPoinRedeem*(CFG.poinNilaiTukar||1000) : 0;
+  const grand = Math.max(0, Math.round(taxable + tax + service - poinDiskon));
   const mejaVal = $('cart-meja').value;
   const cashRec = ST.payMethod==='cash' ? (parseFloat($('cash-inp') ? $('cash-inp').value : grand)||grand) : grand;
   const change = ST.payMethod==='cash' ? Math.max(0, Math.round(cashRec-grand)) : 0;
