@@ -3048,7 +3048,7 @@ function processPayment() {
   const trx = {
     id, time:fmtTime(now), date:fmtDate(now),
     table: mejaVal==='takeaway' ? 'Takeaway' : 'Meja ' + mejaVal,
-    items: ST.cart.map(c => ({name:c.name, qty:c.qty, price:c.price, note:c.note||'', varLabel:c.varLabel||'', extraPrice:c.extraPrice||0, discPct:c.discPct||0, discAmt:c.discAmt||0})),
+    items: ST.cart.map(c => ({menuId:c.menuId||null, name:c.name, qty:c.qty, price:c.price, note:c.note||'', varLabel:c.varLabel||'', extraPrice:c.extraPrice||0, discPct:c.discPct||0, discAmt:c.discAmt||0})),
     orderNote:ST.orderNote||'',
     subtotal:sub, disc, discAmt, tax, total:grand,
     pay:ST.payMethod, cashRec, change, kasir:ST.cu.name, userId:ST.cu.id, shiftId:ST.currentShift.id,
@@ -3164,31 +3164,48 @@ function viewReceipt(id) {
 // MENU
 // ═══════════════════════════════
 function renderMenuTable() {
+  // Hitung terjual dari riwayat transaksi (akurat)
+  var soldMap = {};
+  ST.transactions.forEach(function(t){
+    if (t.voided) return;
+    (t.items||[]).forEach(function(item){
+      var menuId = item.menuId || null;
+      // Cari menu berdasarkan nama jika menuId tidak ada
+      if (!menuId) {
+        var mn = ST.menus.find(function(m){ return m.name === item.name; });
+        if (mn) menuId = mn.id;
+      }
+      if (menuId) soldMap[menuId] = (soldMap[menuId]||0) + (item.qty||0);
+    });
+  });
+  // Update sold di menus dari map (tidak simpan ke CFG, hanya untuk tampilan)
+  ST.menus.forEach(function(m){ if (soldMap[m.id] !== undefined) m.sold = soldMap[m.id]; });
+
   // Sort by urutan
   var sortedMenus = ST.menus.slice().sort(function(a,b){return (a.urutan||0)-(b.urutan||0);});
   $('menu-table').innerHTML = sortedMenus.map((m,idx) =>
     '<tr draggable="true" data-mid="'+m.id+'" class="menu-drag-row" style="cursor:grab">' +
     '<td style="width:24px;color:var(--txt3);font-size:16px;cursor:grab">⠿</td>' +
-    '<td style="display:flex;align-items:center;gap:10px">' +
+    '<td><div style="display:flex;align-items:center;gap:10px">' +
     (m.img
       ? '<img src="' + m.img + '" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0">'
       : '<span style="font-size:22px;flex-shrink:0;width:40px;text-align:center">' + m.emoji + '</span>'
     ) +
     '<div><b>' + m.name + '</b>' +
     (m.img ? '<div style="font-size:9px;color:var(--txt3);margin-top:1px">' + m.emoji + '</div>' : '') +
-    '</div></td>' +
+    '</div></div></td>' +
     '<td><span class="badge ' + (m.cat==='Makanan'?'b-amber':m.cat==='Minuman'?'b-blue':m.cat==='Camilan'?'b-green':'b-purple') + '">' + m.cat + '</span></td>' +
     '<td style="font-weight:700">' + fmt(m.price) + '</td>' +
     '<td><span class="badge ' + (m.status==='available'?'b-green':'b-red') + '">' + (m.status==='available'?'Tersedia':'Habis') + '</span></td>' +
     '<td>' + m.sold + ' porsi</td>' +
-    '<td style="display:flex;gap:5px">' +
-    (m.opts&&m.opts.length ? '<span class="badge b-purple" style="font-size:9px" title="' + m.opts.map(g=>g.label).join(', ') + '">' + m.opts.length + ' varian</span>' : '') +
+    '<td><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">' +
+    (m.opts&&m.opts.length ? '<span class="badge b-purple" style="font-size:9px" title="' + m.opts.map(function(g){return g.label;}).join(', ') + '">' + m.opts.length + ' varian</span>' : '') +
     (can('edit_harga') ?
       '<button class="btn btn-sm" onclick="openMenuModal(' + m.id + ')">✏️</button>' +
       '<button class="btn btn-sm" style="color:' + (m.status==='available'?'var(--red-dk)':'var(--green-dk)') + '" onclick="toggleMenuStatus(' + m.id + ')">' + (m.status==='available'?'Nonaktifkan':'Aktifkan') + '</button>' +
       '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusMenu(' + m.id + ')">🗑️</button>'
       : '<span style="font-size:11px;color:var(--txt3)">Hanya lihat</span>') +
-    '</td></tr>'
+    '</div></td></tr>'
   ).join('');
   setTimeout(initMenuDrag, 50);
 }
@@ -4958,8 +4975,9 @@ function renderLaporan() {
   // Build daily chart from filtered transactions
   var dayMap = {};
   trxs.forEach(function(t) {
-    var d = t.date || 'Unknown';
-    dayMap[d] = (dayMap[d]||0) + t.total;
+    if (!t.date || !t.total) return;  // skip invalid
+    var d = t.date;
+    dayMap[d] = (dayMap[d]||0) + (t.total||0);
   });
   var dayEntries = Object.entries(dayMap).slice(-10);
   var barTitle = $('bar-chart-title');
@@ -4978,9 +4996,12 @@ function renderLaporan() {
     }).join('');
   }
   const mc = {};
-  trxs.forEach(t => t.items.forEach(i => { mc[i.name]=(mc[i.name]||0)+i.qty; }));
+  trxs.forEach(function(t){(t.items||[]).forEach(function(i){ mc[i.name]=(mc[i.name]||0)+(i.qty||0); });});
   const sorted = Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const maxQ = sorted.length ? Math.max(...sorted.map(x=>x[1])) : 1;
+  if (!sorted.length) {
+    $('top-menus').innerHTML = '<div style="text-align:center;color:var(--txt3);font-size:12px;padding:20px 0">Belum ada data penjualan di periode ini</div>';
+  } else {
   $('top-menus').innerHTML = sorted.map(([name,qty],i) =>
     '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--brd)">' +
     '<span style="font-size:12px;font-weight:700;min-width:16px;color:' + (i===0?'var(--amber-dk)':'var(--txt2)') + '">#' + (i+1) + '</span>' +
@@ -4988,17 +5009,25 @@ function renderLaporan() {
     '<div style="height:4px;background:var(--bg);border-radius:2px;margin-top:3px"><div style="height:100%;width:' + Math.round(qty/maxQ*100) + '%;background:var(--accent);border-radius:2px"></div></div></div>' +
     '<span style="font-size:12px;font-weight:700;color:var(--accent)">' + qty + '</span></div>'
   ).join('');
+  }
   const catData = {};
-  trxs.forEach(t => t.items.forEach(item => {
-    const m = ST.menus.find(x=>x.name===item.name);
-    const cat = m ? m.cat : 'Lainnya';
-    if (!catData[cat]) catData[cat] = {qty:0,rev:0};
-    catData[cat].qty += item.qty; catData[cat].rev += item.price*item.qty;
-  }));
+  trxs.forEach(function(t){
+    (t.items||[]).forEach(function(item){
+      var mn = ST.menus.find(function(x){return x.name===item.name||x.id===item.menuId;});
+      var cat = mn ? mn.cat : 'Lainnya';
+      if (!catData[cat]) catData[cat] = {qty:0,rev:0};
+      catData[cat].qty += (item.qty||0);
+      catData[cat].rev += (item.price||0)*(item.qty||0);
+    });
+  });
   const totalRevAll = Object.values(catData).reduce((a,c)=>a+c.rev,0);
+  if (!Object.keys(catData).length) {
+    var catTbl = $('cat-table'); if(catTbl) catTbl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--txt3);font-size:12px;padding:16px">Belum ada data</td></tr>';
+  } else {
   $('cat-table').innerHTML = Object.entries(catData).sort((a,b)=>b[1].rev-a[1].rev).map(([cat,d]) =>
     '<tr><td>' + cat + '</td><td>' + d.qty + ' item</td><td style="font-weight:700">' + fmt(d.rev) + '</td><td>' + (totalRevAll?Math.round(d.rev/totalRevAll*100):0) + '%</td></tr>'
   ).join('');
+  }
   // Online orders detail table (from s.onlineOrders - delivered orders)
   var onlineEl = $('online-summary-lap');
   if (onlineEl) {
