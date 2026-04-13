@@ -2620,11 +2620,7 @@ function addToCart(id) {
 function openVarModal(menu) {
   _varMenu = menu;
   $('var-modal-title').textContent = menu.emoji + ' ' + menu.name;
-  var priceLabel = 'Rp ' + menu.price.toLocaleString('id-ID');
-  var hasVariantPrice = (menu.opts||[]).some(function(g){
-    return (g.choices||[]).some(function(ch){ return typeof ch==='object' && ch.price > 0; });
-  });
-  $('var-modal-price').textContent = hasVariantPrice ? 'Harga sesuai varian' : priceLabel;
+  $('var-modal-price').textContent = fmt(menu.price);
   const el = $('var-opts-body');
   el.innerHTML = menu.opts.map(function(g, gi) {
     return '<div class="var-group">' +
@@ -2668,10 +2664,10 @@ function confirmVar() {
       const chLabel = typeof ch === 'object' ? (ch.label||'') : (chosen.textContent||'');
       const chPrice = typeof ch === 'object' ? (ch.price||0) : 0;
       selections[g.label] = chLabel;
-      // chPrice > 0: harga jual penuh untuk varian ini → extraPrice = selisih dari base
-      // chPrice = 0: tidak ada penambahan harga
-      if (chPrice > 0) {
-        extraPrice += (chPrice - menu.price); // override harga total
+      // chPrice = harga TAMBAHAN di atas harga dasar menu
+      // 0 = tidak ada tambahan harga
+      if (chPrice !== 0) {
+        extraPrice += chPrice;
       }
     }
   });
@@ -3480,8 +3476,23 @@ function tambahKategori() {
 function saveMenu() {
   const name = $('fm-name').value.trim(), price = parseFloat($('fm-price').value)||0;
   if (!name||!price) { showNotif('Nama & harga wajib diisi','#E17055'); return; }
-  const validOpts = _fmOpts.filter(g => g.label.trim() && g.choices.filter(ch=>ch.trim()).length > 0)
-    .map(g => ({...g, label:g.label.trim(), choices:g.choices.map(ch=>ch.trim()).filter(ch=>ch)}));
+  const validOpts = _fmOpts.filter(function(g){
+    if (!g.label.trim()) return false;
+    return g.choices.filter(function(ch){
+      var lbl = typeof ch === 'object' ? (ch.label||'') : ch;
+      return lbl.toString().trim();
+    }).length > 0;
+  }).map(function(g){
+    return Object.assign({}, g, {
+      label: g.label.trim(),
+      choices: g.choices
+        .map(function(ch){
+          if (typeof ch === 'object') return {label:(ch.label||'').trim(), price: ch.price||0};
+          return {label: ch.trim(), price: 0};
+        })
+        .filter(function(ch){ return ch.label; })
+    });
+  });
   // Preserve foto yang sudah ada jika tidak ada foto baru
   var existingImg = ST.editMenuId ? (ST.menus.find(function(m){return m.id===ST.editMenuId;})||{}).img : null;
   var existingUrutan = ST.editMenuId ? (ST.menus.find(function(m){return m.id===ST.editMenuId;})||{}).urutan : null;
