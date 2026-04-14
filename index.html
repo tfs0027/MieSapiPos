@@ -3930,8 +3930,18 @@ function getLapFilteredTrx() {
   var validTrx = ST.transactions.filter(function(t){return !t.voided;});
   if (ST.lapPreset === 'semua' || (!dari && !sampai)) return validTrx;
   var hasil = validTrx.filter(function(t) {
-    if (!t.date && !t.time) return false; // skip transaksi tanpa tanggal
-    var d = parseTrxDate(t.date, t.time);
+    // Jika tidak ada date, coba ambil dari created_at (jika ada)
+    var tDate = t.date;
+    var tTime = t.time;
+    if (!tDate && t.created_at) {
+      var _ca = new Date(t.created_at);
+      tDate = _ca.getFullYear()+'-'+String(_ca.getMonth()+1).padStart(2,'0')+'-'+String(_ca.getDate()).padStart(2,'0');
+      tTime = tTime || _ca.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+      // Simpan agar tidak perlu re-compute
+      t.date = tDate; t.time = tTime;
+    }
+    if (!tDate) return false; // benar-benar tidak ada tanggal sama sekali
+    var d = parseTrxDate(tDate, tTime);
     if (isNaN(d)) return false;
     if (dari && d < dari) return false;
     if (sampai && d > sampai) return false;
