@@ -2086,6 +2086,7 @@ const saveCFG = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG))
 const fmt = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 const fmtTime = d => d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
 const fmtDate = d => d.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+const isoDate = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const can = p => ST.cu && ST.cu.perms[p];
 const isOpen = () => ST.currentShift && ST.currentShift.status === 'open';
 const $ = id => document.getElementById(id);
@@ -3048,7 +3049,7 @@ function processPayment() {
   const id = 'TRX-' + String(ST.trxCounter).padStart(3,'0'); ST.trxCounter++;
   const now = new Date();
   const trx = {
-    id, time:fmtTime(now), date:fmtDate(now),
+    id, time:fmtTime(now), date:isoDate(now), dateDisplay:fmtDate(now),
     table: mejaVal==='takeaway' ? 'Takeaway' : 'Meja ' + mejaVal,
     items: ST.cart.map(c => ({menuId:c.menuId||null, name:c.name, qty:c.qty, price:c.price, note:c.note||'', varLabel:c.varLabel||'', extraPrice:c.extraPrice||0, discPct:c.discPct||0, discAmt:c.discAmt||0})),
     orderNote:ST.orderNote||'',
@@ -3932,28 +3933,34 @@ function getLapFilteredTrx() {
 }
 
 function parseTrxDate(dateStr, timeStr) {
-  var months = {Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,Jun:5,Jul:6,Agu:7,Sep:8,Okt:9,Nov:10,Des:11};
   var str = (dateStr||'').trim();
   var d;
+
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-    if (str.length === 10) {
-      // "2025-01-15" — parse sebagai tanggal LOKAL (bukan UTC)
-      var p = str.split('-');
-      d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]), 0, 0, 0, 0);
-    } else {
-      // Ada time component — gunakan langsung
-      d = new Date(str);
-    }
+    // ISO format: "2025-01-15" atau "2025-01-15T..." — parse LOKAL
+    var p = str.substring(0,10).split('-');
+    d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]), 0, 0, 0, 0);
   } else {
-    var parts = str.split(' ');
-    if (parts.length === 3) {
-      d = new Date(parseInt(parts[2]), months[parts[1]]||0, parseInt(parts[0]));
+    // Format lama locale id-ID: "15 Jan 2025", "15 Apr 2026", "15 April 2025" dll
+    var months = {
+      'jan':0,'feb':1,'mar':2,'apr':3,'mei':4,'jun':5,
+      'jul':6,'agu':7,'agt':7,'sep':8,'okt':9,'ok':9,'nov':10,'des':11,'dec':11
+    };
+    var parts = str.split(/\s+/);
+    if (parts.length >= 3) {
+      var day = parseInt(parts[0]);
+      var monKey = parts[1].replace('.','').toLowerCase().substring(0,3);
+      var yr = parseInt(parts[2]);
+      var mon = (months[monKey] !== undefined) ? months[monKey] : 0;
+      d = new Date(yr, mon, day, 0, 0, 0, 0);
     } else {
       d = new Date(str);
     }
   }
+
   if (isNaN(d)) d = new Date();
-  // FIX: Indonesian locale menggunakan titik (.) sebagai pemisah jam — handle keduanya
+
+  // Tambahkan jam dari timeStr (handle pemisah : atau .)
   if (timeStr) {
     var sep = timeStr.includes(':') ? ':' : (timeStr.includes('.') ? '.' : null);
     if (sep) {
@@ -4056,7 +4063,7 @@ function processPaymentSplit() {
   var now = new Date();
   var labelPay = function(m){return m==='cash'?'Tunai':m==='qris'?'QRIS':'Transfer';};
   var trx = {
-    id, time:fmtTime(now), date:fmtDate(now),
+    id, time:fmtTime(now), date:isoDate(now), dateDisplay:fmtDate(now),
     table: mejaVal==='takeaway'?'Takeaway':'Meja '+mejaVal,
     items: ST.cart.map(function(c){return {name:c.name,qty:c.qty,price:c.price,note:c.note||'',varLabel:c.varLabel||'',extraPrice:c.extraPrice||0,discPct:c.discPct||0,discAmt:c.discAmt||0};}),
     subtotal:sub, disc, discAmt:Math.round(discAmt), tax:Math.round(tax), total:grand,
