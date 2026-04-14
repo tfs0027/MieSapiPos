@@ -4666,11 +4666,18 @@ async function autoSyncFromSupabase() {
     try {
       var mbRes = await _sb.from('members').select('*').eq('restaurant_id', rid);
       if (!mbRes.error && mbRes.data) {
+        // Merge Supabase data dengan lokal — ambil poin tertinggi untuk hindari poin hilang
+        var sbMemberMap = {};
+        mbRes.data.forEach(function(m){ sbMemberMap[m.id] = m; sbMemberMap[m.hp] = m; });
         ST.members = mbRes.data.map(function(m) {
+          // Cek apakah ada data lokal yang lebih baru (poin lebih tinggi)
+          var localM = ST.members.find(function(lm){ return String(lm.id)===String(m.id) || lm.hp===m.hp; });
+          var poin = Math.max(m.poin||0, localM ? (localM.poin||0) : 0);
           return {
             id: m.id, nama: m.nama, hp: m.hp, catatan: m.catatan||'',
-            poin: m.poin||0, totalTrx: m.total_trx||0,
-            totalBelanja: m.total_belanja||0, bergabung: m.bergabung||fmtDate(new Date())
+            poin: poin, totalTrx: Math.max(m.total_trx||0, localM ? (localM.totalTrx||0) : 0),
+            totalBelanja: Math.max(m.total_belanja||0, localM ? (localM.totalBelanja||0) : 0),
+            bergabung: m.bergabung||fmtDate(new Date())
           };
         });
         if (window._currentPage === 'users') renderMemberList2();
@@ -6344,13 +6351,13 @@ function renderMemberList(q) {
       m.nama.charAt(0).toUpperCase() + '</div>' +
       '<div style="flex:1"><div style="font-size:12px;font-weight:600">' + m.nama + '</div>' +
       '<div style="font-size:10px;color:var(--txt2)">' + m.hp + ' · ' + m.poin + ' poin · ' + m.totalTrx + ' transaksi</div></div>' +
-      '<button class="btn btn-sm" style="font-size:11px" onclick="pilihMember(' + m.id + ')">Pilih</button>' +
+      '<button class="btn btn-sm" style="font-size:11px" onclick="pilihMember(\'' + m.id + '\')">Pilih</button>' +
       '</div>';
   }).join('');
 }
 
 function pilihMember(id) {
-  var m = ST.members.find(function(x){return x.id===id;});
+  var m = ST.members.find(function(x){return String(x.id)===String(id);});
   if (!m) return;
   _cartMemberId = id;
   var info = $('cart-member-info');
@@ -7130,10 +7137,20 @@ async function sbSyncMember(m) {
     // Jika m.id adalah UUID valid dari Supabase, update langsung
     var isUUID = /^[0-9a-f-]{36}$/i.test(String(m.id||''));
     if (isUUID) {
-      await _sb.from('members').update(updateData).eq('id', m.id).eq('restaurant_id', rid);
+      var res = await _sb.from('members').update(updateData).eq('id', m.id).eq('restaurant_id', rid);
+      if (res.error) {
+        console.warn('sbSyncMember update gagal:', res.error.message, '— fallback upsert');
+        // Fallback jika update gagal
+        Object.assign(updateData, {id: m.id});
+        await _sb.from('members').upsert(updateData, {onConflict:'id'});
+      }
     } else {
-      // Fallback: upsert berdasarkan hp+restaurant_id
-      await _sb.from('members').upsert(Object.assign({}, updateData), {onConflict:'hp,restaurant_id'});
+      // Tidak punya UUID — upsert by hp+restaurant_id
+      var res2 = await _sb.from('members').upsert(Object.assign({}, updateData), {onConflict:'restaurant_id,hp'});
+      if (!res2.error && res2.data && res2.data[0]) {
+        // Simpan UUID yang baru agar update berikutnya lebih efisien
+        m.id = res2.data[0].id;
+      }
     }
   } catch(e) { console.warn('sbSyncMember:', e.message); }
 }
