@@ -2159,12 +2159,7 @@ function loadShiftLocal() {
     }
     if (d.trxCounter) ST.trxCounter = d.trxCounter;
     if (d.shiftCounter) ST.shiftCounter = d.shiftCounter;
-    if (d.transactions) {
-      // Hanya load transaksi LENGKAP (punya date) — buang transaksi minimal dari currentShift.transaksi
-      ST.transactions = d.transactions.filter(function(t){
-        return t.date || t.created_at; // punya tanggal = transaksi lengkap
-      });
-    }
+    if (d.transactions) ST.transactions = d.transactions;
   } catch(e) { console.warn('loadShiftLocal:', e.message); }
 }
 
@@ -3935,17 +3930,29 @@ function getLapFilteredTrx() {
   var validTrx = ST.transactions.filter(function(t){return !t.voided;});
   if (ST.lapPreset === 'semua' || (!dari && !sampai)) return validTrx;
   var hasil = validTrx.filter(function(t) {
-    // Jika tidak ada date, coba ambil dari created_at (jika ada)
     var tDate = t.date;
-    var tTime = t.time;
+    var tTime = t.time || t.waktu;
+    // Jika tidak ada date, coba ambil dari created_at
     if (!tDate && t.created_at) {
       var _ca = new Date(t.created_at);
       tDate = _ca.getFullYear()+'-'+String(_ca.getMonth()+1).padStart(2,'0')+'-'+String(_ca.getDate()).padStart(2,'0');
       tTime = tTime || _ca.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
-      // Simpan agar tidak perlu re-compute
       t.date = tDate; t.time = tTime;
     }
-    if (!tDate) return false; // transaksi minimal tanpa tanggal — skip
+    // Jika masih tidak ada, cari tanggal dari shift yang mengandung transaksi ini
+    if (!tDate) {
+      var allShiftsForDate = (ST.shifts||[]).concat(ST.currentShift ? [ST.currentShift] : []);
+      var parentShift = allShiftsForDate.find(function(sh){
+        return sh && sh.transaksi && sh.transaksi.find(function(st){ return st.id === t.id; });
+      });
+      if (parentShift && parentShift.tanggal) {
+        tDate = parentShift.tanggal; // format fmtDate dari shift
+        t.date = tDate;
+        tTime = tTime || t.waktu || parentShift.waktuBuka || '00:00';
+        t.time = tTime;
+      }
+    }
+    if (!tDate) return false; // tidak ada tanggal sama sekali
     var d = parseTrxDate(tDate, tTime);
     if (isNaN(d)) return false;
     if (dari && d < dari) return false;
@@ -4709,10 +4716,9 @@ async function autoSyncFromSupabase() {
         });
         // Merge: Supabase sebagai referensi, gabung dengan data lokal yang belum tersync
         var sbCodes = new Set(sbMapped.map(function(t){ return t.id; }));
-        // Hanya ambil transaksi LENGKAP (punya date + items) yang belum ada di Supabase
-        // Transaksi minimal dari currentShift.transaksi (tanpa date) dibuang
+        // Ambil semua transaksi lokal yang belum ada di Supabase
         var localUnsync = ST.transactions.filter(function(t){
-          return !sbCodes.has(t.id) && t.date && t.items;
+          return !sbCodes.has(t.id);
         });
         // Set dari Supabase sebagai base, tambahkan lokal yang belum ada
         ST.transactions = sbMapped.concat(localUnsync);
@@ -4842,10 +4848,9 @@ async function fetchLaporanFromSupabase() {
           voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
         };
       });
-      // Merge: hanya pertahankan transaksi lokal LENGKAP yang belum di Supabase
       var sbCodes2 = new Set(sbMapped2.map(function(t){ return t.id; }));
       var localUnsync2 = ST.transactions.filter(function(t){
-        return !sbCodes2.has(t.id) && t.date && t.items;
+        return !sbCodes2.has(t.id);
       });
       ST.transactions = sbMapped2;
       if (localUnsync2.length) {
