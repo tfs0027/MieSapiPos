@@ -2159,7 +2159,12 @@ function loadShiftLocal() {
     }
     if (d.trxCounter) ST.trxCounter = d.trxCounter;
     if (d.shiftCounter) ST.shiftCounter = d.shiftCounter;
-    if (d.transactions) ST.transactions = d.transactions;
+    if (d.transactions) {
+      // Hanya load transaksi LENGKAP (punya date) — buang transaksi minimal dari currentShift.transaksi
+      ST.transactions = d.transactions.filter(function(t){
+        return t.date || t.created_at; // punya tanggal = transaksi lengkap
+      });
+    }
   } catch(e) { console.warn('loadShiftLocal:', e.message); }
 }
 
@@ -3940,7 +3945,7 @@ function getLapFilteredTrx() {
       // Simpan agar tidak perlu re-compute
       t.date = tDate; t.time = tTime;
     }
-    if (!tDate) return false; // benar-benar tidak ada tanggal sama sekali
+    if (!tDate) return false; // transaksi minimal tanpa tanggal — skip
     var d = parseTrxDate(tDate, tTime);
     if (isNaN(d)) return false;
     if (dari && d < dari) return false;
@@ -4704,8 +4709,11 @@ async function autoSyncFromSupabase() {
         });
         // Merge: Supabase sebagai referensi, gabung dengan data lokal yang belum tersync
         var sbCodes = new Set(sbMapped.map(function(t){ return t.id; }));
-        // Ambil transaksi lokal yang TIDAK ada di Supabase (belum tersync)
-        var localUnsync = ST.transactions.filter(function(t){ return !sbCodes.has(t.id); });
+        // Hanya ambil transaksi LENGKAP (punya date + items) yang belum ada di Supabase
+        // Transaksi minimal dari currentShift.transaksi (tanpa date) dibuang
+        var localUnsync = ST.transactions.filter(function(t){
+          return !sbCodes.has(t.id) && t.date && t.items;
+        });
         // Set dari Supabase sebagai base, tambahkan lokal yang belum ada
         ST.transactions = sbMapped.concat(localUnsync);
         // Retry sync untuk transaksi lokal yang belum masuk Supabase
@@ -4834,9 +4842,11 @@ async function fetchLaporanFromSupabase() {
           voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
         };
       });
-      // FIX: Merge — jangan replace penuh, pertahankan transaksi lokal yg belum tersync
-      var sbCodes2 = sbMapped2.map(function(t){ return t.id; });
-      var localUnsync2 = ST.transactions.filter(function(t){ return !sbCodes2.includes(t.id); });
+      // Merge: hanya pertahankan transaksi lokal LENGKAP yang belum di Supabase
+      var sbCodes2 = new Set(sbMapped2.map(function(t){ return t.id; }));
+      var localUnsync2 = ST.transactions.filter(function(t){
+        return !sbCodes2.has(t.id) && t.date && t.items;
+      });
       ST.transactions = sbMapped2;
       if (localUnsync2.length) {
         localUnsync2.forEach(function(trx) {
