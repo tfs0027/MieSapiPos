@@ -3851,22 +3851,32 @@ function saveStok() {
 // Helper: ambil online orders sesuai filter laporan saat ini
 function getLapOnlineOrders() {
   var now2 = new Date(), dari = null, sampai = null;
-  if (ST.lapPreset==='hari'){ dari=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()); sampai=new Date(dari); sampai.setDate(sampai.getDate()+1); }
-  else if (ST.lapPreset==='minggu'){ sampai=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()+1); dari=new Date(sampai); dari.setDate(dari.getDate()-7); }
-  else if (ST.lapPreset==='bulan'){ sampai=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate()+1); dari=new Date(sampai); dari.setDate(dari.getDate()-30); }
-  else if (ST.lapPreset==='custom'){ var dEl=$('lap-dari'),sEl=$('lap-sampai'); dari=dEl&&dEl.value?new Date(dEl.value):null; sampai=sEl&&sEl.value?new Date(sEl.value+'T23:59:59'):null; }
-  var result = [];
-  var _cachedOnline = ST._onlineOrdersCache || [];
-  if (_cachedOnline.length) {
-    _cachedOnline.forEach(function(o) {
-      var oDate = o.created_at ? new Date(o.created_at) : null;
-      var inRange = true;
-      if (ST.lapPreset !== 'semua' && dari && sampai && oDate) inRange = oDate >= dari && oDate < sampai;
-      if (inRange) result.push(o);
-    });
+  if (ST.lapPreset==='hari') {
+    dari = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(), 0, 0, 0, 0);
+    sampai = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(), 23, 59, 59, 999);
+  } else if (ST.lapPreset==='minggu') {
+    sampai = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(), 23, 59, 59, 999);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-6); dari.setHours(0,0,0,0);
+  } else if (ST.lapPreset==='bulan') {
+    sampai = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(), 23, 59, 59, 999);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-29); dari.setHours(0,0,0,0);
+  } else if (ST.lapPreset==='custom') {
+    var dEl=$('lap-dari'), sEl=$('lap-sampai');
+    dari = dEl&&dEl.value ? new Date(dEl.value+'T00:00:00') : null;
+    sampai = sEl&&sEl.value ? new Date(sEl.value+'T23:59:59') : null;
   }
-  return result;
+  var _cache = ST._onlineOrdersCache || [];
+  if (ST.lapPreset === 'semua' || (!dari && !sampai)) return _cache;
+  return _cache.filter(function(o) {
+    if (!o.created_at) return true; // tidak ada tanggal, masukkan
+    var oDate = new Date(o.created_at);
+    // Konversi ke waktu lokal untuk perbandingan yang tepat
+    var oLocal = new Date(oDate.getFullYear(), oDate.getMonth(), oDate.getDate(),
+      oDate.getHours(), oDate.getMinutes(), oDate.getSeconds());
+    return oLocal >= dari && oLocal <= sampai;
+  });
 }
+
 
 function exportLaporanCSV() {
   var trxs = getLapFilteredTrx();
@@ -5185,25 +5195,38 @@ function renderLaporan() {
       var oDate = o.created_at ? new Date(o.created_at) : null;
       var inRange = true;
       if (ST.lapPreset !== 'semua' && dari && sampai && oDate) {
-        inRange = oDate >= dari && oDate < sampai;
+        // Konversi ke waktu lokal untuk perbandingan yang tepat (hindari UTC shift)
+        var oLocal = new Date(oDate.getFullYear(), oDate.getMonth(), oDate.getDate(),
+          oDate.getHours(), oDate.getMinutes(), oDate.getSeconds());
+        inRange = oLocal >= dari && oLocal <= sampai;
       }
       if (inRange) { onlineTotal += o.total||0; onlineTrxCount++; onlineOrders.push(o); }
     });
   }
-  // Hitung onlinePlatforms manual dari shifts (input manual kasir, bukan dari Supabase orders)
+  // Hitung onlinePlatforms manual dari shifts — FILTER berdasarkan tanggal shift
   allShifts.forEach(function(s) {
-    if (s.onlinePlatforms) s.onlinePlatforms.forEach(function(pl){ onlineTotal+=pl.jumlah; });
-    // FIXED: s.onlineOrders dari localStorage TIDAK dipakai jika ada Supabase+restaurantId
-    // karena tidak bisa divalidasi milik toko mana — bisa data bocor dari toko lain
-    // Hanya fallback jika benar-benar offline (tidak ada _sb sama sekali)
-    if (!_sb && s.onlineOrders && !_cachedOnline.length) s.onlineOrders.forEach(function(o){
-      var shiftDate = s.tanggal ? new Date(s.tanggal) : null;
-      var inRange = true;
-      if (ST.lapPreset !== 'semua' && dari && sampai && shiftDate) {
-        inRange = shiftDate >= dari && shiftDate <= sampai;
+    if (s.onlinePlatforms && s.onlinePlatforms.length) {
+      // Cek apakah shift ini dalam rentang filter
+      var shiftDate = s.tanggal ? parseTrxDate(s.tanggal, s.waktuBuka) : null;
+      var shiftInRange = true;
+      if (ST.lapPreset !== 'semua' && dari && sampai && shiftDate && !isNaN(shiftDate)) {
+        shiftInRange = shiftDate >= dari && shiftDate < sampai;
       }
-      if (inRange) { onlineTotal += o.total; onlineTrxCount++; onlineOrders.push(o); }
-    });
+      if (shiftInRange) {
+        s.onlinePlatforms.forEach(function(pl){ onlineTotal += pl.jumlah||0; });
+      }
+    }
+    // Fallback offline saja
+    if (!_sb && s.onlineOrders && !_cachedOnline.length) {
+      var shiftDate2 = s.tanggal ? parseTrxDate(s.tanggal, s.waktuBuka) : null;
+      var inRange2 = true;
+      if (ST.lapPreset !== 'semua' && dari && sampai && shiftDate2 && !isNaN(shiftDate2)) {
+        inRange2 = shiftDate2 >= dari && shiftDate2 < sampai;
+      }
+      if (inRange2) s.onlineOrders.forEach(function(o){
+        onlineTotal += o.total||0; onlineTrxCount++; onlineOrders.push(o);
+      });
+    }
   });
   // Also fetch delivered orders from Supabase for current period (more reliable)
   if (_sb && CFG.restaurantId && !_lapOnlineFetching) {
@@ -5219,7 +5242,7 @@ function renderLaporan() {
       if (res.error || !res.data) return;
       // Replace with fresh Supabase data
       var sbData = res.data.map(function(o){
-        return {id:o.order_code,total:o.total||0,ongkir:o.ongkir||0,subtotal:o.subtotal||0,pay:o.pay_method,nama:o.nama_pemesan,time:o.created_at?new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}):'-'};
+        return {id:o.order_code,total:o.total||0,ongkir:o.ongkir||0,subtotal:o.subtotal||0,pay:o.pay_method,nama:o.nama_pemesan,catatan:o.catatan||'',created_at:o.created_at,time:o.created_at?new Date(o.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}):'-'};
       });
       // Update cache dan currentShift
       ST._onlineOrdersCache = sbData;
