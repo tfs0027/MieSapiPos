@@ -3861,6 +3861,12 @@ function exportLaporanCSV() {
 
 function exportLaporanHTML() {
   var trxs = getLapFilteredTrx();
+  // Debug info — tampilkan di konsol
+  if (ST.transactions.length) {
+    console.log('[LAP] Total transaksi di ST:', ST.transactions.length, '| Setelah filter:', trxs.length, '| Preset:', ST.lapPreset);
+    var sample = ST.transactions.slice(0,3);
+    sample.forEach(function(t){ console.log('  Sample:', t.id, 'date:', t.date, 'time:', t.time, 'total:', t.total); });
+  }
   var totalRev = trxs.reduce(function(a,t){return a+t.total;},0);
   var onlineTotal = 0;
   ST.shifts.filter(function(s){return s.status==='closed';}).forEach(function(s){
@@ -3923,13 +3929,26 @@ function getLapFilteredTrx() {
   }
   var validTrx = ST.transactions.filter(function(t){return !t.voided;});
   if (ST.lapPreset === 'semua' || (!dari && !sampai)) return validTrx;
-  return validTrx.filter(function(t) {
+  var hasil = validTrx.filter(function(t) {
     var d = parseTrxDate(t.date, t.time);
-    if (isNaN(d)) return false; // skip invalid dates
+    if (isNaN(d)) return false;
     if (dari && d < dari) return false;
     if (sampai && d > sampai) return false;
     return true;
   });
+  // Debug: log ke console agar bisa dicek
+  if (window._lapDebug) {
+    console.group('[LAP DEBUG] Filter: ' + ST.lapPreset);
+    console.log('Dari:', dari ? dari.toLocaleString('id-ID') : 'semua');
+    console.log('Sampai:', sampai ? sampai.toLocaleString('id-ID') : 'semua');
+    validTrx.forEach(function(t){
+      var d = parseTrxDate(t.date, t.time);
+      var inRange = (!dari||d>=dari) && (!sampai||d<=sampai);
+      console.log(t.id, '| date:', t.date, '| time:', t.time, '| parsed:', d.toLocaleString('id-ID'), '| inRange:', inRange);
+    });
+    console.groupEnd();
+  }
+  return hasil;
 }
 
 function parseTrxDate(dateStr, timeStr) {
@@ -4876,7 +4895,9 @@ async function fetchLaporanFromSupabase() {
 }
 
 function renderLaporan() {
+  window._lapDebug = true; // aktifkan debug log
   var trxs = getLapFilteredTrx();
+  window._lapDebug = false;
   var totalRev = trxs.reduce(function(a,t){return a+t.total;},0);
   const totalItems = trxs.reduce(function(a,t){return a+((t.items||[]).reduce(function(b,i){return b+(i.qty||0);},0));},0);
   // Date range for filtering
