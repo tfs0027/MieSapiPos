@@ -4662,20 +4662,18 @@ async function autoSyncFromSupabase() {
             voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
           };
         });
-        // Supabase = sumber kebenaran, langsung set (bukan merge)
-        ST.transactions = sbMapped;
-        // Cari transaksi lokal yang belum ada di Supabase — hanya dari shift aktif
-        var sbCodes = sbMapped.map(function(t){ return t.id; });
-        var localUnsync = (ST.currentShift && ST.currentShift.transaksi || [])
-          .filter(function(t){ return !sbCodes.includes(t.id); });
+        // Merge: Supabase sebagai referensi, gabung dengan data lokal yang belum tersync
+        var sbCodes = new Set(sbMapped.map(function(t){ return t.id; }));
+        // Ambil transaksi lokal yang TIDAK ada di Supabase (belum tersync)
+        var localUnsync = ST.transactions.filter(function(t){ return !sbCodes.has(t.id); });
+        // Set dari Supabase sebagai base, tambahkan lokal yang belum ada
+        ST.transactions = sbMapped.concat(localUnsync);
+        // Retry sync untuk transaksi lokal yang belum masuk Supabase
         if (localUnsync.length) {
+          console.log('[WarungKu] ' + localUnsync.length + ' transaksi lokal belum tersync, retry...');
           localUnsync.forEach(function(trx) {
-            if (!ST.transactions.find(function(t){ return t.id===trx.id; })) {
-              ST.transactions.unshift(trx);
-              setTimeout(function(){ sbSyncTransaction(trx); }, 500);
-            }
+            setTimeout(function(){ sbSyncTransaction(trx); }, 600);
           });
-          console.log('[WarungKu] Retry sync ' + localUnsync.length + ' transaksi shift aktif...');
         }
         // FIX: Update trxCounter agar tidak bentrok dengan data yang sudah ada
         var maxNum = ST.transactions.reduce(function(mx, t) {
@@ -6358,6 +6356,8 @@ function addPoinAfterTrx(trxTotal, memberId) {
   if (m.poin < 0) m.poin = 0;
   m.totalTrx++;
   m.totalBelanja += trxTotal;
+  // Sync poin ke Supabase langsung setelah transaksi
+  sbSyncMember(m);
   var msg = '👤 ' + m.nama;
   if (poinRedeemedNow > 0) msg += ' · -' + poinRedeemedNow + ' poin ditukar';
   if (poinEarned > 0) msg += ' · +' + poinEarned + ' poin';
@@ -7067,11 +7067,19 @@ async function sbSyncMember(m) {
   if (!_sb || !CFG.restaurantId) return;
   var rid = CFG.restaurantId;
   try {
-    await _sb.from('members').upsert({
-      id: (function(s){var h=0;for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;}var x=(h>>>0).toString(16).padStart(8,'0');var h2=0;for(var i=0;i<s.length;i++){h2=Math.imul(37,h2)+s.charCodeAt(i)|0;}var x2=(h2>>>0).toString(16).padStart(8,'0');return x.substr(0,8)+'-'+x2.substr(0,4)+'-4'+x.substr(4,3)+'-a'+x2.substr(4,3)+'-'+x.substr(0,4)+x2;})(rid+'mbr'+m.hp), restaurant_id: rid,
+    var updateData = {
       nama: m.nama, hp: m.hp, catatan: m.catatan||'',
       poin: m.poin||0, total_trx: m.totalTrx||0, total_belanja: m.totalBelanja||0,
-    }, {onConflict:'id'});
+      restaurant_id: rid,
+    };
+    // Jika m.id adalah UUID valid dari Supabase, update langsung
+    var isUUID = /^[0-9a-f-]{36}$/i.test(String(m.id||''));
+    if (isUUID) {
+      await _sb.from('members').update(updateData).eq('id', m.id).eq('restaurant_id', rid);
+    } else {
+      // Fallback: upsert berdasarkan hp+restaurant_id
+      await _sb.from('members').upsert(Object.assign({}, updateData), {onConflict:'hp,restaurant_id'});
+    }
   } catch(e) { console.warn('sbSyncMember:', e.message); }
 }
 
