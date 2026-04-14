@@ -3947,18 +3947,16 @@ function getLapFilteredTrx() {
     if (sampai && d > sampai) return false;
     return true;
   });
-  // Debug: log ke console agar bisa dicek
-  if (window._lapDebug) {
-    console.group('[LAP DEBUG] Filter: ' + ST.lapPreset);
-    console.log('Dari:', dari ? dari.toLocaleString('id-ID') : 'semua');
-    console.log('Sampai:', sampai ? sampai.toLocaleString('id-ID') : 'semua');
-    validTrx.forEach(function(t){
-      var d = parseTrxDate(t.date, t.time);
-      var inRange = (!dari||d>=dari) && (!sampai||d<=sampai);
-      console.log(t.id, '| date:', t.date, '| time:', t.time, '| parsed:', d.toLocaleString('id-ID'), '| inRange:', inRange);
-    });
-    console.groupEnd();
-  }
+  // Debug: selalu log agar bisa dicek
+  console.group('[LAP] Preset=' + ST.lapPreset + ' | total=' + validTrx.length + ' | filtered=' + hasil.length);
+  if (dari) console.log('  Range: ' + dari.toLocaleString('id-ID') + ' s/d ' + (sampai?sampai.toLocaleString('id-ID'):'∞'));
+  validTrx.forEach(function(t){
+    var tD = t.date || (t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID') : 'NODATE');
+    var d = parseTrxDate(t.date, t.time);
+    var inRange = (!dari||d>=dari) && (!sampai||d<=sampai);
+    if (!inRange) console.log('  EXCLUDED:', t.id, 'date='+tD, 'parsed='+(!isNaN(d)?d.toLocaleDateString('id-ID'):'INVALID'));
+  });
+  console.groupEnd();
   return hasil;
 }
 
