@@ -3930,6 +3930,7 @@ function getLapFilteredTrx() {
   var validTrx = ST.transactions.filter(function(t){return !t.voided;});
   if (ST.lapPreset === 'semua' || (!dari && !sampai)) return validTrx;
   var hasil = validTrx.filter(function(t) {
+    if (!t.date && !t.time) return false; // skip transaksi tanpa tanggal
     var d = parseTrxDate(t.date, t.time);
     if (isNaN(d)) return false;
     if (dari && d < dari) return false;
@@ -3977,7 +3978,7 @@ function parseTrxDate(dateStr, timeStr) {
     }
   }
 
-  if (isNaN(d)) d = new Date();
+  if (isNaN(d)) return new Date(NaN); // invalid, jangan fallback ke 'sekarang'
 
   // Tambahkan jam dari timeStr (handle pemisah : atau .)
   if (timeStr) {
@@ -4683,7 +4684,6 @@ async function autoSyncFromSupabase() {
           return {
             id: t.trx_code||t.id,
             time: dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
-            // FIX: gunakan tanggal LOKAL bukan UTC substr (cegah shift tanggal WIB pagi hari)
             date: dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'),
             table: t.meja||'', subtotal: t.subtotal||0,
             disc: t.disc_pct||0, discAmt: t.disc_amt||0,
@@ -4816,7 +4816,7 @@ async function fetchLaporanFromSupabase() {
         return {
           id: t.trx_code||t.id,
           time: dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
-          date: localDate2,
+          date: localDate2 || (dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0')),
           table: t.meja||'', subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0,
           tax: t.tax||0, total: t.total||0, pay: t.pay_method,
@@ -4895,9 +4895,7 @@ async function fetchLaporanFromSupabase() {
 }
 
 function renderLaporan() {
-  window._lapDebug = true; // aktifkan debug log
   var trxs = getLapFilteredTrx();
-  window._lapDebug = false;
   var totalRev = trxs.reduce(function(a,t){return a+t.total;},0);
   const totalItems = trxs.reduce(function(a,t){return a+((t.items||[]).reduce(function(b,i){return b+(i.qty||0);},0));},0);
   // Date range for filtering
@@ -6858,7 +6856,7 @@ async function pullAllFromSupabase() {
       ST.transactions = trxs.map(function(t) {
         return {id: t.trx_code, time: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}); })(),
           // FIX: gunakan tanggal lokal bukan UTC
-          date: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })(),
+          date: t.created_at ? (function(){ var d=new Date(t.created_at); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })() : null,
           table: t.meja||'',
           items: (function(){ try { return t.items_json ? JSON.parse(t.items_json) : []; } catch(e){ return []; } })(), subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0, tax: t.tax||0, total: t.total||0,
