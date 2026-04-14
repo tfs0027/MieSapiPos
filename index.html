@@ -120,6 +120,16 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .cart-hd{padding:14px 16px;border-bottom:1px solid var(--brd)}
 .cart-body{flex:1;overflow-y:auto;padding:10px 14px}
 .menu-drag-row:hover{background:var(--bg)!important}.menu-drag-row td:first-child{user-select:none}
+#menu-table-wrap table{width:100%;border-collapse:collapse;table-layout:fixed}
+#menu-table-wrap th:nth-child(1){width:30px}
+#menu-table-wrap th:nth-child(2){width:200px}
+#menu-table-wrap th:nth-child(3){width:100px}
+#menu-table-wrap th:nth-child(4){width:110px}
+#menu-table-wrap th:nth-child(5){width:90px}
+#menu-table-wrap th:nth-child(6){width:80px}
+#menu-table-wrap th:nth-child(7){width:auto}
+#menu-table-wrap td{vertical-align:middle;white-space:nowrap}
+#menu-table-wrap td:nth-child(2){white-space:normal}
 .cart-empty{text-align:center;padding:40px 0;color:var(--txt3);font-size:12px}
 .cart-row{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)}
 .cart-row:last-child{border-bottom:none}
@@ -647,7 +657,15 @@ tr:hover td{background:rgba(108,92,231,.03)}
         <div id="menu-panel-daftar">
         <div class="card">
           <div class="card-hd"><span class="card-title">Daftar Menu</span><button class="btn btn-primary btn-sm" onclick="openMenuModal()">+ Tambah Menu</button></div>
-          <div class="tbl-wrap"><table><thead><tr><th>Menu</th><th>Kategori</th><th>Harga</th><th>Status</th><th>Terjual</th><th>Aksi</th></tr></thead><tbody id="menu-table"></tbody></table></div>
+          <div class="tbl-wrap" id="menu-table-wrap"><table><thead><tr>
+  <th style="width:30px"></th>
+  <th>Menu</th>
+  <th style="width:100px">Kategori</th>
+  <th style="width:110px">Harga</th>
+  <th style="width:90px">Status</th>
+  <th style="width:80px">Terjual</th>
+  <th>Aksi</th>
+</tr></thead><tbody id="menu-table"></tbody></table></div>
         </div>
         </div><!-- end menu-panel-daftar -->
         <div id="menu-panel-harga" style="display:none">
