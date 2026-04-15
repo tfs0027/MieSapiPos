@@ -93,6 +93,11 @@ input,select,textarea{font-family:inherit}
 .b-amber{background:var(--amber-bg);color:var(--amber-dk)}.b-red{background:var(--red-bg);color:var(--red-dk)}
 .b-purple{background:var(--accent3);color:var(--accent)}.b-gray{background:var(--bg);color:var(--txt2)}
 table{width:100%;border-collapse:collapse;font-size:12px}
+@keyframes slideDown{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+.offline-badge{display:inline-flex;align-items:center;gap:4px;background:#e17055;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+#offline-bar{position:fixed;bottom:0;left:0;right:0;z-index:8500;background:#d63031;color:#fff;text-align:center;font-size:12px;font-weight:600;padding:7px 16px;display:none;align-items:center;justify-content:center;gap:8px}
+#offline-bar.show{display:flex}
 th{padding:9px 12px;font-size:10px;font-weight:700;color:var(--txt2);text-align:left;border-bottom:1px solid var(--brd);text-transform:uppercase;letter-spacing:.04em}
 td{padding:10px 12px;border-bottom:1px solid var(--brd)}
 tr:last-child td{border-bottom:none}
@@ -504,6 +509,10 @@ tr:hover td{background:rgba(108,92,231,.03)}
       <div style="font-size:9px;color:rgba(255,255,255,.35);margin-top:3px;font-family:monospace;word-break:break-all" id="sb-sub-rid">—</div>
     </div>
     <div class="sb-foot">
+      <div id="last-sync-bar" style="padding:0 10px 8px;display:flex;align-items:center;gap:6px">
+        <span id="last-sync-dot" style="width:7px;height:7px;border-radius:50%;background:#00b894;flex-shrink:0;transition:background .3s"></span>
+        <span id="last-sync-text" style="font-size:9px;color:rgba(255,255,255,.4);line-height:1.4">Belum sync</span>
+      </div>
       <div class="sb-user-chip" onclick="doLogout()">
         <div class="u-ava" id="sb-ava" style="width:32px;height:32px;font-size:11px"></div>
         <div style="flex:1">
@@ -2093,6 +2102,39 @@ try {
 } catch(e){}
 const saveCFG = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch(e){} };
 
+function showRecoveryBanner(interruptedAt) {
+  var existing = document.getElementById('recovery-banner');
+  if (existing) return;
+  var trxCount = ST.currentShift ? (ST.currentShift.transaksi||[]).length : 0;
+  var shiftId = ST.currentShift ? ST.currentShift.id : '-';
+  var banner = document.createElement('div');
+  banner.id = 'recovery-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9000;background:linear-gradient(90deg,#00b894,#00cec9);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 12px rgba(0,0,0,.2);animation:slideDown .3s ease';
+  var info = document.createElement('div');
+  info.style.flex = '1';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:12px;font-weight:700';
+  title.textContent = 'Sesi dipulihkan - Shift ' + shiftId + ' masih aktif';
+  var sub = document.createElement('div');
+  sub.style.cssText = 'font-size:11px;opacity:.85';
+  sub.textContent = trxCount + ' transaksi tercatat - ' +
+    (interruptedAt ? 'Tersimpan: ' + interruptedAt : 'Data dari penyimpanan lokal');
+  info.appendChild(title);
+  info.appendChild(sub);
+  var btn = document.createElement('button');
+  btn.style.cssText = 'background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 12px;border-radius:20px;cursor:pointer;font-size:11px';
+  btn.textContent = 'OK';
+  btn.onclick = function() { banner.remove(); };
+  banner.appendChild(info);
+  banner.appendChild(btn);
+  document.body.insertBefore(banner, document.body.firstChild);
+  // Auto-dismiss setelah 8 detik
+  setTimeout(function() {
+    var el = document.getElementById('recovery-banner');
+    if (el) el.remove();
+  }, 8000);
+}
+
 // Bersihkan semua cache shift/session dari restaurantId yang berbeda
 (function cleanStaleLocalStorage() {
   try {
@@ -2350,6 +2392,24 @@ function doLogin(u) {
       });
     } catch(e) { /* silent */ }
   }
+  // ── Cek recovery dari crash / tutup mendadak ─────────────────────────────
+  try {
+    var _sess = localStorage.getItem(SESSION_KEY);
+    if (_sess) {
+      var _sd = JSON.parse(_sess);
+      if (_sd.interrupted) {
+        // Bersihkan flag interrupted
+        delete _sd.interrupted;
+        localStorage.setItem(SESSION_KEY, JSON.stringify(_sd));
+        // Tampilkan notifikasi recovery
+        var interruptedAt = _sd.interruptedAt ? new Date(_sd.interruptedAt).toLocaleString('id-ID') : '';
+        setTimeout(function() {
+          showRecoveryBanner(interruptedAt);
+        }, 800);
+      }
+    }
+  } catch(e) {}
+
   // Auto-pull dari Supabase SELALU saat login (bukan hanya auto-login)
   // Ini memastikan data segar dari Supabase setelah buka browser
   if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) {
@@ -4814,6 +4874,7 @@ function resetFetchFlags() {
 var _autoSyncing = false;
 
 async function autoSyncFromSupabase() {
+  updateLastSync('syncing');
   if (!_sb || !CFG.restaurantId) return;
   if (_autoSyncing) {
     // Sudah ada sync berjalan — tunggu selesai dulu, jangan jalankan paralel
@@ -5065,6 +5126,7 @@ async function autoSyncFromSupabase() {
     else if (window._currentPage === 'shift') renderShiftPage();
     else renderLaporan(); // selalu update laporan di background
     showNotif('✅ Data tersinkronisasi dari Supabase', '#00B894');
+  updateLastSync('ok');
   } catch(e) {
     console.warn('autoSync error:', e.message);
   } finally {
@@ -5165,6 +5227,7 @@ async function fetchLaporanFromSupabase() {
       if (panel && panel.style.display !== 'none') renderLaporanPengeluaran();
     }
   } catch(e) {
+    updateLastSync('error');
     console.warn('fetchLaporanFromSupabase error:', e.message);
     renderLaporan();
   } finally {
@@ -7254,6 +7317,7 @@ function addToPendingQueue(trx) {
 function removeFromPendingQueue(trxId) {
   var q = loadPendingQueue().filter(function(x){ return x.id!==trxId; });
   savePendingQueue(q);
+  updateOfflinePendingCount();
 }
 async function flushPendingQueue() {
   if (!_sb || !CFG.restaurantId) return;
@@ -7315,7 +7379,11 @@ async function _doSyncTrxToSupabase(trx) {
   }
 }
 async function sbSyncTransaction(trx) {
-  if (!_sb || !CFG.restaurantId) { addToPendingQueue(trx); return; }
+  if (!_sb || !CFG.restaurantId || !navigator.onLine) {
+    addToPendingQueue(trx);
+    updateOfflinePendingCount();
+    return;
+  }
   var ok = await _doSyncTrxToSupabase(trx);
   if (ok) {
     removeFromPendingQueue(trx.id); // hapus dari pending jika sebelumnya gagal
@@ -10561,7 +10629,134 @@ const doprint = () => {
 if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) { initSupabase(); }
 
 // Cek force_logout saat tab/jendela aktif kembali (tanpa harus refresh)
+// ── OFFLINE / ONLINE MANAGEMENT ──────────────────────────────────────────
+var _isOffline = false;
+
+function updateNetworkStatus() {
+  var online = navigator.onLine;
+  var bar = document.getElementById('offline-bar');
+  if (!bar) return;
+  if (!online) {
+    _isOffline = true;
+    bar.classList.add('show');
+    updateOfflinePendingCount();
+    updateLastSync('offline');
+  } else {
+    if (_isOffline) {
+      _isOffline = false;
+      bar.classList.remove('show');
+      showNotif('Jaringan kembali online - menyinkronkan data...', '#00B894');
+      setTimeout(function() {
+        flushPendingQueue().then(function() {
+          var q = loadPendingQueue();
+          if (!q.length) showNotif('Semua transaksi berhasil disinkronkan', '#00B894');
+          updateOfflinePendingCount();
+        });
+        if (_sb && CFG.restaurantId) autoSyncFromSupabase();
+      }, 1000);
+    } else {
+      bar.classList.remove('show');
+    }
+  }
+}
+
+function updateLastSync(status) {
+  // status: 'ok' | 'error' | 'offline' | 'syncing'
+  var dot = document.getElementById('last-sync-dot');
+  var txt = document.getElementById('last-sync-text');
+  if (!dot || !txt) return;
+
+  var now = new Date();
+  var jam = now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+
+  if (status === 'ok') {
+    dot.style.background = '#00b894';
+    dot.style.animation = '';
+    txt.textContent = 'Sync ' + jam;
+    txt.style.color = 'rgba(255,255,255,.5)';
+    // Simpan waktu sync terakhir
+    try { localStorage.setItem('wkpos_last_sync', now.toISOString()); } catch(e) {}
+  } else if (status === 'syncing') {
+    dot.style.background = '#fdcb6e';
+    dot.style.animation = 'pulse 1s infinite';
+    txt.textContent = 'Menyinkronkan...';
+    txt.style.color = 'rgba(253,203,110,.8)';
+  } else if (status === 'offline') {
+    dot.style.background = '#e17055';
+    dot.style.animation = 'pulse 1.5s infinite';
+    txt.textContent = 'Offline - data tersimpan lokal';
+    txt.style.color = 'rgba(225,112,85,.9)';
+  } else if (status === 'error') {
+    dot.style.background = '#e17055';
+    dot.style.animation = '';
+    txt.textContent = 'Gagal sync jam ' + jam;
+    txt.style.color = 'rgba(225,112,85,.9)';
+  }
+}
+
+// Restore last sync time on load
+(function initLastSyncDisplay() {
+  try {
+    var ls = localStorage.getItem('wkpos_last_sync');
+    if (ls) {
+      var d = new Date(ls);
+      var txt = document.getElementById('last-sync-text');
+      if (txt) {
+        var diffMin = Math.round((Date.now() - d.getTime()) / 60000);
+        var label = diffMin < 1 ? 'Baru saja'
+          : diffMin < 60 ? diffMin + ' mnt lalu'
+          : Math.round(diffMin/60) + ' jam lalu';
+        txt.textContent = 'Terakhir sync: ' + label;
+      }
+    }
+  } catch(e) {}
+})();
+
+function updateOfflinePendingCount() {
+  var q = loadPendingQueue();
+  var el = document.getElementById('offline-pending-count');
+  if (el) el.textContent = q.length > 0 ? q.length + ' trx menunggu' : '';
+  var badge = document.getElementById('pending-sync-badge');
+  if (badge) {
+    badge.style.display = q.length > 0 ? 'inline-flex' : 'none';
+    var sp = badge.querySelector('span');
+    if (sp) sp.textContent = q.length;
+  }
+}
+
+window.addEventListener('online',  function() { updateNetworkStatus(); });
+window.addEventListener('offline', function() { updateNetworkStatus(); });
+
+// ── Auto-save setiap 30 detik saat shift aktif ────────────────────────────
+setInterval(function() {
+  if (ST.currentShift && ST.currentShift.status === 'open' && ST.cu) {
+    saveShiftLocal();
+  }
+}, 30000);
+
+// ── Simpan saat tab/window ditutup atau di-refresh ─────────────────────────
+window.addEventListener('beforeunload', function() {
+  if (ST.currentShift && ST.currentShift.status === 'open') {
+    saveShiftLocal();
+    // Tandai session sebagai "interrupted" agar bisa dilanjutkan
+    try {
+      var sess = localStorage.getItem(SESSION_KEY);
+      if (sess) {
+        var sd = JSON.parse(sess);
+        sd.interrupted = true;
+        sd.interruptedAt = new Date().toISOString();
+        sd.shiftId = ST.currentShift.id;
+        localStorage.setItem(SESSION_KEY, JSON.stringify(sd));
+      }
+    } catch(e) {}
+  }
+});
+
+// ── Simpan saat tab menjadi background (pindah tab / minimize) ────────────
 document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden' && ST.currentShift && ST.currentShift.status === 'open') {
+    saveShiftLocal(); // simpan sebelum tab hilang dari fokus
+  }
   if (document.visibilityState === 'visible' && ST.cu && _sb) {
     checkForceLogout();
   }
@@ -11190,6 +11385,11 @@ async function fetchShiftOnlineOrders(shift) {
   </div>
 </div>
 
+<div id="offline-bar">
+  <span>&#x26A0;</span>
+  <span id="offline-msg">Jaringan terputus — transaksi tetap berjalan &amp; akan tersync otomatis saat online</span>
+  <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
+</div>
 
 </body>
 </html>
