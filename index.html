@@ -45,6 +45,7 @@ input,select,textarea{font-family:inherit}
 .pin-key:hover{background:var(--accent3);color:var(--accent)}
 .pin-key.confirm{background:var(--accent);color:#fff;border-color:var(--accent)}
 .pin-err{color:var(--red-dk);font-size:11px;text-align:center;margin-top:8px}
+.pin-lockout{color:var(--amber-dk);font-size:11px;text-align:center;margin-top:8px;line-height:1.6}
 #app{display:flex;height:100vh;height:100dvh;overflow:hidden}
 .sidebar{width:210px;background:var(--sidebar);flex-shrink:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
 .sb-logo{padding:20px 16px 14px;border-bottom:1px solid rgba(255,255,255,.06)}
@@ -433,6 +434,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
       <div class="pin-dots" id="pin-dots"></div>
       <div class="pin-pad" id="pin-pad"></div>
       <div class="pin-err" id="pin-err" style="display:none">PIN salah, coba lagi</div>
+      <div class="pin-lockout" id="pin-lockout" style="display:none"></div>
     </div>
     <!-- Tombol setup awal — hanya muncul saat USERS kosong -->
     <div id="login-setup-btn-wrap" style="display:none;margin-top:14px;text-align:center">
@@ -2074,7 +2076,7 @@ try {
     if (_urlR && _urlR.length > 10) {
       // Jika restaurantId BERUBAH (pindah toko), reset semua data per-toko
       if (saved.restaurantId && saved.restaurantId !== _urlR) {
-        console.log('[WarungKu] restaurantId berubah:', saved.restaurantId, '->', _urlR, '— reset CFG per-toko');
+        _dbg('[WarungKu] restaurantId berubah:', saved.restaurantId, '->', _urlR, '— reset CFG per-toko');
         CFG.vouchers = [];
         CFG.kurirList = [];
         CFG.banks = [];
@@ -2101,6 +2103,88 @@ try {
   }
 } catch(e){}
 const saveCFG = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch(e){} };
+
+// ── Debug flag (set true untuk troubleshoot) ─────────────────────────────
+var WKPOS_DEBUG = false;
+var _dbg = function() { if(WKPOS_DEBUG) console.log.apply(console, arguments); };
+
+// ── Idle timeout (auto-lock setelah tidak ada aktivitas) ──────────────────
+var IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 menit
+var _idleTimer = null;
+var _idleWarningTimer = null;
+var _idleBannerShown = false;
+
+function resetIdleTimer() {
+  if (!ST.cu) return; // hanya aktif saat login
+  clearTimeout(_idleTimer);
+  clearTimeout(_idleWarningTimer);
+  // Hapus warning banner jika ada
+  if (_idleBannerShown) {
+    var banner = document.getElementById('idle-warning-banner');
+    if (banner) banner.remove();
+    _idleBannerShown = false;
+  }
+  // Warning 2 menit sebelum timeout
+  _idleWarningTimer = setTimeout(function() {
+    if (!ST.cu) return;
+    _idleBannerShown = true;
+    var b = document.createElement('div');
+    b.id = 'idle-warning-banner';
+    b.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:8999;'
+      + 'background:#2d3436;color:#fff;padding:10px 20px;border-radius:var(--radius-lg);'
+      + 'font-size:12px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.3);'
+      + 'display:flex;align-items:center;gap:10px';
+    b.innerHTML = '<span>&#x23F3;</span>'
+      + '<span>Sesi akan terkunci dalam <b id="idle-countdown">2:00</b> — ada aktivitas?</span>'
+      + '<button onclick="resetIdleTimer()" style="background:#6c5ce7;border:none;color:#fff;padding:4px 12px;border-radius:20px;cursor:pointer;font-size:11px">Saya masih di sini</button>';
+    document.body.appendChild(b);
+    // Countdown
+    var secs = 120;
+    var cd = setInterval(function() {
+      secs--;
+      var el = document.getElementById('idle-countdown');
+      if (el) el.textContent = Math.floor(secs/60) + ':' + String(secs%60).padStart(2,'0');
+      if (secs <= 0) clearInterval(cd);
+    }, 1000);
+  }, IDLE_TIMEOUT_MS - 120000);
+
+  // Auto-lock
+  _idleTimer = setTimeout(function() {
+    if (!ST.cu) return;
+    var banner = document.getElementById('idle-warning-banner');
+    if (banner) banner.remove();
+    _idleBannerShown = false;
+    // Simpan state sebelum lock
+    saveShiftLocal();
+    // Kembali ke layar PIN (bukan logout penuh — shift tetap jalan)
+    ST.cu = null;
+    ST.pin = '';
+    var app = document.getElementById('app');
+    var login = document.getElementById('login-screen');
+    if (app) app.style.display = 'none';
+    if (login) { login.style.display = 'flex'; }
+    renderLogin();
+    var errEl = document.getElementById('pin-err');
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = '&#x1F512; Layar dikunci karena tidak ada aktivitas'; }
+    showNotif('Sesi dikunci — masukkan PIN untuk melanjutkan', '#636E72');
+  }, IDLE_TIMEOUT_MS);
+}
+
+// Pantau aktivitas user
+['click','keydown','touchstart','mousemove','scroll'].forEach(function(evt) {
+  document.addEventListener(evt, resetIdleTimer, {passive: true});
+});
+
+// ── XSS sanitizer ─────────────────────────────────────────────────────────
+function escHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function showRecoveryBanner(interruptedAt) {
   var existing = document.getElementById('recovery-banner');
@@ -2150,7 +2234,7 @@ function showRecoveryBanner(interruptedAt) {
     }
     keysToRemove.forEach(function(k) {
       try { localStorage.removeItem(k); } catch(e){}
-      console.log('[WarungKu] Hapus data toko lain:', k);
+      _dbg('[WarungKu] Hapus data toko lain:', k);
     });
     // Hapus key lama tanpa restaurantId
     try { localStorage.removeItem('wkpos_shift'); } catch(e){}
@@ -2166,6 +2250,93 @@ const fmtTime = d => d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digi
 const fmtDate = d => d.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
 const isoDate = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const can = p => ST.cu && ST.cu.perms[p];
+
+// ── Brute Force Protection ────────────────────────────────────────────────
+var MAX_PIN_ATTEMPTS = 5;
+var PIN_LOCKOUT_MS   = 5 * 60 * 1000; // 5 menit
+
+function getPinLockKey(userId) {
+  return 'wkpos_pin_lock_' + (userId||'x');
+}
+
+function getPinLockState(userId) {
+  try {
+    var raw = localStorage.getItem(getPinLockKey(userId));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function setPinLockState(userId, state) {
+  try { localStorage.setItem(getPinLockKey(userId), JSON.stringify(state)); } catch(e) {}
+}
+
+function clearPinLock(userId) {
+  try { localStorage.removeItem(getPinLockKey(userId)); } catch(e) {}
+}
+
+// Cek apakah user sedang dalam lockout — return sisa detik, atau 0 jika bebas
+function getPinLockRemaining(userId) {
+  var state = getPinLockState(userId);
+  if (!state || !state.lockedAt) return 0;
+  var elapsed = Date.now() - state.lockedAt;
+  if (elapsed >= PIN_LOCKOUT_MS) {
+    clearPinLock(userId);
+    return 0;
+  }
+  return Math.ceil((PIN_LOCKOUT_MS - elapsed) / 1000);
+}
+
+// Rekam percobaan gagal — return true jika sekarang terkunci
+function recordFailedPinAttempt(userId) {
+  var state = getPinLockState(userId) || {attempts: 0, lockedAt: null};
+  state.attempts = (state.attempts || 0) + 1;
+  if (state.attempts >= MAX_PIN_ATTEMPTS) {
+    state.lockedAt = Date.now();
+  }
+  setPinLockState(userId, state);
+  return state.attempts >= MAX_PIN_ATTEMPTS;
+}
+
+function getPinAttemptCount(userId) {
+  var state = getPinLockState(userId);
+  return state ? (state.attempts || 0) : 0;
+}
+
+var _lockoutTimer = null;
+function startLockoutCountdown(userId) {
+  if (_lockoutTimer) clearInterval(_lockoutTimer);
+  var lockEl = document.getElementById('pin-lockout');
+  var errEl  = document.getElementById('pin-err');
+  var pinPad = document.querySelector('.pin-pad');
+  var pinDots = document.querySelector('.pin-dots');
+
+  if (errEl) errEl.style.display = 'none';
+
+  function tick() {
+    var rem = getPinLockRemaining(userId);
+    if (rem <= 0) {
+      clearInterval(_lockoutTimer);
+      _lockoutTimer = null;
+      if (lockEl) { lockEl.style.display = 'none'; lockEl.textContent = ''; }
+      if (pinPad) pinPad.style.opacity = '1';
+      if (pinPad) pinPad.style.pointerEvents = '';
+      if (pinDots) pinDots.style.opacity = '1';
+      clearPinLock(userId);
+      return;
+    }
+    var m = Math.floor(rem/60), s = rem % 60;
+    var timeStr = m > 0 ? m + ':' + String(s).padStart(2,'0') + ' menit' : s + ' detik';
+    if (lockEl) {
+      lockEl.style.display = 'block';
+      lockEl.innerHTML = '&#x1F512; Terlalu banyak percobaan salah<br>Coba lagi dalam <b>' + timeStr + '</b>';
+    }
+    if (pinPad) { pinPad.style.opacity = '0.35'; pinPad.style.pointerEvents = 'none'; }
+    if (pinDots) pinDots.style.opacity = '0.35';
+  }
+  tick();
+  _lockoutTimer = setInterval(tick, 1000);
+}
 const isOpen = () => ST.currentShift && ST.currentShift.status === 'open';
 const $ = id => document.getElementById(id);
 const closeModal = id => $(id).classList.remove('open');
@@ -2220,7 +2391,7 @@ function loadShiftLocal() {
     // Jika tidak ada restaurantId di data lama → migrasi: tandai dengan restaurantId saat ini
     // Jangan hapus — key localStorage sudah per-restoran (wkpos_shift_<rid>)
     if (!d.restaurantId && currentRid) {
-      console.log('[WarungKu] Data lama tanpa restaurantId, migrasi ke restoran:', currentRid);
+      _dbg('[WarungKu] Data lama tanpa restaurantId, migrasi ke restoran:', currentRid);
       d.restaurantId = currentRid;
       try { localStorage.setItem(getShiftKey(), JSON.stringify(d)); } catch(e){}
       // Lanjut load data ini
@@ -2299,6 +2470,20 @@ function selectUser(id) {
   ).join('');
 }
 
+function checkLockoutOnSelect(userId) {
+  var rem = getPinLockRemaining(userId);
+  if (rem > 0) {
+    setTimeout(function() { startLockoutCountdown(userId); }, 100);
+  } else {
+    var lockEl = document.getElementById('pin-lockout');
+    if (lockEl) { lockEl.style.display = 'none'; }
+    var pinPad = document.querySelector('.pin-pad');
+    if (pinPad) { pinPad.style.opacity = '1'; pinPad.style.pointerEvents = ''; }
+    var pinDots = document.querySelector('.pin-dots');
+    if (pinDots) pinDots.style.opacity = '1';
+  }
+}
+
 function renderPinDots() {
   $('pin-dots').innerHTML = [0,1,2,3].map(i =>
     '<div class="pin-dot' + (i<ST.pin.length?' filled':'') + '"></div>'
@@ -2322,34 +2507,47 @@ async function checkPin() {
   var u = USERS.find(function(x){ return x.id === ST.selId; });
   if (!u) { $('pin-err').style.display = 'block'; ST.pin = ''; renderPinDots(); return; }
 
+  // Cek lockout sebelum proses PIN
+  var lockRem = getPinLockRemaining(u.id);
+  if (lockRem > 0) {
+    ST.pin = ''; renderPinDots();
+    startLockoutCountdown(u.id);
+    return;
+  }
+
   var inputPin = ST.pin;
   var storedPin = u.pin || '';
-
-  // Deteksi apakah pin tersimpan sebagai hash SHA-256 (64 hex chars) atau plain
   var isHashed = /^[0-9a-f]{64}$/.test(storedPin);
   var match = false;
 
   if (isHashed) {
-    // Hash input PIN lalu bandingkan
     try {
       var enc = new TextEncoder().encode(inputPin);
       var buf = await crypto.subtle.digest('SHA-256', enc);
       var inputHash = Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
       match = (inputHash === storedPin);
-    } catch(e) {
-      match = false;
-    }
+    } catch(e) { match = false; }
   } else {
-    // Fallback: bandingkan langsung (PIN plain, untuk kompatibilitas)
     match = (inputPin === storedPin);
   }
 
   if (match) {
+    clearPinLock(u.id); // reset counter saat berhasil
     doLogin(u);
   } else {
-    ST.pin = '';
-    renderPinDots();
-    $('pin-err').style.display = 'block';
+    ST.pin = ''; renderPinDots();
+    var nowLocked = recordFailedPinAttempt(u.id);
+    if (nowLocked) {
+      startLockoutCountdown(u.id);
+      showNotif('&#x1F512; Akun dikunci 5 menit karena terlalu banyak percobaan salah', '#E17055');
+    } else {
+      var remaining = MAX_PIN_ATTEMPTS - getPinAttemptCount(u.id);
+      var errEl = $('pin-err');
+      if (errEl) {
+        errEl.style.display = 'block';
+        errEl.textContent = 'PIN salah — ' + remaining + ' percobaan tersisa';
+      }
+    }
   }
 }
 
@@ -2357,13 +2555,14 @@ function doLogin(u) {
   // Reset shift/trx jika restaurantId berubah sejak terakhir login
   var _lastRid = (function(){ try{ var s=localStorage.getItem(SESSION_KEY); return s?JSON.parse(s).restaurantId||'':''; }catch(e){return '';} })();
   if (_lastRid && CFG.restaurantId && _lastRid !== CFG.restaurantId) {
-    console.log('[WarungKu] doLogin: toko berubah, reset state');
+    _dbg('[WarungKu] doLogin: toko berubah, reset state');
     ST.transactions = []; ST.shifts = []; ST.currentShift = null; ST.cart = [];
     try { localStorage.removeItem('wkpos_shift_' + _lastRid); } catch(e){}
   }
   ST.cu = u;
   $('login-screen').style.display = 'none';
   $('app').style.display = 'flex';
+  resetIdleTimer(); // mulai idle timer
   const av = $('sb-ava');
   av.textContent = u.avatar; av.style.background = u.bg; av.style.color = u.tc;
   $('sb-uname').textContent = u.name;
@@ -2438,6 +2637,10 @@ function cancelAutoLogoutTimer() {
 }
 
 function doLogout() {
+  clearTimeout(_idleTimer);
+  clearTimeout(_idleWarningTimer);
+  var b = document.getElementById('idle-warning-banner');
+  if (b) b.remove();
   if (isOpen()) {
     var isOwner = !ST.currentShift.userId || ST.currentShift.userId===ST.cu.id || ST.cu.role==='admin';
     if (isOwner) {
@@ -3290,7 +3493,7 @@ function renderMenuTable() {
       ? '<img src="' + m.img + '" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0">'
       : '<span style="font-size:22px;flex-shrink:0;width:40px;text-align:center">' + m.emoji + '</span>'
     ) +
-    '<div><b>' + m.name + '</b>' +
+    '<div><b>' + escHtml(m.name) + '</b>' +
     (m.img ? '<div style="font-size:9px;color:var(--txt3);margin-top:1px">' + m.emoji + '</div>' : '') +
     '</div></div></td>' +
     '<td><span class="badge ' + (m.cat==='Makanan'?'b-amber':m.cat==='Minuman'?'b-blue':m.cat==='Camilan'?'b-green':'b-purple') + '">' + m.cat + '</span></td>' +
@@ -4014,9 +4217,9 @@ function exportLaporanHTML() {
   var trxs = getLapFilteredTrx();
   // Debug info — tampilkan di konsol
   if (ST.transactions.length) {
-    console.log('[LAP] Total transaksi di ST:', ST.transactions.length, '| Setelah filter:', trxs.length, '| Preset:', ST.lapPreset);
+    _dbg('[LAP] Total transaksi di ST:', ST.transactions.length, '| Setelah filter:', trxs.length, '| Preset:', ST.lapPreset);
     var sample = ST.transactions.slice(0,3);
-    sample.forEach(function(t){ console.log('  Sample:', t.id, 'date:', t.date, 'time:', t.time, 'total:', t.total); });
+    sample.forEach(function(t){ _dbg('  Sample:', t.id, 'date:', t.date, 'time:', t.time, 'total:', t.total); });
   }
   var totalRev = trxs.reduce(function(a,t){return a+t.total;},0);
   var _onlineForExport = getLapOnlineOrders();
@@ -4050,7 +4253,7 @@ function exportLaporanHTML() {
     html += '<td>' + t.id + (t.voided?' <span style="color:#e17055">[VOID]</span>':'') + '</td>';
     html += '<td>' + (t.date||'') + '</td>';
     html += '<td>' + (t.time||'') + '</td>';
-    html += '<td>' + (t.table||'') + '</td>';
+    html += '<td>' + escHtml(t.table||'') + '</td>';
     html += '<td style="font-size:9pt;color:#555">' + itemsStr + '</td>';
     html += '<td style="font-weight:bold">Rp ' + (t.total||0).toLocaleString('id-ID') + '</td>';
     html += '<td>' + payLabel + '</td>';
@@ -4150,7 +4353,7 @@ function getLapFilteredTrx() {
     var tD = t.date || (t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID') : 'NODATE');
     var d = parseTrxDate(t.date, t.time);
     var inRange = (!dari||d>=dari) && (!sampai||d<=sampai);
-    if (!inRange) console.log('  EXCLUDED:', t.id, 'date='+tD, 'parsed='+(!isNaN(d)?d.toLocaleDateString('id-ID'):'INVALID'));
+    if (!inRange) _dbg('  EXCLUDED:', t.id, 'date='+tD, 'parsed='+(!isNaN(d)?d.toLocaleDateString('id-ID'):'INVALID'));
   });
   console.groupEnd();
   return hasil;
@@ -4878,7 +5081,7 @@ async function autoSyncFromSupabase() {
   if (!_sb || !CFG.restaurantId) return;
   if (_autoSyncing) {
     // Sudah ada sync berjalan — tunggu selesai dulu, jangan jalankan paralel
-    console.log('[WarungKu] autoSync sudah berjalan, skip');
+    _dbg('[WarungKu] autoSync sudah berjalan, skip');
     return;
   }
   _autoSyncing = true;
@@ -5040,7 +5243,7 @@ async function autoSyncFromSupabase() {
         ST.transactions = sbMapped.concat(localUnsync);
         // Retry sync untuk transaksi lokal yang belum masuk Supabase
         if (localUnsync.length) {
-          console.log('[WarungKu] ' + localUnsync.length + ' transaksi lokal belum tersync, retry...');
+          _dbg('[WarungKu] ' + localUnsync.length + ' transaksi lokal belum tersync, retry...');
           localUnsync.forEach(function(trx) {
             setTimeout(function(){ sbSyncTransaction(trx); }, 600);
           });
@@ -6003,7 +6206,7 @@ async function prosesTutupKasir() {
     if (_sb && CFG.restaurantId) {
       _sb.from('restaurants').update({force_logout: false, logout_reason: null})
         .eq('id', CFG.restaurantId)
-        .then(function() { console.log('force_logout cleared'); });
+        .then(function() { _dbg('force_logout cleared'); });
     }
     // Tampilkan pesan lalu auto-logout setelah 3 detik
     var banner = document.getElementById('force-logout-banner');
@@ -6237,7 +6440,7 @@ async function sbSyncExpense(peng, shiftCode, tanggalStr, kasirNama) {
       };
       await _sb.from('expenses').insert(minimal);
     }
-    console.log('[WarungKu] Pengeluaran sync OK:', peng.nama, peng.nominal);
+    _dbg('[WarungKu] Pengeluaran sync OK:', peng.nama, peng.nominal);
   } catch(e) { console.warn('sbSyncExpense:', e.message); }
 }
 
@@ -6673,8 +6876,8 @@ function renderMemberList(q) {
     return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--brd)">' +
       '<div style="width:36px;height:36px;border-radius:50%;background:var(--accent3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">' +
       m.nama.charAt(0).toUpperCase() + '</div>' +
-      '<div style="flex:1"><div style="font-size:12px;font-weight:600">' + m.nama + '</div>' +
-      '<div style="font-size:10px;color:var(--txt2)">' + m.hp + ' · ' + m.poin + ' poin · ' + m.totalTrx + ' transaksi</div></div>' +
+      '<div style="flex:1"><div style="font-size:12px;font-weight:600">' + escHtml(m.nama) + '</div>' +
+      '<div style="font-size:10px;color:var(--txt2)">' + escHtml(m.hp) + ' · ' + m.poin + ' poin · ' + m.totalTrx + ' transaksi</div></div>' +
       '<button class="btn btn-sm" style="font-size:11px" onclick="pilihMember(\'' + m.id + '\')">Pilih</button>' +
       '</div>';
   }).join('');
@@ -6762,9 +6965,9 @@ function renderMemberList2() {
     return '<div class="user-card">' +
       '<div style="display:flex;align-items:center;gap:12px">' +
       '<div style="width:42px;height:42px;border-radius:50%;background:var(--accent3);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + m.nama.charAt(0).toUpperCase() + '</div>' +
-      '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + m.nama + '</div>' +
-      '<div style="font-size:11px;color:var(--txt2);margin-top:2px">' + m.hp + (m.catatan?' · '+m.catatan:'') + '</div>' +
-      '<div style="font-size:10px;color:var(--txt3);margin-top:2px">Bergabung: ' + m.bergabung + '</div></div>' +
+      '<div style="flex:1"><div style="font-size:13px;font-weight:600">' + escHtml(m.nama) + '</div>' +
+      '<div style="font-size:11px;color:var(--txt2);margin-top:2px">' + escHtml(m.hp) + (m.catatan?' · '+escHtml(m.catatan):'') + '</div>' +
+      '<div style="font-size:10px;color:var(--txt3);margin-top:2px">Bergabung: ' + escHtml(m.bergabung) + '</div></div>' +
       '<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--accent)">' + m.poin + '</div>' +
       '<div style="font-size:10px;color:var(--txt2)">poin</div>' +
       '<div style="font-size:10px;color:var(--txt3);margin-top:2px">' + m.totalTrx + ' trx</div></div>' +
@@ -7323,7 +7526,7 @@ async function flushPendingQueue() {
   if (!_sb || !CFG.restaurantId) return;
   var q = loadPendingQueue();
   if (!q.length) return;
-  console.log('[WarungKu] Memproses ' + q.length + ' transaksi dari pending queue...');
+  _dbg('[WarungKu] Memproses ' + q.length + ' transaksi dari pending queue...');
   for (var i = 0; i < q.length; i++) {
     var ok = await _doSyncTrxToSupabase(q[i]);
     if (ok) removeFromPendingQueue(q[i].id);
@@ -9722,7 +9925,7 @@ async function loadSystemConfig() {
     if (window._currentPage === 'online-order') refreshOrderLink();
     // Update rek link
     updateRekLink && updateRekLink();
-    console.log('✅ system_config loaded: order_url='+cfgMap.order_url);
+    _dbg('✅ system_config loaded: order_url='+cfgMap.order_url);
   } catch(e) { console.warn('loadSystemConfig:', e.message); }
 }
 
@@ -10781,7 +10984,7 @@ document.addEventListener('visibilitychange', function() {
       var cleanUrl = window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
     } catch(e) {}
-    console.log('✅ Restaurant ID configured from URL:', rId);
+    _dbg('✅ Restaurant ID configured from URL:', rId);
   }
 })();
 
@@ -10796,7 +10999,7 @@ document.addEventListener('visibilitychange', function() {
         var _savedRid = _sd.restaurantId || '';
         var _curRid = CFG.restaurantId || '';
         if (_savedRid && _curRid && _savedRid !== _curRid) {
-          console.log('[WarungKu] Toko berubah (' + _savedRid + ' → ' + _curRid + '), bersihkan semua state lokal');
+          _dbg('[WarungKu] Toko berubah (' + _savedRid + ' → ' + _curRid + '), bersihkan semua state lokal');
           // Hapus data shift toko lama
           try { localStorage.removeItem('wkpos_shift_' + _savedRid); } catch(e){}
           try { localStorage.removeItem('wkpos_shift_default'); } catch(e){}
@@ -10823,7 +11026,7 @@ document.addEventListener('visibilitychange', function() {
     // Jika tidak ada shift aktif, jangan auto-login — require fresh login
     if (!ST.currentShift || ST.currentShift.status !== 'open') {
       localStorage.removeItem(SESSION_KEY);
-      console.log('Session cleared: no active shift');
+      _dbg('Session cleared: no active shift');
       return;
     }
     // Auto login hanya jika ada shift aktif DAN user ditemukan
@@ -11227,7 +11430,7 @@ async function fetchShiftOnlineOrders(shift) {
       var prevShift = ST.shifts[0]; // shift terakhir yang ditutup
       if (prevShift.isoClose) {
         isoFrom = prevShift.isoClose;
-        console.log('[WarungKu] fetchShiftOnlineOrders: isoFrom dari tutup shift sebelumnya:', isoFrom);
+        _dbg('[WarungKu] fetchShiftOnlineOrders: isoFrom dari tutup shift sebelumnya:', isoFrom);
       } else if (prevShift.tanggal && prevShift.waktuTutup) {
         var ts3 = parseTanggalShift(prevShift.tanggal);
         if (ts3) {
@@ -11236,7 +11439,7 @@ async function fetchShiftOnlineOrders(shift) {
           dClose.setHours(parseInt(tp3[0])||0, parseInt(tp3[1])||0, 0, 0);
           if (!isNaN(dClose)) {
             isoFrom = dClose.toISOString();
-            console.log('[WarungKu] fetchShiftOnlineOrders: isoFrom rebuild dari shift sebelumnya:', isoFrom);
+            _dbg('[WarungKu] fetchShiftOnlineOrders: isoFrom rebuild dari shift sebelumnya:', isoFrom);
           }
         }
       }
@@ -11278,7 +11481,7 @@ async function fetchShiftOnlineOrders(shift) {
 
     // Update shift dengan data yang sudah terfilter dengan benar
     shift.onlineOrders = orders;
-    console.log('[WarungKu] fetchShiftOnlineOrders:', orders.length, 'order dari', isoFrom, 'sampai', isoTo);
+    _dbg('[WarungKu] fetchShiftOnlineOrders:', orders.length, 'order dari', isoFrom, 'sampai', isoTo);
   } catch(e) {
     console.warn('[WarungKu] fetchShiftOnlineOrders error:', e.message);
     // Fallback ke filter client-side jika Supabase gagal
