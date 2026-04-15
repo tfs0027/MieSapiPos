@@ -251,6 +251,12 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .img-upload-box .img-overlay{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;pointer-events:none}
 .img-upload-box:hover .img-overlay{opacity:1;pointer-events:auto}
 .menu-card-img{width:100%;height:70px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;margin:-12px -12px 6px;width:calc(100% + 24px)}
+.img-lazy{opacity:0;transition:opacity .25s ease}
+.img-lazy.loaded{opacity:1}
+.img-placeholder{width:calc(100% + 24px);height:70px;margin:-12px -12px 6px;background:linear-gradient(90deg,var(--bg) 25%,var(--bg2) 50%,var(--bg) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite;border-radius:var(--radius) var(--radius) 0 0}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.img-lazy-thumb{opacity:0;transition:opacity .2s;border-radius:8px}
+.img-lazy-thumb.loaded{opacity:1}
 .receipt-logo-img{max-width:80px;max-height:50px;display:block;margin:0 auto 4px}
 
 @media print {
@@ -2114,6 +2120,61 @@ try {
 } catch(e){}
 const saveCFG = () => { try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch(e){} };
 
+// ── Lazy image loader (IntersectionObserver) ──────────────────────────────
+var _imgCache = {}; // cache URL gambar yang sudah di-load
+
+var _lazyObserver = (function() {
+  if (!('IntersectionObserver' in window)) return null;
+  return new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (!entry.isIntersecting) return;
+      var img = entry.target;
+      var src = img.getAttribute('data-src');
+      if (!src) return;
+      _lazyObserver.unobserve(img);
+      if (_imgCache[src]) {
+        img.src = src;
+        img.classList.add('loaded');
+        return;
+      }
+      img.src = src;
+      img.onload = function() {
+        img.classList.add('loaded');
+        _imgCache[src] = true;
+        // Hapus shimmer placeholder jika ada
+        var ph = img.previousElementSibling;
+        if (ph && ph.classList.contains('img-placeholder')) ph.remove();
+      };
+      img.onerror = function() {
+        // Gambar gagal load — tampilkan emoji fallback
+        var em = img.getAttribute('data-emoji') || '🍽️';
+        var fallback = document.createElement('div');
+        fallback.style.cssText = 'font-size:28px;margin-bottom:6px;text-align:center';
+        fallback.textContent = em;
+        img.parentNode.insertBefore(fallback, img);
+        img.remove();
+        var ph2 = document.querySelector('.img-placeholder');
+        if (ph2) ph2.remove();
+      };
+    });
+  }, {rootMargin: '100px', threshold: 0});
+})();
+
+function lazyLoadAllImages() {
+  if (!_lazyObserver) {
+    // Fallback: load semua langsung (browser lama)
+    document.querySelectorAll('img[data-src]').forEach(function(img) {
+      img.src = img.getAttribute('data-src');
+      img.classList.add('loaded');
+    });
+    return;
+  }
+  document.querySelectorAll('img[data-src]:not([data-observed])').forEach(function(img) {
+    img.setAttribute('data-observed','1');
+    _lazyObserver.observe(img);
+  });
+}
+
 // ── Debug flag (set true untuk troubleshoot) ─────────────────────────────
 var WKPOS_DEBUG = false;
 var _dbg = function() { if(WKPOS_DEBUG) console.log.apply(console, arguments); };
@@ -2826,6 +2887,17 @@ renderClock();
 // ═══════════════════════════════
 // ORDER
 // ═══════════════════════════════
+function preloadTopMenuImages() {
+  // Preload gambar 6 menu pertama (urutan teratas)
+  var topMenus = ST.menus.slice(0, 6).filter(function(m){ return m.img; });
+  topMenus.forEach(function(m) {
+    if (_imgCache[m.img]) return;
+    var img = new Image();
+    img.onload = function() { _imgCache[m.img] = true; };
+    img.src = m.img;
+  });
+}
+
 function buildCatTabs() {
   const usedCats = new Set(ST.menus.map(m => m.cat));
   const orderedCats = MENU_CATS.filter(c => usedCats.has(c));
@@ -2932,13 +3004,28 @@ function filterCat(c) { ST.activeCat = c; buildCatTabs(); renderMenuGrid(); }
 
 function renderMenuGrid() {
   const menus = ST.activeCat==='Semua' ? ST.menus : ST.menus.filter(m => m.cat===ST.activeCat);
-  $('menu-grid').innerHTML = menus.map(m =>
-    '<div class="menu-card' + (m.status==='out'?' out':'') + '" onclick="' + (m.status==='out'?'void(0)':'addToCart('+m.id+')') + '">' +
-    (m.img ? '<img src="' + m.img + '" style="width:calc(100% + 24px);height:70px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;margin:-12px -12px 6px;display:block">' : '<div style="font-size:28px;margin-bottom:6px">' + m.emoji + '</div>') +
-    '<div class="mc-nm">' + m.name + '</div>' +
-    '<div class="mc-pr">' + fmt(m.price) + '</div>' +
-    '</div>'
-  ).join('');
+  $('menu-grid').innerHTML = menus.map(function(m) {
+    var imgHtml = '';
+    if (m.img) {
+      // Shimmer placeholder + lazy img
+      imgHtml = '<div class="img-placeholder"></div>' +
+        '<img class="img-lazy" data-src="' + m.img + '" data-emoji="' + m.emoji + '" ' +
+        'style="width:calc(100% + 24px);height:70px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;margin:-12px -12px 6px;display:block">';
+    } else {
+      imgHtml = '<div style="font-size:28px;margin-bottom:6px">' + m.emoji + '</div>';
+    }
+    var varBadge = (m.opts&&m.opts.length)
+      ? '<div style="position:absolute;top:4px;right:4px;background:var(--accent);color:#fff;font-size:8px;padding:1px 5px;border-radius:8px;font-weight:700">' + m.opts.length + 'v</div>'
+      : '';
+    return '<div class="menu-card' + (m.status==='out'?' out':'') + '" onclick="' + (m.status==='out'?'void(0)':'addToCart('+m.id+')') + '">' +
+      imgHtml + varBadge +
+      '<div class="mc-nm">' + escHtml(m.name) + '</div>' +
+      '<div class="mc-pr">' + fmt(m.price) + (m.opts&&m.opts.length&&m.img?'':'') + '</div>' +
+      (m.status==='out'?'<div style="font-size:9px;color:var(--red-dk);margin-top:2px">Habis</div>':'') +
+      '</div>';
+  }).join('');
+  // Trigger lazy load setelah render
+  setTimeout(lazyLoadAllImages, 50);
 }
 
 let _varMenu = null;
@@ -3526,7 +3613,7 @@ function renderMenuTable() {
     '<td style="width:24px;color:var(--txt3);font-size:16px;cursor:grab">⠿</td>' +
     '<td><div style="display:flex;align-items:center;gap:10px">' +
     (m.img
-      ? '<img src="' + m.img + '" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0">'
+      ? '<img class="img-lazy-thumb" data-src="' + m.img + '" data-emoji="' + m.emoji + '" width="40" height="40" style="object-fit:cover;border-radius:8px;flex-shrink:0">'
       : '<span style="font-size:22px;flex-shrink:0;width:40px;text-align:center">' + m.emoji + '</span>'
     ) +
     '<div><b>' + escHtml(m.name) + '</b>' +
@@ -3546,6 +3633,7 @@ function renderMenuTable() {
     '</div></td></tr>'
   ).join('');
   setTimeout(initMenuDrag, 50);
+  setTimeout(lazyLoadAllImages, 80);
 }
 
 function toggleMenuStatus(id) {
@@ -3594,13 +3682,39 @@ var _fmImgData = null;
 function onMenuImgSelected(input) {
   var file = input.files && input.files[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) { showNotif('Ukuran foto maks 2MB', '#E17055'); input.value = ''; return; }
+  if (file.size > 5 * 1024 * 1024) { showNotif('Ukuran foto maks 5MB', '#E17055'); input.value = ''; return; }
   var reader = new FileReader();
   reader.onload = function(e) {
-    _fmImgData = e.target.result;
-    setMenuImgPreview(_fmImgData);
+    // Compress & resize menggunakan canvas sebelum simpan
+    compressMenuImg(e.target.result, function(compressed) {
+      _fmImgData = compressed;
+      setMenuImgPreview(_fmImgData);
+      // Tampilkan ukuran setelah compress
+      var sizeKB = Math.round(compressed.length * 3/4 / 1024);
+      var nm = document.getElementById('fm-img-name');
+      if (nm) nm.textContent = file.name + ' · ' + sizeKB + 'KB (dikompres)';
+    });
   };
   reader.readAsDataURL(file);
+}
+
+function compressMenuImg(dataUrl, callback) {
+  var img = new Image();
+  img.onload = function() {
+    var MAX = 480; // max 480px sisi terpanjang
+    var w = img.width, h = img.height;
+    if (w > MAX || h > MAX) {
+      if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+      else       { w = Math.round(w * MAX / h); h = MAX; }
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    // JPEG 80% — jauh lebih kecil dari PNG base64 asli
+    callback(canvas.toDataURL('image/jpeg', 0.80));
+  };
+  img.src = dataUrl;
 }
 
 function setMenuImgPreview(src) {
@@ -5207,6 +5321,7 @@ async function autoSyncFromSupabase() {
         });
         buildCatTabs(); renderMenuGrid();
         if (window._currentPage === 'menu') renderMenuTable();
+        preloadTopMenuImages(); // preload gambar menu teratas
       }
     } catch(e) { console.warn('sync menus:', e.message); }
 
