@@ -1655,6 +1655,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
     <div class="modal-sub" id="receipt-sub"></div>
     <div id="receipt-body"></div>
     <div class="modal-actions">
+      <button class="btn btn-sm" onclick="window.print()" style="font-size:11px">🖨️ Cetak</button>
       <button class="btn" onclick="closeModal('receipt-modal')">Tutup</button>
       <button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="openWAModal(null)">💬 Kirim WA</button>
       <button class="btn btn-primary" onclick="doprint()">🖨️ Cetak Struk</button>
@@ -2184,6 +2185,17 @@ function resetIdleTimer() {
   document.addEventListener(evt, resetIdleTimer, {passive: true});
 });
 
+// ── Tanggal display helper ────────────────────────────────────────────────
+function fmtTanggal(dateStr) {
+  if (!dateStr) return '-';
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    var p = dateStr.substring(0,10).split('-');
+    var d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
+    return d.toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'});
+  }
+  return dateStr;
+}
+
 // ── XSS sanitizer ─────────────────────────────────────────────────────────
 function escHtml(s) {
   if (s === null || s === undefined) return '';
@@ -2368,17 +2380,31 @@ function getShiftKey() {
 }
 
 function saveShiftLocal() {
-  if (!CFG.restaurantId) { console.warn('[WarungKu] saveShiftLocal: restaurantId kosong, skip'); return; }
+  if (!CFG.restaurantId) return;
   try {
-    localStorage.setItem(getShiftKey(), JSON.stringify({
+    var payload = JSON.stringify({
       restaurantId: CFG.restaurantId,  // wajib ada untuk validasi lintas toko
       currentShift: ST.currentShift,
       shifts: ST.shifts,
       trxCounter: ST.trxCounter,
       shiftCounter: ST.shiftCounter,
       transactions: ST.transactions,
-    }));
-  } catch(e) { console.warn('saveShiftLocal:', e.message); }
+    });
+    // Cegah QuotaExceededError: cek ukuran sebelum simpan
+    if (payload.length > 4 * 1024 * 1024) { // > 4MB
+      // Potong transaksi lama — simpan max 500 terbaru
+      var compact = JSON.parse(payload);
+      if (compact.transactions && compact.transactions.length > 500) {
+        compact.transactions = compact.transactions.slice(0, 500);
+        payload = JSON.stringify(compact);
+      }
+    }
+    localStorage.setItem(getShiftKey(), payload);
+  } catch(e) {
+    if (e.name === 'QuotaExceededError') {
+      showNotif('⚠️ Penyimpanan lokal penuh — data lama dipangkas', '#F59E0B');
+    }
+  }
 }
 
 function loadShiftLocal() {
@@ -3382,7 +3408,8 @@ function processPayment() {
   renderCart();
   addPoinAfterTrx(grand, _cartMemberId);
   clearCartMember();
-  showNotif('✅ ' + id + ' berhasil!', '#00B894');
+  var payLbl = ST.payMethod==='cash'?'Tunai':ST.payMethod==='qris'?'QRIS':'Transfer';
+  showNotif('✅ ' + id + ' · ' + fmt(grand) + ' · ' + payLbl, '#00B894');
   saveShiftLocal(); // simpan ke localStorage DULU — pastikan tidak hilang walau Supabase gagal
   sbSyncTransaction(trx); // lalu sync ke Supabase (async, tidak blocking)
   if (window._currentPage === 'laporan') renderLaporan();
@@ -3413,15 +3440,15 @@ function showReceipt(trx) {
   if (CFG.se.shift && trx.shiftId) html += '<div class="r-r"><span>Shift</span><span>' + trx.shiftId + '</span></div>';
   if (CFG.se.kasir) html += '<div class="r-r"><span>Kasir</span><span>' + trx.kasir + '</span></div>';
   if (CFG.se.meja) html += '<div class="r-r"><span>Meja</span><span>' + trx.table + '</span></div>';
-  html += '<div class="r-r"><span>Waktu</span><span>' + trx.time + ' · ' + trx.date + '</span></div>';
+  html += '<div class="r-r"><span>Waktu</span><span>' + escHtml(trx.time) + ' · ' + fmtTanggal(trx.date) + '</span></div>';
   html += '<hr class="r-d">';
   if (trx.orderNote) html += '<div style="background:var(--amber-bg);border-radius:4px;padding:5px 8px;font-size:10px;margin-bottom:6px">📋 ' + trx.orderNote + '</div>';
   trx.items.forEach(i => {
     var iPrice = i.discPct ? i.price - (i.discAmt||Math.round(i.price*i.discPct/100)) : i.price;
-    html += '<div class="r-r"><span>' + i.name + (i.discPct?' <span style="font-size:9px;color:var(--green-dk);">-'+i.discPct+'%</span>':'') + '</span></div>';
+    html += '<div class="r-r"><span>' + escHtml(i.name) + (i.discPct?' <span style="font-size:9px;color:var(--green-dk);">-'+i.discPct+'%</span>':'') + '</span></div>';
     if (i.varLabel) html += '<div style="padding-left:12px;color:var(--accent);font-size:9px">' + i.varLabel + '</div>';
     html += '<div class="r-r" style="padding-left:12px"><span>' + i.qty + ' × ' + fmt(iPrice) + '</span><span>' + fmt(i.qty*iPrice) + '</span></div>';
-    if (i.note) html += '<div style="padding-left:12px;color:var(--txt2);font-size:9px">📝 ' + i.note + '</div>';
+    if (i.note) html += '<div style="padding-left:12px;color:var(--txt2);font-size:9px">📝 ' + escHtml(i.note) + '</div>';
   });
   html += '<hr class="r-d">';
   html += '<div class="r-r"><span>Subtotal</span><span>' + fmt(trx.subtotal) + '</span></div>';
@@ -3442,7 +3469,7 @@ function showReceipt(trx) {
   html += '<hr class="r-d">';
   // Member & poin info
   if (trx.memberNama) {
-    html += '<div class="r-r"><span>👤 Member</span><span style="font-weight:600;color:var(--accent)">' + trx.memberNama + '</span></div>';
+    html += '<div class="r-r"><span>👤 Member</span><span style="font-weight:600;color:var(--accent)">' + escHtml(trx.memberNama) + '</span></div>';
     if (trx.poinRedeemed > 0) html += '<div class="r-r"><span>Poin Ditukar</span><span style="color:var(--amber-dk)">-' + trx.poinRedeemed + ' poin</span></div>';
     if (trx.poinEarned > 0) html += '<div class="r-r"><span>Poin Diperoleh</span><span style="color:var(--green-dk)">+' + trx.poinEarned + ' poin</span></div>';
     var memberObj = ST.members.find(function(x){return x.id===trx.memberId;});
@@ -4163,7 +4190,7 @@ function exportLaporanCSV() {
   trxs.forEach(function(t) {
     rows.push([
       t.voided ? t.id + ' [VOID]' : t.id,
-      t.date||'', t.time||'', t.table||'',
+      fmtTanggal(t.date), t.time||'', t.table||'',
       (t.items||[]).map(function(i){return i.name+'x'+i.qty+(i.varLabel?' ('+i.varLabel+')':'');}).join('; '),
       t.subtotal||0, t.disc||0, t.discAmt||0, t.tax||0, t.total||0,
       t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':t.pay==='split'?'Split':'Transfer',
@@ -4260,7 +4287,7 @@ function exportLaporanHTML() {
     var payLabel = t.pay==='cash'?'Tunai':t.pay==='qris'?'QRIS':t.pay==='split'?'Split':'Transfer';
     html += '<tr class="' + (t.voided?'void':'') + '">';
     html += '<td>' + t.id + (t.voided?' <span style="color:#e17055">[VOID]</span>':'') + '</td>';
-    html += '<td>' + (t.date||'') + '</td>';
+    html += '<td>' + fmtTanggal(t.date) + '</td>';
     html += '<td>' + (t.time||'') + '</td>';
     html += '<td>' + escHtml(t.table||'') + '</td>';
     html += '<td style="font-size:9pt;color:#555">' + itemsStr + '</td>';
@@ -10839,6 +10866,16 @@ const doprint = () => {
 // FIX: jangan panggil startRealtimeOrders() di sini — restaurantId belum tentu benar
 // startRealtimeOrders() sudah dipanggil dari doLogin() setelah restaurantId dipastikan dari URL
 if (CFG.sbUrl && CFG.sbKey && CFG.restaurantId) { initSupabase(); }
+
+// ── Keyboard input untuk PIN layar login ──────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  var loginScreen = document.getElementById('login-screen');
+  if (!loginScreen || loginScreen.style.display === 'none') return;
+  if (!ST.selId) return;
+  if (e.key >= '0' && e.key <= '9') { e.preventDefault(); pinKey(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); pinKey('←'); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (ST.pin.length >= 4) checkPin(); }
+});
 
 // Cek force_logout saat tab/jendela aktif kembali (tanpa harus refresh)
 // ── OFFLINE / ONLINE MANAGEMENT ──────────────────────────────────────────
