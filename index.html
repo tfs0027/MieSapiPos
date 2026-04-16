@@ -7122,30 +7122,28 @@ function renderMemberList2() {
       '<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--accent)">' + m.poin + '</div>' +
       '<div style="font-size:10px;color:var(--txt2)">poin</div>' +
       '<div style="font-size:10px;color:var(--txt3);margin-top:2px">' + m.totalTrx + ' trx</div></div>' +
-      '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusMember(' + m.id + ')">Hapus</button>' +
+      '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="hapusMember(\'' + m.id + '\')">Hapus</button>' +
       '</div></div>';
   }).join('');
 }
 
 async function hapusMember(id) {
-  var m = ST.members.find(function(x){return x.id===id;});
+  var m = ST.members.find(function(x){return String(x.id)===String(id);});
   if (!m) return;
   if (!confirm('Hapus member ' + escHtml(m.nama) + '?\nPoin: ' + m.poin + ' · ' + m.totalTrx + ' transaksi\n\nAksi ini tidak bisa dibatalkan.')) return;
   // Hapus dari lokal dulu
-  ST.members = ST.members.filter(function(x){return x.id!==id;});
+  ST.members = ST.members.filter(function(x){return String(x.id)!==String(id);});
   renderMemberList2();
   showNotif('Member ' + escHtml(m.nama) + ' dihapus','#A8A5BE');
   // Hapus dari Supabase (jika punya sbId)
-  if (_sb && m.sbId) {
+  // Hapus dari Supabase — m.id adalah UUID dari Supabase
+  if (_sb && CFG.restaurantId) {
     try {
-      var res = await _sb.from('members').delete().eq('id', m.sbId);
+      var res = await _sb.from('members').delete()
+        .eq('id', m.id)
+        .eq('restaurant_id', CFG.restaurantId);
       if (res.error) console.warn('Hapus member Supabase:', res.error.message);
     } catch(e) { console.warn('hapusMember sync:', e.message); }
-  } else if (_sb && m.id) {
-    // Coba hapus by UUID jika sbId tidak ada
-    try {
-      await _sb.from('members').delete().eq('restaurant_id', CFG.restaurantId).eq('hp', m.hp||'');
-    } catch(e) {}
   }
 }
 
