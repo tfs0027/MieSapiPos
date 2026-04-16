@@ -7127,13 +7127,26 @@ function renderMemberList2() {
   }).join('');
 }
 
-function hapusMember(id) {
+async function hapusMember(id) {
   var m = ST.members.find(function(x){return x.id===id;});
   if (!m) return;
-  if (!confirm('Hapus member ' + m.nama + '?')) return;
+  if (!confirm('Hapus member ' + escHtml(m.nama) + '?\nPoin: ' + m.poin + ' · ' + m.totalTrx + ' transaksi\n\nAksi ini tidak bisa dibatalkan.')) return;
+  // Hapus dari lokal dulu
   ST.members = ST.members.filter(function(x){return x.id!==id;});
   renderMemberList2();
-  showNotif('Member ' + m.nama + ' dihapus','#A8A5BE');
+  showNotif('Member ' + escHtml(m.nama) + ' dihapus','#A8A5BE');
+  // Hapus dari Supabase (jika punya sbId)
+  if (_sb && m.sbId) {
+    try {
+      var res = await _sb.from('members').delete().eq('id', m.sbId);
+      if (res.error) console.warn('Hapus member Supabase:', res.error.message);
+    } catch(e) { console.warn('hapusMember sync:', e.message); }
+  } else if (_sb && m.id) {
+    // Coba hapus by UUID jika sbId tidak ada
+    try {
+      await _sb.from('members').delete().eq('restaurant_id', CFG.restaurantId).eq('hp', m.hp||'');
+    } catch(e) {}
+  }
 }
 
 
