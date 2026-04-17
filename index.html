@@ -3242,11 +3242,8 @@ function updateTotals() {
   const discAmt = net2 * disc / 100;
   const taxable = net2 - discAmt;
   const tax = CFG.enablePajak ? Math.round(taxable * (CFG.pajak/100)) : 0;
-  var service = 0;
-  if (CFG.enableService) {
-    service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable * (CFG.service/100));
-  }
-  const grand = Math.max(0, Math.round(taxable + tax + service));
+  // Biaya layanan HANYA untuk pesanan online, tidak berlaku di kasir
+  const grand = Math.max(0, Math.round(taxable + tax));
   if($('c-sub')) $('c-sub').textContent = fmt(sub - itemDiscTotal);
   var itemDiscRow = $('cart-item-disc-row'); if(itemDiscRow){itemDiscRow.style.display=itemDiscTotal>0?'':'none'; var ide=$('c-item-disc');if(ide)ide.textContent='-'+fmt(itemDiscTotal);}
   if($('c-tax')) $('c-tax').textContent = fmt(tax);
@@ -3257,9 +3254,8 @@ function updateTotals() {
   if($('pajak-label')) $('pajak-label').textContent = CFG.pajak;
   const taxRow = $('cart-tax-row');
   if (taxRow) taxRow.style.display = CFG.enablePajak ? '' : 'none';
-  var svcEl = $('c-service'); if(svcEl) svcEl.textContent = fmt(service);
-  var svcNmEl = $('service-label-nm'); if(svcNmEl) svcNmEl.textContent = CFG.serviceNama||'Biaya Layanan';
-  var svcRow = $('cart-service-row'); if(svcRow) svcRow.style.display = CFG.enableService ? '' : 'none';
+  // Baris service dihapus dari kasir (hanya untuk online order)
+  var svcRow = $('cart-service-row'); if(svcRow) svcRow.style.display = 'none';
   var poinEarn = $('poin-earn-label');
   if (poinEarn && grand > 0) poinEarn.textContent = '+ ' + Math.floor(grand/1000) + ' poin';
   else if (poinEarn) poinEarn.textContent = '';
@@ -3483,11 +3479,8 @@ function openPay(method) {
   const discAmt = net2 * disc / 100;
   const taxable = net2 - discAmt;
   const tax = CFG.enablePajak ? Math.round(taxable*(CFG.pajak/100)) : 0;
-  var service = 0;
-  if (CFG.enableService) {
-    service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable*(CFG.service/100));
-  }
-  const grand = Math.max(0, Math.round(taxable + tax + service));
+  // Biaya layanan tidak berlaku di kasir (hanya pesanan online)
+  const grand = Math.max(0, Math.round(taxable + tax));
   const suggested = Math.ceil(grand/1000)*1000;
   const icons = {cash:'💵',qris:'📱',transfer:'🏦'};
   const labels = {cash:'Tunai',qris:'QRIS',transfer:'Transfer Bank'};
@@ -3539,11 +3532,8 @@ function processPayment() {
   const discAmt = net2 * disc / 100;
   const taxable = net2 - discAmt;
   const tax = CFG.enablePajak ? Math.round(taxable*(CFG.pajak/100)) : 0;
-  var service = 0;
-  if (CFG.enableService) {
-    service = CFG.serviceTipe === 'flat' ? (CFG.serviceFlat||0) : Math.round(taxable*(CFG.service/100));
-  }
-  const grand = Math.max(0, Math.round(taxable + tax + service));
+  // Biaya layanan tidak berlaku di kasir (hanya pesanan online)
+  const grand = Math.max(0, Math.round(taxable + tax));
   const mejaVal = $('cart-meja').value;
   const cashRec = ST.payMethod==='cash' ? (parseFloat($('cash-inp') ? $('cash-inp').value : grand)||grand) : grand;
   const change = ST.payMethod==='cash' ? Math.max(0, Math.round(cashRec-grand)) : 0;
@@ -4658,9 +4648,8 @@ function openSplitModal() {
   var discAmt2 = net2 * disc / 100;
   var taxable2 = net2 - discAmt2;
   var tax = CFG.enablePajak ? Math.round(taxable2*(CFG.pajak/100)):0;
-  var svc2 = 0;
-  if (CFG.enableService) svc2 = CFG.serviceTipe==='flat'?(CFG.serviceFlat||0):Math.round(taxable2*(CFG.service/100));
-  var grand = Math.max(0, Math.round(taxable2+tax+svc2));
+  // Biaya layanan tidak berlaku di kasir
+  var grand = Math.max(0, Math.round(taxable2+tax));
   $('split-grand').textContent = fmt(grand);
   $('split-sub').textContent = 'Total: ' + fmt(grand);
   $('split-amt1').value = '';
