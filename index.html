@@ -5449,11 +5449,20 @@ async function autoSyncFromSupabase() {
     // 5. Transaksi kasir (90 hari)
     try {
       var tRes = await _sb.from('transactions').select('*')
-        .eq('restaurant_id', rid).gte('created_at', iso90)
-        .order('created_at', {ascending: false});
+        .eq('restaurant_id', rid)
+        .order('trx_code', {ascending: false})
+        .limit(500);
       if (!tRes.error && tRes.data) {
         var sbMapped = tRes.data.map(function(t) {
-          var dt = t.created_at ? new Date(t.created_at) : new Date();
+          // Ambil tanggal dari created_at, jika NULL coba tanggal dari shift
+          var dt = null;
+          if (t.created_at) { dt = new Date(t.created_at); }
+          // Fallback: jika created_at null, pakai tanggal dari shift
+          if (!dt || isNaN(dt)) {
+            var sh = ST.shifts.find(function(s){return s.id===t.shift_code;});
+            if (sh && sh.tanggal) { dt = new Date(parseTanggalShift(sh.tanggal)||new Date()); }
+            else dt = new Date();
+          }
           return {
             id: t.trx_code||t.id,
             time: dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
@@ -5513,8 +5522,7 @@ async function autoSyncFromSupabase() {
     // 7. Pengeluaran
     try {
       var eRes = await _sb.from('expenses').select('*')
-        .eq('restaurant_id', rid).gte('created_at', iso90)
-        .order('created_at', {ascending:false});
+        .eq('restaurant_id', rid);
       if (!eRes.error && eRes.data && eRes.data.length) {
         ST._expensesCache = eRes.data.map(function(e) {
           return {
@@ -5533,7 +5541,7 @@ async function autoSyncFromSupabase() {
       // Filter created_at sering gagal jika saat insert tidak ada created_at
       var shRes = await _sb.from('shifts').select('*')
         .eq('restaurant_id', rid)
-        .order('id', {ascending:false})
+        .order('shift_code', {ascending:false})
         .limit(200);
       if (!shRes.error && shRes.data) {
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
@@ -5592,17 +5600,25 @@ async function fetchLaporanFromSupabase() {
     var trxRes = await _sb.from('transactions')
       .select('*')
       .eq('restaurant_id', rid)
-      .gte('created_at', iso90)
-      .order('created_at', {ascending: false});
+      .order('trx_code', {ascending: false})
+      .limit(500);
     if (!trxRes.error && trxRes.data) {
       var sbMapped2 = trxRes.data.map(function(t) {
         var dt = t.created_at ? new Date(t.created_at) : new Date();
-        // FIX: gunakan tanggal lokal bukan UTC
-        var localDate2 = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+        // Fallback tanggal jika created_at null
+          var localDate2 = '';
+          if (t.created_at) {
+            var _dt2 = new Date(t.created_at);
+            if (!isNaN(_dt2)) {
+              dt = _dt2;
+              localDate2 = _dt2.getFullYear()+'-'+String(_dt2.getMonth()+1).padStart(2,'0')+'-'+String(_dt2.getDate()).padStart(2,'0');
+            }
+          }
+          if (!localDate2) localDate2 = new Date().getFullYear()+'-01-01'; // last resort
         return {
           id: t.trx_code||t.id,
           time: dt.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
-          date: localDate2 || (dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0')),
+          date: localDate2,
           table: t.meja||'', subtotal: t.subtotal||0,
           disc: t.disc_pct||0, discAmt: t.disc_amt||0,
           tax: t.tax||0, total: t.total||0, pay: t.pay_method,
@@ -5652,9 +5668,7 @@ async function fetchLaporanFromSupabase() {
     // 3. Pengeluaran dari expenses table
     var expRes = await _sb.from('expenses')
       .select('*')
-      .eq('restaurant_id', rid)
-      .gte('created_at', iso90)
-      .order('created_at', {ascending: false});
+      .eq('restaurant_id', rid);
     if (!expRes.error && expRes.data && expRes.data.length) {
       ST._expensesCache = expRes.data.map(function(e) {
         return {
@@ -6501,7 +6515,7 @@ async function syncShiftHistory() {
     var rid = CFG.restaurantId;
     var res = await _sb.from('shifts').select('*')
       .eq('restaurant_id', rid)
-      .order('id', {ascending: false})
+      .order('shift_code', {ascending: false})
       .limit(500);
     if (res.error) throw res.error;
     if (!res.data || !res.data.length) {
@@ -7709,7 +7723,7 @@ async function pullAllFromSupabase() {
     var d30 = new Date(); d30.setDate(d30.getDate()-30);
     var { data: trxs, error: e3 } = await _sb.from('transactions')
       .select('*').eq('restaurant_id', rid)
-      .gte('created_at', d30.toISOString()).order('created_at');
+      .order('created_at');
     if (!e3 && trxs && trxs.length) {
       ST.transactions = trxs.map(function(t) {
         return {id: t.trx_code, time: (function(){ var d=t.created_at?new Date(t.created_at):new Date(); return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}); })(),
@@ -7739,7 +7753,7 @@ async function pullAllFromSupabase() {
     var d90s = new Date(); d90s.setDate(d90s.getDate()-90);
     var { data: shifts, error: e5 } = await _sb.from('shifts')
       .select('*').eq('restaurant_id', rid)
-      .order('id', {ascending: false})
+      .order('shift_code', {ascending: false})
       .limit(200);
     if (!e5 && shifts && shifts.length) {
       var existingCodes = ST.shifts.map(function(s){return s.id;});
@@ -7761,9 +7775,7 @@ async function pullAllFromSupabase() {
 
     // Load expenses
     var { data: exps, error: e6 } = await _sb.from('expenses')
-      .select('*').eq('restaurant_id', rid)
-      .gte('created_at', d90s.toISOString())
-      .order('created_at', {ascending: false});
+      .select('*').eq('restaurant_id', rid);
     if (!e6 && exps && exps.length) {
       ST._expensesCache = exps.map(function(e) {
         return {
