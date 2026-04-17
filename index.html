@@ -1608,7 +1608,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
   </div>
 </div>
 
-<!-- COGS PAGE -->
+    <!-- COGS PAGE -->
     <div class="page" id="page-cogs">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div>
@@ -1617,56 +1617,463 @@ tr:hover td{background:rgba(108,92,231,.03)}
         </div>
         <button class="btn btn-sm btn-primary" onclick="openModalBahan()">+ Bahan Baku</button>
       </div>
-      <div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
-          <div class="metric" style="background:var(--green-bg);border-radius:var(--radius-lg);padding:14px 16px">
-            <div class="metric-lbl">Rata-rata Margin</div>
-            <div class="metric-val" id="cogs-avg-margin" style="color:var(--green-dk);font-size:22px">--</div>
-          </div>
-          <div class="metric" style="background:var(--accent-bg);border-radius:var(--radius-lg);padding:14px 16px">
-            <div class="metric-lbl">Menu Belum Ada Resep</div>
-            <div class="metric-val" id="cogs-no-recipe" style="color:var(--accent);font-size:22px">--</div>
-          </div>
-          <div class="metric" style="background:var(--bg2);border-radius:var(--radius-lg);padding:14px 16px">
-            <div style="font-size:11px;color:var(--txt2);margin-bottom:4px">Biaya Operasional (%)</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="cogs-ops-pct" value="15" min="0" max="100"
-                style="width:60px;padding:4px 8px;border:1px solid var(--brd);border-radius:6px;font-size:16px;font-weight:700;text-align:center;background:var(--bg);color:var(--txt)"
-                oninput="renderMenuCogs();renderCogsLaporan()">
-              <span style="font-size:11px;color:var(--txt3)">% dari harga jual</span>
-            </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+        <div class="metric" style="background:var(--green-bg);border-radius:var(--radius-lg);padding:14px 16px">
+          <div class="metric-lbl">Rata-rata Margin</div>
+          <div class="metric-val" id="cogs-avg-margin" style="color:var(--green-dk);font-size:22px">--</div>
+        </div>
+        <div class="metric" style="background:var(--accent-bg);border-radius:var(--radius-lg);padding:14px 16px">
+          <div class="metric-lbl">Menu Belum Ada Resep</div>
+          <div class="metric-val" id="cogs-no-recipe" style="color:var(--accent);font-size:22px">--</div>
+        </div>
+        <div class="metric" style="background:var(--bg2);border-radius:var(--radius-lg);padding:14px 16px">
+          <div style="font-size:11px;color:var(--txt2);margin-bottom:4px">Biaya Operasional (%)</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="cogs-ops-pct" value="15" min="0" max="100"
+              style="width:60px;padding:4px 8px;border:1px solid var(--brd);border-radius:6px;font-size:16px;font-weight:700;text-align:center;background:var(--bg);color:var(--txt)"
+              oninput="renderMenuCogs();renderCogsLaporan()">
+            <span style="font-size:11px;color:var(--txt3)">% dari harga jual</span>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-          <div>
-            <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
-              <span>&#128230; Master Bahan Baku</span>
-              <span id="bahan-count" style="font-size:11px;color:var(--txt3)"></span>
-            </div>
-            <div id="bahan-list-container"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Belum ada bahan. Klik "+ Bahan Baku".</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <span>&#128230; Master Bahan Baku</span>
+            <span id="bahan-count" style="font-size:11px;color:var(--txt3)"></span>
           </div>
-          <div>
-            <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#127869; Resep &amp; Margin per Menu</div>
-            <div id="menu-cogs-list"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Memuat...</div></div>
-          </div>
+          <div id="bahan-list-container"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Belum ada bahan. Klik "+ Bahan Baku".</div></div>
         </div>
         <div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <div style="font-size:13px;font-weight:700">&#128202; Laporan Profitabilitas</div>
-            <select class="fi" id="cogs-lap-periode" style="font-size:11px;padding:4px 8px;width:auto" onchange="renderCogsLaporan()">
-              <option value="bulan">Bulan ini</option><option value="minggu">7 hari terakhir</option><option value="all">Semua waktu</option>
-            </select>
-          </div>
-          <div class="tbl-wrap">
-            <table>
-              <thead><tr><th>Menu</th><th style="text-align:right">Terjual</th><th style="text-align:right">Revenue</th><th style="text-align:right">COGS</th><th style="text-align:right">Biaya Ops</th><th style="text-align:right">Profit</th><th style="text-align:right">Margin</th><th>Aksi</th></tr></thead>
-              <tbody id="cogs-lap-tbody"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Memuat...</td></tr></tbody>
-            </table>
-          </div>
-          <div id="cogs-lap-alert" style="margin-top:10px"></div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#127869; Resep &amp; Margin per Menu</div>
+          <div id="menu-cogs-list"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Memuat...</div></div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700">&#128202; Laporan Profitabilitas</div>
+          <select class="fi" id="cogs-lap-periode" style="font-size:11px;padding:4px 8px;width:auto" onchange="renderCogsLaporan()">
+            <option value="bulan">Bulan ini</option><option value="minggu">7 hari terakhir</option><option value="all">Semua waktu</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Menu</th><th style="text-align:right">Terjual</th><th style="text-align:right">Revenue</th><th style="text-align:right">COGS</th><th style="text-align:right">Biaya Ops</th><th style="text-align:right">Profit</th><th style="text-align:right">Margin</th><th>Aksi</th></tr></thead>
+            <tbody id="cogs-lap-tbody"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Memuat...</td></tr></tbody>
+          </table>
+        </div>
+        <div id="cogs-lap-alert" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+<!-- MODALS -->
+
+<div class="modal-wrap" id="split-modal">
+  <div class="modal">
+    <h3>💳 Split Payment</h3>
+    <div class="modal-sub" id="split-sub">Bayar dengan dua metode berbeda</div>
+    <div style="background:var(--bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700">
+        <span>Total Tagihan</span><span id="split-grand" style="color:var(--accent)">Rp 0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);margin-top:4px">
+        <span>Sisa belum terbayar</span><span id="split-remaining" style="color:var(--red-dk);font-weight:600">Rp 0</span>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="form-group">
+        <label class="form-lbl">Metode 1</label>
+        <select class="fi" id="split-method1" onchange="calcSplitRemaining()">
+          <option value="cash">💵 Tunai</option>
+          <option value="qris">📱 QRIS</option>
+          <option value="transfer">🏦 Transfer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-lbl">Nominal (Rp)</label>
+        <input class="fi" type="number" id="split-amt1" placeholder="0" oninput="calcSplitRemaining()">
+      </div>
+    </div>
+    <div class="frow">
+      <div class="form-group">
+        <label class="form-lbl">Metode 2</label>
+        <select class="fi" id="split-method2" onchange="calcSplitRemaining()">
+          <option value="qris">📱 QRIS</option>
+          <option value="cash">💵 Tunai</option>
+          <option value="transfer">🏦 Transfer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-lbl">Nominal (Rp)</label>
+        <input class="fi" type="number" id="split-amt2" placeholder="0" oninput="calcSplitRemaining()">
+      </div>
+    </div>
+    <div id="split-cash-change" style="display:none" class="kembalian-box">
+      <span>💸 Kembalian Tunai</span><span id="split-change-val">Rp 0</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('split-modal')">Batal</button>
+      <button class="btn btn-success" onclick="processSplitPayment()">✅ Proses Split Bayar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="pay-modal">
+  <div class="modal">
+    <h3 id="pay-title">Konfirmasi Pembayaran</h3>
+    <div class="modal-sub">Periksa pesanan sebelum memproses</div>
+    <div id="pay-body"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('pay-modal')">Batal</button>
+      <button class="btn btn-success" onclick="processPayment()">✅ Proses Bayar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="receipt-modal">
+  <div class="modal">
+    <h3>🧾 Struk Transaksi</h3>
+    <div class="modal-sub" id="receipt-sub"></div>
+    <div id="receipt-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="window.print()" style="font-size:11px">🖨️ Cetak</button>
+      <button class="btn" onclick="closeModal('receipt-modal')">Tutup</button>
+      <button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="openWAModal(null)">💬 Kirim WA</button>
+      <button class="btn btn-primary" onclick="doprint()">🖨️ Cetak Struk</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="wa-modal">
+  <div class="modal">
+    <h3>💬 Kirim Struk via WhatsApp</h3>
+    <div class="modal-sub" id="wa-sub">Masukkan nomor pelanggan</div>
+    <div class="form-group">
+      <label class="form-lbl">Nomor WhatsApp</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="color:var(--txt2);flex-shrink:0">+62</span>
+        <input class="fi" type="tel" id="wa-nomor" placeholder="8xx-xxxx-xxxx" style="flex:1">
+      </div>
+      <div style="font-size:11px;color:var(--txt2);margin-top:4px">Tanpa +62 dan tanpa angka 0 di depan</div>
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Pesan Tambahan</label>
+      <textarea class="fi" id="wa-pesan" rows="2" placeholder="Terima kasih!" oninput="renderWAPreview()"></textarea>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius);padding:10px;margin-bottom:4px;max-height:180px;overflow-y:auto">
+      <div style="font-size:10px;font-weight:600;color:var(--txt2);margin-bottom:5px;text-transform:uppercase">Preview Pesan WA</div>
+      <div id="wa-preview" style="font-size:11px;white-space:pre-wrap;line-height:1.6"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('wa-modal')">Batal</button>
+      <button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="kirimWA()">Buka WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+
+
+
+<div class="modal-wrap" id="redeem-poin-modal">
+  <div class="modal">
+    <h3>🎁 Tukar Poin Member</h3>
+    <div class="modal-sub" id="redeem-member-info">Pilih member terlebih dahulu</div>
+    <div style="background:var(--accent3);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px" id="redeem-poin-info">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;color:var(--txt2)">Poin tersedia</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent)" id="redeem-poin-available">0</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--txt2)">Nilai per poin</div>
+          <div style="font-size:14px;font-weight:600" id="redeem-nilai-per-poin">Rp 0</div>
         </div>
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-lbl">Jumlah Poin yang Ditukar</label>
+      <input class="fi" type="number" id="redeem-jumlah" placeholder="0" oninput="updateRedeemPreview()">
+      <div style="font-size:10px;color:var(--txt2);margin-top:4px">Minimum: <span id="redeem-min-label">100</span> poin</div>
+    </div>
+    <div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius);padding:10px 12px;margin-bottom:4px" id="redeem-preview" style="display:none">
+      <div style="font-size:12px;font-weight:600;color:var(--green-dk)">Potongan harga: <span id="redeem-diskon-val">Rp 0</span></div>
+      <div style="font-size:11px;color:var(--green-dk);margin-top:2px">Sisa poin setelah tukar: <span id="redeem-sisa-poin">0</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('redeem-poin-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="prosesRedeemPoin()">✅ Tukar Poin</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="member-modal">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <h3 style="margin-bottom:0">👤 Program Member</h3>
+      <button class="btn btn-sm" onclick="closeModal('member-modal')" style="font-size:13px;padding:2px 8px;color:var(--txt2)">✕</button>
+    </div>
+    <div class="modal-sub" id="member-modal-sub">Cari atau daftarkan pelanggan</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input class="fi" id="member-search-inp" placeholder="Cari nama atau no. HP..." style="flex:1" oninput="searchMember()">
+      <button class="btn btn-primary btn-sm" onclick="showDaftarMemberForm()">+ Daftar Baru</button>
+    </div>
+    <div id="member-search-result" style="margin-bottom:10px"></div>
+    <div id="daftar-member-form" style="display:none">
+      <div class="frow">
+        <div class="form-group"><label class="form-lbl">Nama Lengkap</label><input class="fi" id="mm-nama" placeholder="Budi Santoso"></div>
+        <div class="form-group"><label class="form-lbl">No. HP / WhatsApp</label><input class="fi" id="mm-hp" placeholder="08xxxxxxxxxx"></div>
+      </div>
+      <div class="form-group"><label class="form-lbl">Catatan</label><input class="fi" id="mm-catatan" placeholder="Pelanggan tetap, alergi, dll."></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="$('daftar-member-form').style.display='none'">Batal</button>
+        <button class="btn btn-primary" onclick="daftarMember()">💾 Daftarkan</button>
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:center;padding-top:4px;border-top:1px solid var(--brd);margin-top:10px">
+      <button class="btn" onclick="closeModal('member-modal')" style="width:100%">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="edit-meja-modal">
+  <div class="modal">
+    <h3>✏️ Edit Meja</h3>
+    <div class="modal-sub" id="edit-meja-sub">Ubah detail meja</div>
+    <div class="frow">
+      <div class="form-group"><label class="form-lbl">Nomor / Nama Meja</label><input class="fi" id="em-num" placeholder="01"></div>
+      <div class="form-group"><label class="form-lbl">Kapasitas (orang)</label><input class="fi" type="number" id="em-cap" min="1" max="50" placeholder="4"></div>
+    </div>
+    <div class="form-group"><label class="form-lbl">Status</label>
+      <select class="fi" id="em-status">
+        <option value="available">Tersedia</option>
+        <option value="occupied">Terisi</option>
+        <option value="reserved">Reservasi</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" onclick="hapusMeja()" id="em-hapus-btn">🗑️ Hapus Meja</button>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="closeModal('edit-meja-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="simpanEditMeja()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="buka-modal">
+  <div class="modal">
+    <h3>🔓 Buka Kasir</h3>
+    <div class="modal-sub">Input modal awal sebelum mulai shift</div>
+    <div class="form-group"><label class="form-lbl">Modal Awal (Rp)</label><input class="fi" type="number" id="buka-modal-val" value="200000"></div>
+    <div class="form-group"><label class="form-lbl">Catatan</label><input class="fi" id="buka-ket" placeholder="Shift pagi, dll."></div>
+    <div class="sum-box" id="buka-info" style="margin-bottom:0"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('buka-modal')">Batal</button>
+      <button class="btn btn-success" onclick="prosesBukaKasir()">✅ Buka Kasir</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="tutup-modal">
+  <div class="modal modal-lg">
+    <h3>🔒 Tutup Kasir</h3>
+    <div class="modal-sub">Rekap akhir shift — hitung kas fisik sebelum menutup</div>
+    <div id="tutup-body"></div>
+    <div class="form-group"><label class="form-lbl">Kas Fisik Dihitung (Rp)</label><input class="fi" type="number" id="kas-fisik" placeholder="0" oninput="hitungSelisih()"></div>
+    <div id="selisih-box" style="display:none" class="selisih-box"></div>
+    <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">🌐 Penjualan Online / Platform Lain</div>
+      <div style="font-size:10px;color:var(--txt3);margin-bottom:10px">Catat penjualan dari platform lain (GoFood, GrabFood, ShopeeFood, dll.) yang tidak tercatat di kasir ini.</div>
+      <div id="online-platform-list"></div>
+      <button class="btn btn-sm" onclick="tambahPlatformOnline()" style="width:100%;margin-top:6px;font-size:11px">+ Tambah Platform</button>
+    </div>
+    <div class="form-group"><label class="form-lbl">Catatan Penutupan</label><input class="fi" id="tutup-ket" placeholder="Opsional..."></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('tutup-modal')">Batal</button>
+      <button class="btn btn-danger" onclick="prosesTutupKasir()">🔒 Tutup Shift</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="shift-lap-modal">
+  <div class="modal modal-lg">
+    <h3>📋 Laporan Shift</h3>
+    <div id="shift-lap-body"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('shift-lap-modal')">Tutup</button>
+      <button class="btn btn-primary" onclick="doprint()">🖨️ Cetak</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="menu-modal">
+  <div class="modal">
+    <h3 id="menu-modal-title">Tambah Menu</h3>
+    <div class="frow" style="margin-bottom:10px">
+      <div class="form-group"><label class="form-lbl">Nama Menu</label><input class="fi" id="fm-name" placeholder="Nasi Goreng Spesial"></div>
+      <div class="form-group"><label class="form-lbl">Harga (Rp)</label><input class="fi" type="number" id="fm-price" placeholder="15000"></div>
+    </div>
+    <div class="frow" style="margin-bottom:10px">
+      <div class="form-group"><label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">Kategori<button type="button" class="btn btn-sm" onclick="openKategoriModal()" style="font-size:9px;padding:2px 8px;margin-left:auto">⚙️ Kelola Kategori</button></label><select class="fi" id="fm-cat" style="margin-top:4px"></select></div>
+      <div class="form-group"><label class="form-lbl">Emoji</label><input class="fi" id="fm-emoji" placeholder="🍳" maxlength="2"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">
+        Foto Produk <span style="font-size:10px;color:var(--txt3);font-weight:400">opsional · maks 2MB</span>
+      </label>
+      <div style="display:flex;gap:12px;align-items:flex-start;margin-top:6px">
+        <label for="fm-img-input" class="img-upload-box" id="fm-img-box" style="width:100px;height:100px;flex-shrink:0;cursor:pointer">
+          <span style="font-size:24px" id="fm-img-placeholder">📷</span>
+          <span style="font-size:10px;color:var(--txt2);margin-top:4px" id="fm-img-hint">Klik upload</span>
+          <div class="img-overlay"><span style="color:#fff;font-size:11px">Ganti foto</span></div>
+        </label>
+        <div style="flex:1;font-size:11px;color:var(--txt2);line-height:1.7">
+          Foto tampil di kartu menu kasir.<br>Tanpa foto, emoji digunakan sebagai pengganti.
+          <div id="fm-img-name" style="margin-top:6px;font-size:10px;color:var(--green-dk)"></div>
+          <button class="btn btn-sm" id="fm-img-clear" style="display:none;margin-top:6px;color:var(--red-dk);font-size:10px" onclick="clearMenuImg()">✕ Hapus foto</button>
+        </div>
+      </div>
+      <input type="file" id="fm-img-input" accept="image/*" style="display:none" onchange="onMenuImgSelected(this)">
+    </div>
+    <div class="form-group"><label class="form-lbl">Status</label><select class="fi" id="fm-status"><option value="available">Tersedia</option><option value="out">Habis</option></select></div>
+    <div class="form-group">
+      <label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">
+        Pilihan Tambahan (Varian / Request)
+        <button type="button" class="btn btn-sm" onclick="tambahOptGroup()" style="font-size:9px;padding:2px 8px">+ Tambah Grup</button>
+      </label>
+      <div style="font-size:10px;color:var(--txt3);margin-bottom:8px;margin-top:2px">Contoh: Tingkat Kepedasan, Suhu, Porsi, Topping, dll.</div>
+      <div id="fm-opts-list"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('menu-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveMenu()">Simpan Menu</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="kategori-modal">
+  <div class="modal">
+    <h3>⚙️ Kelola Kategori Menu</h3>
+    <div class="modal-sub">Tambah, edit, atau hapus kategori menu</div>
+    <div id="kat-list" style="margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px">
+      <input class="fi" id="kat-new-input" placeholder="Nama kategori baru..." style="flex:1" onkeydown="if(event.key==='Enter')tambahKategori()">
+      <button class="btn btn-primary" onclick="tambahKategori()">+ Tambah</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal('kategori-modal');renderFmCatSelect()">✅ Selesai</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="stok-modal">
+  <div class="modal">
+    <h3 id="stok-modal-title">Tambah Stok</h3>
+    <div class="frow" style="margin-bottom:10px">
+      <div class="form-group"><label class="form-lbl">Nama Bahan</label><input class="fi" id="fs-name" placeholder="Beras"></div>
+      <div class="form-group"><label class="form-lbl">Kategori</label><select class="fi" id="fs-cat"></select></div>
+    </div>
+    <div class="frow" style="margin-bottom:10px">
+      <div class="form-group"><label class="form-lbl">Stok</label><input class="fi" type="number" id="fs-qty" placeholder="50"></div>
+      <div class="form-group"><label class="form-lbl">Satuan</label><input class="fi" id="fs-unit" placeholder="kg / pcs / liter"></div>
+    </div>
+    <div class="frow" style="margin-bottom:0">
+      <div class="form-group"><label class="form-lbl">Min Stok</label><input class="fi" type="number" id="fs-min" placeholder="10"></div>
+      <div class="form-group"><label class="form-lbl">Harga/Satuan</label><input class="fi" type="number" id="fs-cost" placeholder="5000"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('stok-modal')">Batal</button>
+      <div class="form-group" id="fs-ket-group"><label class="form-lbl">Keterangan Perubahan Stok</label><input class="fi" id="fs-ket" placeholder="Contoh: Restock dari supplier, koreksi stok opname..."></div>
+      <button class="btn btn-primary" onclick="saveStok()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="user-modal">
+  <div class="modal">
+    <h3>Tambah User</h3>
+    <div class="frow" style="margin-bottom:10px">
+      <div class="form-group"><label class="form-lbl">Nama</label><input class="fi" id="fu-name" placeholder="Siti Rahayu"></div>
+      <div class="form-group"><label class="form-lbl">PIN (4 digit)</label><input class="fi" type="number" id="fu-pin" placeholder="1234" maxlength="4"></div>
+    </div>
+    <div class="form-group"><label class="form-lbl">Role</label><select class="fi" id="fu-role"><option value="admin">👑 Admin</option><option value="kasir">🧾 Kasir</option></select></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('user-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveUser()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-wrap" id="var-modal">
+  <div class="modal">
+    <h3 id="var-modal-title">Pilih Varian</h3>
+    <div style="font-size:12px;color:var(--txt2);margin-bottom:12px">Harga dasar: <b id="var-modal-price" style="color:var(--accent)"></b></div>
+    <div id="var-opts-body" style="margin-bottom:14px"></div>
+    <div class="form-group">
+      <label class="form-lbl">Catatan Tambahan</label>
+      <input class="fi" id="var-note" placeholder="Contoh: tidak pakai bawang, ekstra saos...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('var-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="confirmVar()">+ Tambah ke Pesanan</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-wrap" id="manual-peng-modal">
+  <div class="modal">
+    <h3>📝 Input Pengeluaran Manual</h3>
+    <div class="modal-sub" id="manual-peng-sub">Tambah pengeluaran ke shift atau tanggal tertentu</div>
+    <div class="form-group">
+      <label class="form-lbl">Masukkan ke Shift</label>
+      <select class="fi" id="mpeng-shift-sel" style="font-size:12px"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Tanggal Pengeluaran</label>
+      <input type="date" class="fi" id="mpeng-tanggal">
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Waktu</label>
+      <input type="time" class="fi" id="mpeng-waktu" value="00:00">
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Nama Pengeluaran</label>
+      <input class="fi" id="mpeng-nama" placeholder="Beli bahan, bayar tagihan...">
+    </div>
+    <div class="frow">
+      <div class="form-group">
+        <label class="form-lbl">Nominal (Rp)</label>
+        <input class="fi" type="number" id="mpeng-nominal" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-lbl">Kategori</label>
+        <select class="fi" id="mpeng-kategori">
+          <option>Bahan Baku</option>
+          <option>Operasional</option>
+          <option>Utilitas</option>
+          <option>Gaji / Upah</option>
+          <option>Pemeliharaan</option>
+          <option>Lain-lain</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">Keterangan</label>
+      <input class="fi" id="mpeng-ket" placeholder="Detail pengeluaran (opsional)">
+    </div>
+    <div class="form-group">
+      <label class="form-lbl">No. Referensi / Nota</label>
+      <input class="fi" id="mpeng-ref" placeholder="Nomor nota, nama supplier...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('manual-peng-modal')">Batal</button>
+      <button class="btn btn-danger" onclick="simpanManualPengeluaran()">💾 Simpan Pengeluaran</button>
+    </div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
 
 <script>
 'use strict';
@@ -2451,414 +2858,6 @@ const PAGE_TITLES = {
   settings:'⚙️ Pengaturan Toko', locked:'🔒 Akses Ditolak'
 };
 
-<!-- MODALS -->
-
-<div class="modal-wrap" id="split-modal">
-  <div class="modal">
-    <h3>💳 Split Payment</h3>
-    <div class="modal-sub" id="split-sub">Bayar dengan dua metode berbeda</div>
-    <div style="background:var(--bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700">
-        <span>Total Tagihan</span><span id="split-grand" style="color:var(--accent)">Rp 0</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);margin-top:4px">
-        <span>Sisa belum terbayar</span><span id="split-remaining" style="color:var(--red-dk);font-weight:600">Rp 0</span>
-      </div>
-    </div>
-    <div class="frow">
-      <div class="form-group">
-        <label class="form-lbl">Metode 1</label>
-        <select class="fi" id="split-method1" onchange="calcSplitRemaining()">
-          <option value="cash">💵 Tunai</option>
-          <option value="qris">📱 QRIS</option>
-          <option value="transfer">🏦 Transfer</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-lbl">Nominal (Rp)</label>
-        <input class="fi" type="number" id="split-amt1" placeholder="0" oninput="calcSplitRemaining()">
-      </div>
-    </div>
-    <div class="frow">
-      <div class="form-group">
-        <label class="form-lbl">Metode 2</label>
-        <select class="fi" id="split-method2" onchange="calcSplitRemaining()">
-          <option value="qris">📱 QRIS</option>
-          <option value="cash">💵 Tunai</option>
-          <option value="transfer">🏦 Transfer</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-lbl">Nominal (Rp)</label>
-        <input class="fi" type="number" id="split-amt2" placeholder="0" oninput="calcSplitRemaining()">
-      </div>
-    </div>
-    <div id="split-cash-change" style="display:none" class="kembalian-box">
-      <span>💸 Kembalian Tunai</span><span id="split-change-val">Rp 0</span>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('split-modal')">Batal</button>
-      <button class="btn btn-success" onclick="processSplitPayment()">✅ Proses Split Bayar</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="pay-modal">
-  <div class="modal">
-    <h3 id="pay-title">Konfirmasi Pembayaran</h3>
-    <div class="modal-sub">Periksa pesanan sebelum memproses</div>
-    <div id="pay-body"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('pay-modal')">Batal</button>
-      <button class="btn btn-success" onclick="processPayment()">✅ Proses Bayar</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="receipt-modal">
-  <div class="modal">
-    <h3>🧾 Struk Transaksi</h3>
-    <div class="modal-sub" id="receipt-sub"></div>
-    <div id="receipt-body"></div>
-    <div class="modal-actions">
-      <button class="btn btn-sm" onclick="window.print()" style="font-size:11px">🖨️ Cetak</button>
-      <button class="btn" onclick="closeModal('receipt-modal')">Tutup</button>
-      <button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="openWAModal(null)">💬 Kirim WA</button>
-      <button class="btn btn-primary" onclick="doprint()">🖨️ Cetak Struk</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="wa-modal">
-  <div class="modal">
-    <h3>💬 Kirim Struk via WhatsApp</h3>
-    <div class="modal-sub" id="wa-sub">Masukkan nomor pelanggan</div>
-    <div class="form-group">
-      <label class="form-lbl">Nomor WhatsApp</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <span style="color:var(--txt2);flex-shrink:0">+62</span>
-        <input class="fi" type="tel" id="wa-nomor" placeholder="8xx-xxxx-xxxx" style="flex:1">
-      </div>
-      <div style="font-size:11px;color:var(--txt2);margin-top:4px">Tanpa +62 dan tanpa angka 0 di depan</div>
-    </div>
-    <div class="form-group">
-      <label class="form-lbl">Pesan Tambahan</label>
-      <textarea class="fi" id="wa-pesan" rows="2" placeholder="Terima kasih!" oninput="renderWAPreview()"></textarea>
-    </div>
-    <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius);padding:10px;margin-bottom:4px;max-height:180px;overflow-y:auto">
-      <div style="font-size:10px;font-weight:600;color:var(--txt2);margin-bottom:5px;text-transform:uppercase">Preview Pesan WA</div>
-      <div id="wa-preview" style="font-size:11px;white-space:pre-wrap;line-height:1.6"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('wa-modal')">Batal</button>
-      <button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="kirimWA()">Buka WhatsApp</button>
-    </div>
-  </div>
-</div>
-
-
-
-
-<div class="modal-wrap" id="redeem-poin-modal">
-  <div class="modal">
-    <h3>🎁 Tukar Poin Member</h3>
-    <div class="modal-sub" id="redeem-member-info">Pilih member terlebih dahulu</div>
-    <div style="background:var(--accent3);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px" id="redeem-poin-info">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-size:11px;color:var(--txt2)">Poin tersedia</div>
-          <div style="font-size:22px;font-weight:700;color:var(--accent)" id="redeem-poin-available">0</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:11px;color:var(--txt2)">Nilai per poin</div>
-          <div style="font-size:14px;font-weight:600" id="redeem-nilai-per-poin">Rp 0</div>
-        </div>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-lbl">Jumlah Poin yang Ditukar</label>
-      <input class="fi" type="number" id="redeem-jumlah" placeholder="0" oninput="updateRedeemPreview()">
-      <div style="font-size:10px;color:var(--txt2);margin-top:4px">Minimum: <span id="redeem-min-label">100</span> poin</div>
-    </div>
-    <div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius);padding:10px 12px;margin-bottom:4px" id="redeem-preview" style="display:none">
-      <div style="font-size:12px;font-weight:600;color:var(--green-dk)">Potongan harga: <span id="redeem-diskon-val">Rp 0</span></div>
-      <div style="font-size:11px;color:var(--green-dk);margin-top:2px">Sisa poin setelah tukar: <span id="redeem-sisa-poin">0</span></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('redeem-poin-modal')">Batal</button>
-      <button class="btn btn-primary" onclick="prosesRedeemPoin()">✅ Tukar Poin</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="member-modal">
-  <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <h3 style="margin-bottom:0">👤 Program Member</h3>
-      <button class="btn btn-sm" onclick="closeModal('member-modal')" style="font-size:13px;padding:2px 8px;color:var(--txt2)">✕</button>
-    </div>
-    <div class="modal-sub" id="member-modal-sub">Cari atau daftarkan pelanggan</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <input class="fi" id="member-search-inp" placeholder="Cari nama atau no. HP..." style="flex:1" oninput="searchMember()">
-      <button class="btn btn-primary btn-sm" onclick="showDaftarMemberForm()">+ Daftar Baru</button>
-    </div>
-    <div id="member-search-result" style="margin-bottom:10px"></div>
-    <div id="daftar-member-form" style="display:none">
-      <div class="frow">
-        <div class="form-group"><label class="form-lbl">Nama Lengkap</label><input class="fi" id="mm-nama" placeholder="Budi Santoso"></div>
-        <div class="form-group"><label class="form-lbl">No. HP / WhatsApp</label><input class="fi" id="mm-hp" placeholder="08xxxxxxxxxx"></div>
-      </div>
-      <div class="form-group"><label class="form-lbl">Catatan</label><input class="fi" id="mm-catatan" placeholder="Pelanggan tetap, alergi, dll."></div>
-      <div class="modal-actions">
-        <button class="btn" onclick="$('daftar-member-form').style.display='none'">Batal</button>
-        <button class="btn btn-primary" onclick="daftarMember()">💾 Daftarkan</button>
-      </div>
-    </div>
-    <div class="modal-actions" style="justify-content:center;padding-top:4px;border-top:1px solid var(--brd);margin-top:10px">
-      <button class="btn" onclick="closeModal('member-modal')" style="width:100%">Tutup</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="edit-meja-modal">
-  <div class="modal">
-    <h3>✏️ Edit Meja</h3>
-    <div class="modal-sub" id="edit-meja-sub">Ubah detail meja</div>
-    <div class="frow">
-      <div class="form-group"><label class="form-lbl">Nomor / Nama Meja</label><input class="fi" id="em-num" placeholder="01"></div>
-      <div class="form-group"><label class="form-lbl">Kapasitas (orang)</label><input class="fi" type="number" id="em-cap" min="1" max="50" placeholder="4"></div>
-    </div>
-    <div class="form-group"><label class="form-lbl">Status</label>
-      <select class="fi" id="em-status">
-        <option value="available">Tersedia</option>
-        <option value="occupied">Terisi</option>
-        <option value="reserved">Reservasi</option>
-      </select>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-danger btn-sm" onclick="hapusMeja()" id="em-hapus-btn">🗑️ Hapus Meja</button>
-      <div style="flex:1"></div>
-      <button class="btn" onclick="closeModal('edit-meja-modal')">Batal</button>
-      <button class="btn btn-primary" onclick="simpanEditMeja()">Simpan</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="buka-modal">
-  <div class="modal">
-    <h3>🔓 Buka Kasir</h3>
-    <div class="modal-sub">Input modal awal sebelum mulai shift</div>
-    <div class="form-group"><label class="form-lbl">Modal Awal (Rp)</label><input class="fi" type="number" id="buka-modal-val" value="200000"></div>
-    <div class="form-group"><label class="form-lbl">Catatan</label><input class="fi" id="buka-ket" placeholder="Shift pagi, dll."></div>
-    <div class="sum-box" id="buka-info" style="margin-bottom:0"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('buka-modal')">Batal</button>
-      <button class="btn btn-success" onclick="prosesBukaKasir()">✅ Buka Kasir</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="tutup-modal">
-  <div class="modal modal-lg">
-    <h3>🔒 Tutup Kasir</h3>
-    <div class="modal-sub">Rekap akhir shift — hitung kas fisik sebelum menutup</div>
-    <div id="tutup-body"></div>
-    <div class="form-group"><label class="form-lbl">Kas Fisik Dihitung (Rp)</label><input class="fi" type="number" id="kas-fisik" placeholder="0" oninput="hitungSelisih()"></div>
-    <div id="selisih-box" style="display:none" class="selisih-box"></div>
-    <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;color:var(--txt2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">🌐 Penjualan Online / Platform Lain</div>
-      <div style="font-size:10px;color:var(--txt3);margin-bottom:10px">Catat penjualan dari platform lain (GoFood, GrabFood, ShopeeFood, dll.) yang tidak tercatat di kasir ini.</div>
-      <div id="online-platform-list"></div>
-      <button class="btn btn-sm" onclick="tambahPlatformOnline()" style="width:100%;margin-top:6px;font-size:11px">+ Tambah Platform</button>
-    </div>
-    <div class="form-group"><label class="form-lbl">Catatan Penutupan</label><input class="fi" id="tutup-ket" placeholder="Opsional..."></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('tutup-modal')">Batal</button>
-      <button class="btn btn-danger" onclick="prosesTutupKasir()">🔒 Tutup Shift</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="shift-lap-modal">
-  <div class="modal modal-lg">
-    <h3>📋 Laporan Shift</h3>
-    <div id="shift-lap-body"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('shift-lap-modal')">Tutup</button>
-      <button class="btn btn-primary" onclick="doprint()">🖨️ Cetak</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="menu-modal">
-  <div class="modal">
-    <h3 id="menu-modal-title">Tambah Menu</h3>
-    <div class="frow" style="margin-bottom:10px">
-      <div class="form-group"><label class="form-lbl">Nama Menu</label><input class="fi" id="fm-name" placeholder="Nasi Goreng Spesial"></div>
-      <div class="form-group"><label class="form-lbl">Harga (Rp)</label><input class="fi" type="number" id="fm-price" placeholder="15000"></div>
-    </div>
-    <div class="frow" style="margin-bottom:10px">
-      <div class="form-group"><label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">Kategori<button type="button" class="btn btn-sm" onclick="openKategoriModal()" style="font-size:9px;padding:2px 8px;margin-left:auto">⚙️ Kelola Kategori</button></label><select class="fi" id="fm-cat" style="margin-top:4px"></select></div>
-      <div class="form-group"><label class="form-lbl">Emoji</label><input class="fi" id="fm-emoji" placeholder="🍳" maxlength="2"></div>
-    </div>
-    <div class="form-group">
-      <label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">
-        Foto Produk <span style="font-size:10px;color:var(--txt3);font-weight:400">opsional · maks 2MB</span>
-      </label>
-      <div style="display:flex;gap:12px;align-items:flex-start;margin-top:6px">
-        <label for="fm-img-input" class="img-upload-box" id="fm-img-box" style="width:100px;height:100px;flex-shrink:0;cursor:pointer">
-          <span style="font-size:24px" id="fm-img-placeholder">📷</span>
-          <span style="font-size:10px;color:var(--txt2);margin-top:4px" id="fm-img-hint">Klik upload</span>
-          <div class="img-overlay"><span style="color:#fff;font-size:11px">Ganti foto</span></div>
-        </label>
-        <div style="flex:1;font-size:11px;color:var(--txt2);line-height:1.7">
-          Foto tampil di kartu menu kasir.<br>Tanpa foto, emoji digunakan sebagai pengganti.
-          <div id="fm-img-name" style="margin-top:6px;font-size:10px;color:var(--green-dk)"></div>
-          <button class="btn btn-sm" id="fm-img-clear" style="display:none;margin-top:6px;color:var(--red-dk);font-size:10px" onclick="clearMenuImg()">✕ Hapus foto</button>
-        </div>
-      </div>
-      <input type="file" id="fm-img-input" accept="image/*" style="display:none" onchange="onMenuImgSelected(this)">
-    </div>
-    <div class="form-group"><label class="form-lbl">Status</label><select class="fi" id="fm-status"><option value="available">Tersedia</option><option value="out">Habis</option></select></div>
-    <div class="form-group">
-      <label class="form-lbl" style="display:flex;align-items:center;justify-content:space-between">
-        Pilihan Tambahan (Varian / Request)
-        <button type="button" class="btn btn-sm" onclick="tambahOptGroup()" style="font-size:9px;padding:2px 8px">+ Tambah Grup</button>
-      </label>
-      <div style="font-size:10px;color:var(--txt3);margin-bottom:8px;margin-top:2px">Contoh: Tingkat Kepedasan, Suhu, Porsi, Topping, dll.</div>
-      <div id="fm-opts-list"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('menu-modal')">Batal</button>
-      <button class="btn btn-primary" onclick="saveMenu()">Simpan Menu</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="kategori-modal">
-  <div class="modal">
-    <h3>⚙️ Kelola Kategori Menu</h3>
-    <div class="modal-sub">Tambah, edit, atau hapus kategori menu</div>
-    <div id="kat-list" style="margin-bottom:14px"></div>
-    <div style="display:flex;gap:8px">
-      <input class="fi" id="kat-new-input" placeholder="Nama kategori baru..." style="flex:1" onkeydown="if(event.key==='Enter')tambahKategori()">
-      <button class="btn btn-primary" onclick="tambahKategori()">+ Tambah</button>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" onclick="closeModal('kategori-modal');renderFmCatSelect()">✅ Selesai</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="stok-modal">
-  <div class="modal">
-    <h3 id="stok-modal-title">Tambah Stok</h3>
-    <div class="frow" style="margin-bottom:10px">
-      <div class="form-group"><label class="form-lbl">Nama Bahan</label><input class="fi" id="fs-name" placeholder="Beras"></div>
-      <div class="form-group"><label class="form-lbl">Kategori</label><select class="fi" id="fs-cat"></select></div>
-    </div>
-    <div class="frow" style="margin-bottom:10px">
-      <div class="form-group"><label class="form-lbl">Stok</label><input class="fi" type="number" id="fs-qty" placeholder="50"></div>
-      <div class="form-group"><label class="form-lbl">Satuan</label><input class="fi" id="fs-unit" placeholder="kg / pcs / liter"></div>
-    </div>
-    <div class="frow" style="margin-bottom:0">
-      <div class="form-group"><label class="form-lbl">Min Stok</label><input class="fi" type="number" id="fs-min" placeholder="10"></div>
-      <div class="form-group"><label class="form-lbl">Harga/Satuan</label><input class="fi" type="number" id="fs-cost" placeholder="5000"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('stok-modal')">Batal</button>
-      <div class="form-group" id="fs-ket-group"><label class="form-lbl">Keterangan Perubahan Stok</label><input class="fi" id="fs-ket" placeholder="Contoh: Restock dari supplier, koreksi stok opname..."></div>
-      <button class="btn btn-primary" onclick="saveStok()">Simpan</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-wrap" id="user-modal">
-  <div class="modal">
-    <h3>Tambah User</h3>
-    <div class="frow" style="margin-bottom:10px">
-      <div class="form-group"><label class="form-lbl">Nama</label><input class="fi" id="fu-name" placeholder="Siti Rahayu"></div>
-      <div class="form-group"><label class="form-lbl">PIN (4 digit)</label><input class="fi" type="number" id="fu-pin" placeholder="1234" maxlength="4"></div>
-    </div>
-    <div class="form-group"><label class="form-lbl">Role</label><select class="fi" id="fu-role"><option value="admin">👑 Admin</option><option value="kasir">🧾 Kasir</option></select></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('user-modal')">Batal</button>
-      <button class="btn btn-primary" onclick="saveUser()">Simpan</button>
-    </div>
-  </div>
-</div>
-
-
-<div class="modal-wrap" id="var-modal">
-  <div class="modal">
-    <h3 id="var-modal-title">Pilih Varian</h3>
-    <div style="font-size:12px;color:var(--txt2);margin-bottom:12px">Harga dasar: <b id="var-modal-price" style="color:var(--accent)"></b></div>
-    <div id="var-opts-body" style="margin-bottom:14px"></div>
-    <div class="form-group">
-      <label class="form-lbl">Catatan Tambahan</label>
-      <input class="fi" id="var-note" placeholder="Contoh: tidak pakai bawang, ekstra saos...">
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('var-modal')">Batal</button>
-      <button class="btn btn-primary" onclick="confirmVar()">+ Tambah ke Pesanan</button>
-    </div>
-  </div>
-</div>
-
-
-<div class="modal-wrap" id="manual-peng-modal">
-  <div class="modal">
-    <h3>📝 Input Pengeluaran Manual</h3>
-    <div class="modal-sub" id="manual-peng-sub">Tambah pengeluaran ke shift atau tanggal tertentu</div>
-    <div class="form-group">
-      <label class="form-lbl">Masukkan ke Shift</label>
-      <select class="fi" id="mpeng-shift-sel" style="font-size:12px"></select>
-    </div>
-    <div class="form-group">
-      <label class="form-lbl">Tanggal Pengeluaran</label>
-      <input type="date" class="fi" id="mpeng-tanggal">
-    </div>
-    <div class="form-group">
-      <label class="form-lbl">Waktu</label>
-      <input type="time" class="fi" id="mpeng-waktu" value="00:00">
-    </div>
-    <div class="form-group">
-      <label class="form-lbl">Nama Pengeluaran</label>
-      <input class="fi" id="mpeng-nama" placeholder="Beli bahan, bayar tagihan...">
-    </div>
-    <div class="frow">
-      <div class="form-group">
-        <label class="form-lbl">Nominal (Rp)</label>
-        <input class="fi" type="number" id="mpeng-nominal" placeholder="0">
-      </div>
-      <div class="form-group">
-        <label class="form-lbl">Kategori</label>
-        <select class="fi" id="mpeng-kategori">
-          <option>Bahan Baku</option>
-          <option>Operasional</option>
-          <option>Utilitas</option>
-          <option>Gaji / Upah</option>
-          <option>Pemeliharaan</option>
-          <option>Lain-lain</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-lbl">Keterangan</label>
-      <input class="fi" id="mpeng-ket" placeholder="Detail pengeluaran (opsional)">
-    </div>
-    <div class="form-group">
-      <label class="form-lbl">No. Referensi / Nota</label>
-      <input class="fi" id="mpeng-ref" placeholder="Nomor nota, nama supplier...">
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('manual-peng-modal')">Batal</button>
-      <button class="btn btn-danger" onclick="simpanManualPengeluaran()">💾 Simpan Pengeluaran</button>
-    </div>
-  </div>
-</div>
-
-<div class="notif" id="notif"></div>
 
 // ── Responsive Sidebar ─────────────────────────────────────────────────────
 function toggleSidebar() {
@@ -11973,6 +11972,82 @@ async function loadCogsData(){
   }catch(e){console.warn('loadCogsData:',e.message);}
 }
 </script>
+<!-- KALKULATOR -->
+<div id="calc-overlay" class="calc-overlay" style="display:none" onclick="if(event.target===this)closeCalc()">
+  <div class="calc-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:700">Kalkulator</span>
+      <button onclick="closeCalc()" style="border:none;background:none;font-size:18px;cursor:pointer;color:var(--txt3)">&#10005;</button>
+    </div>
+    <div class="calc-display-sub" id="calc-sub"></div>
+    <div class="calc-display-main" id="calc-display">0</div>
+    <div class="calc-grid" style="margin-top:8px">
+      <button class="calc-key op" onclick="calcKey('C')">C</button>
+      <button class="calc-key op" onclick="calcKey('±')">&#177;</button>
+      <button class="calc-key op" onclick="calcKey('%')">%</button>
+      <button class="calc-key op" onclick="calcKey('÷')">&#247;</button>
+      <button class="calc-key" onclick="calcKey('7')">7</button>
+      <button class="calc-key" onclick="calcKey('8')">8</button>
+      <button class="calc-key" onclick="calcKey('9')">9</button>
+      <button class="calc-key op" onclick="calcKey('×')">&#215;</button>
+      <button class="calc-key" onclick="calcKey('4')">4</button>
+      <button class="calc-key" onclick="calcKey('5')">5</button>
+      <button class="calc-key" onclick="calcKey('6')">6</button>
+      <button class="calc-key op" onclick="calcKey('−')">&#8722;</button>
+      <button class="calc-key" onclick="calcKey('1')">1</button>
+      <button class="calc-key" onclick="calcKey('2')">2</button>
+      <button class="calc-key" onclick="calcKey('3')">3</button>
+      <button class="calc-key op" onclick="calcKey('+')">+</button>
+      <button class="calc-key fill" onclick="calcKey('isi')" style="grid-column:span 2;font-size:12px">&#8594; Isi Nominal</button>
+      <button class="calc-key" onclick="calcKey('0')">0</button>
+      <button class="calc-key eq" onclick="calcKey('=')">=</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL BAHAN BAKU -->
+<div class="modal-wrap" id="modal-bahan">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-hd"><h3 id="bahan-modal-title">Tambah Bahan</h3><button class="modal-close" onclick="closeModal('modal-bahan')">&#10005;</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-lbl">Nama Bahan *</label><input class="fi" id="bahan-nama" placeholder="mis: Beras, Telur..."></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group"><label class="form-lbl">Satuan</label>
+          <select class="fi" id="bahan-satuan"><option>gram</option><option>kg</option><option>ml</option><option>liter</option><option>butir</option><option>buah</option><option>sachet</option><option>sendok makan</option><option>pcs</option></select>
+        </div>
+        <div class="form-group"><label class="form-lbl">Harga per satuan (Rp) *</label><input class="fi" type="number" id="bahan-harga" placeholder="14000"></div>
+      </div>
+      <div class="form-group"><label class="form-lbl">Kategori</label>
+        <select class="fi" id="bahan-kategori"><option>Bahan Pokok</option><option>Bumbu</option><option>Sayuran</option><option>Protein</option><option>Minuman</option><option>Lainnya</option></select>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" onclick="simpanBahan()">Simpan</button><button class="btn" onclick="closeModal('modal-bahan')">Batal</button></div>
+  </div>
+</div>
+
+<!-- MODAL RESEP -->
+<div class="modal-wrap" id="modal-resep">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hd"><h3 id="resep-modal-title">Resep Menu</h3><button class="modal-close" onclick="closeModal('modal-resep')">&#10005;</button></div>
+    <div class="modal-body">
+      <div id="resep-menu-info" style="background:var(--bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px"></div>
+      <div style="font-size:12px;font-weight:700;color:var(--txt2);margin-bottom:8px">Bahan per 1 porsi:</div>
+      <div id="resep-bahan-list"></div>
+      <div style="margin-top:10px;background:var(--bg2);border-radius:var(--radius);padding:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">+ Tambah Bahan ke Resep</div>
+        <select class="fi" id="resep-pilih-bahan" style="margin-bottom:8px"><option value="">-- Pilih bahan --</option></select>
+        <div style="display:flex;gap:8px">
+          <input class="fi" type="number" id="resep-jumlah" placeholder="Jumlah" min="0.01" step="any" style="width:110px">
+          <button class="btn btn-sm btn-primary" onclick="tambahBahanKeResep()">+ Tambah</button>
+        </div>
+      </div>
+      <div id="resep-cogs-summary" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius)"></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" onclick="simpanResep()">Simpan Resep</button><button class="btn" onclick="closeModal('modal-resep')">Batal</button></div>
+  </div>
+</div>
+
+
 
 
 <!-- Assign Kurir Modal -->
@@ -12078,80 +12153,5 @@ async function loadCogsData(){
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
 </div>
 
-<!-- KALKULATOR -->
-<div id="calc-overlay" class="calc-overlay" style="display:none" onclick="if(event.target===this)closeCalc()">
-  <div class="calc-panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:700">Kalkulator</span>
-      <button onclick="closeCalc()" style="border:none;background:none;font-size:18px;cursor:pointer;color:var(--txt3)">&#10005;</button>
-    </div>
-    <div class="calc-display-sub" id="calc-sub"></div>
-    <div class="calc-display-main" id="calc-display">0</div>
-    <div class="calc-grid" style="margin-top:8px">
-      <button class="calc-key op" onclick="calcKey('C')">C</button>
-      <button class="calc-key op" onclick="calcKey('±')">&#177;</button>
-      <button class="calc-key op" onclick="calcKey('%')">%</button>
-      <button class="calc-key op" onclick="calcKey('÷')">&#247;</button>
-      <button class="calc-key" onclick="calcKey('7')">7</button>
-      <button class="calc-key" onclick="calcKey('8')">8</button>
-      <button class="calc-key" onclick="calcKey('9')">9</button>
-      <button class="calc-key op" onclick="calcKey('×')">&#215;</button>
-      <button class="calc-key" onclick="calcKey('4')">4</button>
-      <button class="calc-key" onclick="calcKey('5')">5</button>
-      <button class="calc-key" onclick="calcKey('6')">6</button>
-      <button class="calc-key op" onclick="calcKey('−')">&#8722;</button>
-      <button class="calc-key" onclick="calcKey('1')">1</button>
-      <button class="calc-key" onclick="calcKey('2')">2</button>
-      <button class="calc-key" onclick="calcKey('3')">3</button>
-      <button class="calc-key op" onclick="calcKey('+')">+</button>
-      <button class="calc-key fill" onclick="calcKey('isi')" style="grid-column:span 2;font-size:12px">&#8594; Isi Nominal</button>
-      <button class="calc-key" onclick="calcKey('0')">0</button>
-      <button class="calc-key eq" onclick="calcKey('=')">=</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL BAHAN -->
-<div class="modal-wrap" id="modal-bahan">
-  <div class="modal" style="max-width:460px">
-    <div class="modal-hd"><h3 id="bahan-modal-title">Tambah Bahan</h3><button class="modal-close" onclick="closeModal('modal-bahan')">&#10005;</button></div>
-    <div class="modal-body">
-      <div class="form-group"><label class="form-lbl">Nama Bahan *</label><input class="fi" id="bahan-nama" placeholder="mis: Beras, Telur..."></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="form-group"><label class="form-lbl">Satuan</label>
-          <select class="fi" id="bahan-satuan"><option>gram</option><option>kg</option><option>ml</option><option>liter</option><option>butir</option><option>buah</option><option>sachet</option><option>sendok makan</option><option>pcs</option></select>
-        </div>
-        <div class="form-group"><label class="form-lbl">Harga per satuan (Rp) *</label><input class="fi" type="number" id="bahan-harga" placeholder="14000"></div>
-      </div>
-      <div class="form-group"><label class="form-lbl">Kategori</label>
-        <select class="fi" id="bahan-kategori"><option>Bahan Pokok</option><option>Bumbu</option><option>Sayuran</option><option>Protein</option><option>Minuman</option><option>Lainnya</option></select>
-      </div>
-    </div>
-    <div class="modal-actions"><button class="btn btn-primary" onclick="simpanBahan()">Simpan</button><button class="btn" onclick="closeModal('modal-bahan')">Batal</button></div>
-  </div>
-</div>
-
-<!-- MODAL RESEP -->
-<div class="modal-wrap" id="modal-resep">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-hd"><h3 id="resep-modal-title">Resep Menu</h3><button class="modal-close" onclick="closeModal('modal-resep')">&#10005;</button></div>
-    <div class="modal-body">
-      <div id="resep-menu-info" style="background:var(--bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px"></div>
-      <div style="font-size:12px;font-weight:700;color:var(--txt2);margin-bottom:8px">Bahan per 1 porsi:</div>
-      <div id="resep-bahan-list"></div>
-      <div style="margin-top:10px;background:var(--bg2);border-radius:var(--radius);padding:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">+ Tambah Bahan ke Resep</div>
-        <select class="fi" id="resep-pilih-bahan" style="margin-bottom:8px"><option value="">-- Pilih bahan --</option></select>
-        <div style="display:flex;gap:8px">
-          <input class="fi" type="number" id="resep-jumlah" placeholder="Jumlah" min="0.01" step="any" style="width:110px">
-          <button class="btn btn-sm btn-primary" onclick="tambahBahanKeResep()">+ Tambah</button>
-        </div>
-      </div>
-      <div id="resep-cogs-summary" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius)"></div>
-    </div>
-    <div class="modal-actions"><button class="btn btn-primary" onclick="simpanResep()">Simpan Resep</button><button class="btn" onclick="closeModal('modal-resep')">Batal</button></div>
-  </div>
-</div>
-
 </body>
-</html>>
+</html>
