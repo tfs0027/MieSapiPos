@@ -1526,7 +1526,67 @@ tr:hover td{background:rgba(108,92,231,.03)}
         </div>
       </div>
 
+    
+
+    <!-- COGS PAGE -->
+    <div class="page" id="page-cogs">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <div style="font-size:16px;font-weight:700">&#128176; COGS &amp; Margin</div>
+          <div style="font-size:11px;color:var(--txt2)">Kelola bahan baku, resep, dan analisis profitabilitas</div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="openModalBahan()">+ Bahan Baku</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+        <div class="metric" style="background:var(--green-bg);border-radius:var(--radius-lg);padding:14px 16px">
+          <div class="metric-lbl">Rata-rata Margin</div>
+          <div class="metric-val" id="cogs-avg-margin" style="color:var(--green-dk);font-size:22px">--</div>
+        </div>
+        <div class="metric" style="background:var(--accent-bg);border-radius:var(--radius-lg);padding:14px 16px">
+          <div class="metric-lbl">Menu Belum Ada Resep</div>
+          <div class="metric-val" id="cogs-no-recipe" style="color:var(--accent);font-size:22px">--</div>
+        </div>
+        <div class="metric" style="background:var(--bg2);border-radius:var(--radius-lg);padding:14px 16px">
+          <div style="font-size:11px;color:var(--txt2);margin-bottom:4px">Biaya Operasional (%)</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="cogs-ops-pct" value="15" min="0" max="100"
+              style="width:60px;padding:4px 8px;border:1px solid var(--brd);border-radius:6px;font-size:16px;font-weight:700;text-align:center;background:var(--bg);color:var(--txt)"
+              oninput="renderMenuCogs();renderCogsLaporan()">
+            <span style="font-size:11px;color:var(--txt3)">% dari harga jual</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <span>&#128230; Master Bahan Baku</span>
+            <span id="bahan-count" style="font-size:11px;color:var(--txt3)"></span>
+          </div>
+          <div id="bahan-list-container"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Belum ada bahan. Klik "+ Bahan Baku".</div></div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#127869; Resep &amp; Margin per Menu</div>
+          <div id="menu-cogs-list"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Memuat...</div></div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700">&#128202; Laporan Profitabilitas</div>
+          <select class="fi" id="cogs-lap-periode" style="font-size:11px;padding:4px 8px;width:auto" onchange="renderCogsLaporan()">
+            <option value="bulan">Bulan ini</option><option value="minggu">7 hari terakhir</option><option value="all">Semua waktu</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Menu</th><th style="text-align:right">Terjual</th><th style="text-align:right">Revenue</th><th style="text-align:right">COGS</th><th style="text-align:right">Biaya Ops</th><th style="text-align:right">Profit</th><th style="text-align:right">Margin</th><th>Aksi</th></tr></thead>
+            <tbody id="cogs-lap-tbody"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Memuat...</td></tr></tbody>
+          </table>
+        </div>
+        <div id="cogs-lap-alert" style="margin-top:10px"></div>
+      </div>
     </div>
+
+</div>
   </div>
 </div>
 
@@ -1607,64 +1667,6 @@ tr:hover td{background:rgba(108,92,231,.03)}
     <div style="font-size:11px;color:rgba(255,255,255,.25);margin-top:14px">Kode toko dikirim admin via WhatsApp · WarungKu POS v2</div>
   </div>
 </div>
-
-    <!-- COGS PAGE -->
-    <div class="page" id="page-cogs">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div>
-          <div style="font-size:16px;font-weight:700">&#128176; COGS &amp; Margin</div>
-          <div style="font-size:11px;color:var(--txt2)">Kelola bahan baku, resep, dan analisis profitabilitas</div>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="openModalBahan()">+ Bahan Baku</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
-        <div class="metric" style="background:var(--green-bg);border-radius:var(--radius-lg);padding:14px 16px">
-          <div class="metric-lbl">Rata-rata Margin</div>
-          <div class="metric-val" id="cogs-avg-margin" style="color:var(--green-dk);font-size:22px">--</div>
-        </div>
-        <div class="metric" style="background:var(--accent-bg);border-radius:var(--radius-lg);padding:14px 16px">
-          <div class="metric-lbl">Menu Belum Ada Resep</div>
-          <div class="metric-val" id="cogs-no-recipe" style="color:var(--accent);font-size:22px">--</div>
-        </div>
-        <div class="metric" style="background:var(--bg2);border-radius:var(--radius-lg);padding:14px 16px">
-          <div style="font-size:11px;color:var(--txt2);margin-bottom:4px">Biaya Operasional (%)</div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="number" id="cogs-ops-pct" value="15" min="0" max="100"
-              style="width:60px;padding:4px 8px;border:1px solid var(--brd);border-radius:6px;font-size:16px;font-weight:700;text-align:center;background:var(--bg);color:var(--txt)"
-              oninput="renderMenuCogs();renderCogsLaporan()">
-            <span style="font-size:11px;color:var(--txt3)">% dari harga jual</span>
-          </div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-        <div>
-          <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
-            <span>&#128230; Master Bahan Baku</span>
-            <span id="bahan-count" style="font-size:11px;color:var(--txt3)"></span>
-          </div>
-          <div id="bahan-list-container"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Belum ada bahan. Klik "+ Bahan Baku".</div></div>
-        </div>
-        <div>
-          <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#127869; Resep &amp; Margin per Menu</div>
-          <div id="menu-cogs-list"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Memuat...</div></div>
-        </div>
-      </div>
-      <div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div style="font-size:13px;font-weight:700">&#128202; Laporan Profitabilitas</div>
-          <select class="fi" id="cogs-lap-periode" style="font-size:11px;padding:4px 8px;width:auto" onchange="renderCogsLaporan()">
-            <option value="bulan">Bulan ini</option><option value="minggu">7 hari terakhir</option><option value="all">Semua waktu</option>
-          </select>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Menu</th><th style="text-align:right">Terjual</th><th style="text-align:right">Revenue</th><th style="text-align:right">COGS</th><th style="text-align:right">Biaya Ops</th><th style="text-align:right">Profit</th><th style="text-align:right">Margin</th><th>Aksi</th></tr></thead>
-            <tbody id="cogs-lap-tbody"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Memuat...</td></tr></tbody>
-          </table>
-        </div>
-        <div id="cogs-lap-alert" style="margin-top:10px"></div>
-      </div>
-    </div>
 
 <!-- MODALS -->
 
