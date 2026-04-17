@@ -432,6 +432,23 @@ tr:hover td{background:rgba(108,92,231,.03)}
   .content{padding:20px}
   .g2{grid-template-columns:1fr 1fr}
 }
+
+.calc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:8800;display:flex;align-items:flex-end;justify-content:center}
+.calc-panel{background:var(--card);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:16px;width:100%;max-width:340px;max-height:85vh;overflow-y:auto}
+.calc-display-main{font-size:28px;font-weight:700;text-align:right;padding:8px 12px;background:var(--bg);border-radius:var(--radius);min-height:50px;word-break:break-all;color:var(--txt)}
+.calc-display-sub{font-size:11px;color:var(--txt3);text-align:right;min-height:16px;margin-bottom:8px;padding:0 4px}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.calc-key{padding:14px 0;text-align:center;border-radius:var(--radius);font-size:16px;font-weight:600;cursor:pointer;border:none;background:var(--bg2);color:var(--txt);transition:opacity .1s}
+.calc-key:active{opacity:.6}
+.calc-key.op{background:var(--accent-bg);color:var(--accent)}
+.calc-key.eq{background:var(--accent);color:#fff}
+.calc-key.fill{background:var(--green-bg);color:var(--green-dk);font-size:12px}
+.bahan-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)}
+.bahan-row:last-child{border-bottom:none}
+.margin-badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;display:inline-block}
+.margin-high{background:var(--green-bg,#e8f5e9);color:var(--green-dk,#1b5e20)}
+.margin-mid{background:var(--amber-bg,#fff8e1);color:var(--amber-dk,#e65100)}
+.margin-low{background:var(--red-bg,#ffebee);color:var(--red-dk,#b71c1c)}
 </style>
 </head>
 <body>
@@ -543,7 +560,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
   <div class="main">
     <div class="topbar">
       <span class="topbar-title" id="page-title">Kasir &amp; Order</span>
-      <div id="topbar-right" style="display:flex;gap:8px;align-items:center"></div>
+      <button onclick="openCalc()" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:20px;opacity:.65;flex-shrink:0" title="Kalkulator">🧮</button><div id="topbar-right" style="display:flex;gap:8px;align-items:center"></div>
     </div>
     <div class="content">
 
@@ -2771,6 +2788,7 @@ const NAV_ITEMS = [
   {id:'riwayat',       label:'Riwayat Transaksi',     icon:'📋', perm:'riwayat',      sec:null},
   {id:'online-order',  label:'Pesanan Online',        icon:'🛵', perm:'online-order', sec:'Operasional Online'},
   {id:'rekrutmen',     label:'Rekrutmen',             icon:'📝', perm:'rekrutmen',    sec:'SDM & Rekrutmen'},
+  {id:'cogs',          label:'COGS & Margin',         icon:'💰', perm:'laporan',      sec:'Laporan'},
   {id:'users',         label:'Manajemen User',        icon:'👥', perm:'users',        sec:'Pengaturan'},
   {id:'settings',      label:'Pengaturan Toko',       icon:'⚙️', perm:'settings',    sec:null},
 ];
@@ -2778,7 +2796,7 @@ const PAGE_TITLES = {
   order:'🛒 Kasir & Order', meja:'🪑 Manajemen Meja', shift:'🔓 Buka / Tutup Kasir',
   menu:'🍽️ Menu & Harga', stok:'📦 Stok Bahan Baku', laporan:'📊 Laporan Penjualan',
   riwayat:'📋 Riwayat Transaksi', 'online-order':'🛵 Pesanan Online',
-  rekrutmen:'📝 Rekrutmen & Pelamar', users:'👥 Manajemen User',
+  rekrutmen:'📝 Rekrutmen & Pelamar', cogs:'💰 COGS & Margin', users:'👥 Manajemen User',
   settings:'⚙️ Pengaturan Toko', locked:'🔒 Akses Ditolak'
 };
 
@@ -2869,6 +2887,7 @@ function nav(p) {
     if (onlineSettingTab) onlineSettingTab.style.display = can('settings_online') ? '' : 'none';
   }
   if (p === 'rekrutmen') { renderRekrutmenPage(); }
+  if (p === 'cogs') { renderCogsPage(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
   if (p === 'settings') renderSettings();
@@ -5346,6 +5365,9 @@ async function autoSyncFromSupabase() {
         if (window._currentPage === 'users') renderMemberList2();
       }
     } catch(e) { console.warn('sync members:', e.message); }
+
+    // COGS data
+    try { await loadCogsData(); } catch(e) { console.warn('loadCogsData:', e.message); }
 
     // 4. Users
     try {
@@ -11660,6 +11682,237 @@ async function fetchShiftOnlineOrders(shift) {
     shift.onlineOrders = filterOnlineByShift(ST._onlineOrdersCache || [], shift);
   }
 }
+
+// ════════════════════════════════════════════════════════════════
+// KALKULATOR
+// ════════════════════════════════════════════════════════════════
+var _cV='0',_cOp=null,_cPrev=null,_cNew=true;
+function openCalc(){_cV='0';_cOp=null;_cPrev=null;_cNew=true;var o=document.getElementById('calc-overlay');if(o){o.style.display='flex';_updCalc();}}
+function closeCalc(){var o=document.getElementById('calc-overlay');if(o)o.style.display='none';}
+function _updCalc(){var d=document.getElementById('calc-display'),s=document.getElementById('calc-sub');if(d)d.textContent=parseFloat(_cV).toLocaleString('id-ID');if(s)s.textContent=(_cPrev!=null&&_cOp)?_cPrev+' '+_cOp:'';}
+function calcKey(k){
+  if(k==='C'){_cV='0';_cOp=null;_cPrev=null;_cNew=true;}
+  else if(k==='±'){_cV=String(-parseFloat(_cV)||0);}
+  else if(k==='%'){_cV=String(parseFloat(_cV)/100);}
+  else if(k==='isi'){
+    var targets=['kas-awal','pay-cash-input','nominal-bayar'];
+    var v=Math.round(parseFloat(_cV)||0);var filled=false;
+    for(var i=0;i<targets.length;i++){var el=document.getElementById(targets[i]);if(el&&el.offsetParent!==null){el.value=v;el.dispatchEvent(new Event('input'));filled=true;break;}}
+    if(!filled)showNotif('Nilai: Rp '+v.toLocaleString('id-ID'),'#6C5CE7');
+    closeCalc();return;
+  }
+  else if(['+','−','×','÷'].includes(k)){if(_cOp&&!_cNew)calcKey('=');_cPrev=_cV;_cOp=k;_cNew=true;}
+  else if(k==='='){
+    if(_cOp&&_cPrev!=null){
+      var a=parseFloat(_cPrev),b=parseFloat(_cV);
+      var r=_cOp==='+'?a+b:_cOp==='−'?a-b:_cOp==='×'?a*b:(_cOp==='÷'&&b!==0?a/b:a);
+      _cV=String(Math.round(r*10000)/10000);_cOp=null;_cPrev=null;_cNew=true;
+    }
+  }
+  else if(k==='.'){if(_cNew){_cV='0.';_cNew=false;}else if(!_cV.includes('.'))_cV+=k;}
+  else{if(_cNew||_cV==='0'){_cV=k;_cNew=false;}else _cV+=k;}
+  _updCalc();
+}
+document.addEventListener('keydown',function(e){
+  var o=document.getElementById('calc-overlay');if(!o||o.style.display==='none')return;
+  var m={'0':'0','1':'1','2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9','+':'+','-':'−','*':'×','/':'÷','Enter':'=','Escape':'C','.':'.'};
+  if(e.key in m){e.preventDefault();calcKey(m[e.key]);}
+  else if(e.key==='Backspace'){e.preventDefault();_cV=_cV.length>1?_cV.slice(0,-1):'0';_updCalc();}
+});
+
+// ════════════════════════════════════════════════════════════════
+// MASTER BAHAN BAKU
+// ════════════════════════════════════════════════════════════════
+var ST_ingredients=[],ST_recipes={},_editBahanId=null,_editResepMenuId=null,_resepTemp=[];
+
+function openModalBahan(id){
+  _editBahanId=id||null;
+  var b=id?ST_ingredients.find(function(x){return x.id===id;}):null;
+  document.getElementById('bahan-modal-title').textContent=b?'Edit Bahan':'Tambah Bahan';
+  document.getElementById('bahan-nama').value=b?b.nama:'';
+  document.getElementById('bahan-satuan').value=b?b.satuan:'gram';
+  document.getElementById('bahan-harga').value=b?b.harga:'';
+  document.getElementById('bahan-kategori').value=b?(b.kategori||'Bahan Pokok'):'Bahan Pokok';
+  document.getElementById('modal-bahan').classList.add('open');
+}
+async function simpanBahan(){
+  var nama=document.getElementById('bahan-nama').value.trim();
+  var satuan=document.getElementById('bahan-satuan').value;
+  var harga=parseFloat(document.getElementById('bahan-harga').value)||0;
+  var kategori=document.getElementById('bahan-kategori').value;
+  if(!nama){showNotif('Nama bahan wajib','#E17055');return;}
+  var payload={nama:nama,satuan:satuan,harga:harga,kategori:kategori,restaurant_id:CFG.restaurantId};
+  if(_editBahanId){
+    var ix=ST_ingredients.findIndex(function(x){return x.id===_editBahanId;});
+    if(ix>-1)Object.assign(ST_ingredients[ix],payload);
+    if(_sb)await _sb.from('ingredients').update(payload).eq('id',_editBahanId).eq('restaurant_id',CFG.restaurantId);
+  } else {
+    var nb=Object.assign({id:'loc-'+Date.now()},payload);ST_ingredients.push(nb);
+    if(_sb){var res=await _sb.from('ingredients').insert(payload).select('id').single();if(!res.error)nb.id=res.data.id;}
+  }
+  closeModal('modal-bahan');renderBahanList();renderMenuCogs();showNotif('Bahan disimpan','#00B894');
+}
+async function hapusBahan(id){
+  var b=ST_ingredients.find(function(x){return x.id===id;});
+  if(!b||!confirm('Hapus bahan '+b.nama+'?'))return;
+  ST_ingredients=ST_ingredients.filter(function(x){return x.id!==id;});
+  if(_sb)await _sb.from('ingredients').delete().eq('id',id).eq('restaurant_id',CFG.restaurantId);
+  renderBahanList();renderMenuCogs();showNotif('Bahan dihapus','#A8A5BE');
+}
+function renderBahanList(){
+  var el=document.getElementById('bahan-list-container');if(!el)return;
+  var cnt=document.getElementById('bahan-count');if(cnt)cnt.textContent=ST_ingredients.length+' bahan';
+  if(!ST_ingredients.length){el.innerHTML='<div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Belum ada bahan. Klik "+ Bahan Baku".</div>';return;}
+  el.innerHTML=ST_ingredients.map(function(b){
+    return '<div class="bahan-row">'
+      +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+escHtml(b.nama)+'</div>'
+      +'<div style="font-size:10px;color:var(--txt3)">per '+escHtml(b.satuan)+' &middot; '+escHtml(b.kategori||'')+'</div></div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--accent);min-width:80px;text-align:right">'+fmt(b.harga)+'</div>'
+      +'<button data-bid="'+b.id+'" onclick="openModalBahan(this.dataset.bid)" style="border:none;background:none;cursor:pointer;font-size:14px;padding:2px 6px">&#9999;</button>'
+      +'<button data-bid="'+b.id+'" onclick="hapusBahan(this.dataset.bid)" style="border:none;background:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--red-dk)">&#128465;</button>'
+      +'</div>';
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+// RESEP PER MENU
+// ════════════════════════════════════════════════════════════════
+function openResepModal(menuId){
+  var menu=ST.menus.find(function(m){return String(m.id)===String(menuId);});
+  if(!menu){showNotif('Menu tidak ditemukan','#E17055');return;}
+  _editResepMenuId=String(menuId);
+  _resepTemp=JSON.parse(JSON.stringify(ST_recipes[_editResepMenuId]||[]));
+  document.getElementById('resep-modal-title').textContent='Resep — '+menu.name;
+  document.getElementById('resep-menu-info').innerHTML='<b>'+escHtml(menu.name)+'</b> &nbsp;&middot;&nbsp; Harga jual: <b style="color:var(--accent)">'+fmt(menu.price)+'</b>';
+  var sel=document.getElementById('resep-pilih-bahan');
+  sel.innerHTML='<option value="">-- Pilih bahan --</option>'+ST_ingredients.map(function(b){return '<option value="'+b.id+'">'+escHtml(b.nama)+' ('+escHtml(b.satuan)+' = '+fmt(b.harga)+')</option>';}).join('');
+  renderResepTemp(menu.price);
+  document.getElementById('modal-resep').classList.add('open');
+}
+function renderResepTemp(hargaJual){
+  var el=document.getElementById('resep-bahan-list');if(!el)return;
+  var opsPct=parseFloat((document.getElementById('cogs-ops-pct')||{value:15}).value)||15;
+  el.innerHTML=_resepTemp.length?_resepTemp.map(function(r,i){
+    var bhn=ST_ingredients.find(function(b){return b.id===r.ingredient_id;});if(!bhn)return '';
+    return '<div class="bahan-row">'
+      +'<div style="flex:2;font-size:12px">'+escHtml(bhn.nama)+'</div>'
+      +'<input type="number" value="'+r.jumlah+'" min="0.01" step="any" data-idx="'+i+'"'
+      +' style="width:75px;padding:4px 6px;border:1px solid var(--brd);border-radius:6px;font-size:12px;text-align:center;background:var(--bg);color:var(--txt)"'
+      +' onchange="_resepTemp['+i+'].jumlah=parseFloat(this.value)||0;renderResepTemp('+hargaJual+')">'
+      +'<div style="font-size:10px;color:var(--txt3);min-width:35px">'+escHtml(bhn.satuan)+'</div>'
+      +'<div style="font-size:12px;color:var(--txt2);min-width:70px;text-align:right">'+fmt(bhn.harga*r.jumlah)+'</div>'
+      +'<button data-idx="'+i+'" onclick="_resepTemp.splice(parseInt(this.dataset.idx),1);renderResepTemp('+hargaJual+')" style="border:none;background:none;cursor:pointer;color:var(--red-dk);font-size:16px;padding:0 4px">&times;</button>'
+      +'</div>';
+  }).join(''):'<div style="text-align:center;padding:12px;color:var(--txt3);font-size:12px">Belum ada bahan. Tambah dari panel di bawah.</div>';
+  var totalCogs=_resepTemp.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+  var ops=(hargaJual||0)*(opsPct/100),profit=(hargaJual||0)-totalCogs-ops;
+  var margin=hargaJual>0?Math.round(profit/hargaJual*100):0;
+  var mc=margin>=50?'margin-high':margin>=25?'margin-mid':'margin-low';
+  var se=document.getElementById('resep-cogs-summary');if(!se)return;
+  se.innerHTML='<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>Total COGS bahan</span><b style="color:var(--red-dk)">'+fmt(totalCogs)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:var(--txt2)">Biaya ops ('+opsPct+'%)</span><span style="color:var(--txt2)">'+fmt(ops)+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:8px;border-top:1px solid var(--brd)">'
+    +'<span>Profit per porsi</span><span class="margin-badge '+mc+'">'+fmt(profit)+' ('+margin+'%)</span></div>';
+}
+function tambahBahanKeResep(){
+  var sel=document.getElementById('resep-pilih-bahan');var id=sel.value;
+  if(!id){showNotif('Pilih bahan dulu','#E17055');return;}
+  var jumlah=parseFloat(document.getElementById('resep-jumlah').value)||1;
+  var ex=_resepTemp.findIndex(function(r){return r.ingredient_id===id;});
+  if(ex>-1)_resepTemp[ex].jumlah=Math.round((_resepTemp[ex].jumlah+jumlah)*1000)/1000;
+  else _resepTemp.push({ingredient_id:id,jumlah:jumlah});
+  document.getElementById('resep-jumlah').value='';sel.value='';
+  var menu=ST.menus.find(function(m){return String(m.id)===_editResepMenuId;});
+  renderResepTemp(menu?menu.price:0);
+}
+async function simpanResep(){
+  if(!_editResepMenuId)return;
+  ST_recipes[_editResepMenuId]=JSON.parse(JSON.stringify(_resepTemp));
+  if(_sb&&CFG.restaurantId){
+    try{
+      await _sb.from('menu_recipes').delete().eq('menu_id',_editResepMenuId).eq('restaurant_id',CFG.restaurantId);
+      if(_resepTemp.length){var rows=_resepTemp.map(function(r){return {menu_id:_editResepMenuId,ingredient_id:r.ingredient_id,jumlah:r.jumlah,restaurant_id:CFG.restaurantId};});await _sb.from('menu_recipes').insert(rows);}
+    }catch(e){console.warn('simpanResep:',e.message);}
+  }
+  closeModal('modal-resep');renderMenuCogs();renderCogsLaporan();showNotif('Resep disimpan','#00B894');
+}
+
+// ════════════════════════════════════════════════════════════════
+// RENDER HALAMAN COGS
+// ════════════════════════════════════════════════════════════════
+function renderCogsPage(){renderBahanList();renderMenuCogs();renderCogsLaporan();}
+
+function renderMenuCogs(){
+  var el=document.getElementById('menu-cogs-list');if(!el)return;
+  var opsPct=parseFloat((document.getElementById('cogs-ops-pct')||{value:15}).value)||15;
+  var actives=ST.menus.filter(function(m){return m.status==='available'||!m.status;});
+  if(!actives.length){el.innerHTML='<div style="padding:12px;color:var(--txt3);font-size:12px">Belum ada menu</div>';return;}
+  var margins=[],noRecipe=0;
+  el.innerHTML=actives.map(function(m){
+    var mid=String(m.id),resep=ST_recipes[mid]||[];
+    var cogs=resep.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+    var ops=m.price*(opsPct/100),profit=m.price-cogs-ops;
+    var margin=m.price>0?Math.round(profit/m.price*100):0;
+    var mc=margin>=50?'margin-high':margin>=25?'margin-mid':'margin-low';
+    if(!resep.length)noRecipe++;else margins.push(margin);
+    var img=m.img?'<img src="'+m.img+'" style="width:34px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0">':'<span style="font-size:22px;width:34px;text-align:center;flex-shrink:0">'+(m.emoji||'&#127869;')+'</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--brd)">'
+      +img+'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(m.name)+'</div>'
+      +'<div style="font-size:10px;color:var(--txt3)">'+fmt(m.price)+(resep.length?' &middot; COGS: '+fmt(cogs):'')+'</div></div>'
+      +(resep.length?'<span class="margin-badge '+mc+'" style="flex-shrink:0">'+margin+'%</span>':'<span style="font-size:9px;color:var(--amber-dk);flex-shrink:0">Belum ada resep</span>')
+      +'<button data-mid="'+mid+'" onclick="openResepModal(this.dataset.mid)" style="font-size:10px;padding:3px 10px;background:var(--accent-bg);color:var(--accent);border:none;border-radius:20px;cursor:pointer;flex-shrink:0">'+(resep.length?'&#9999; Edit':'+ Resep')+'</button>'
+      +'</div>';
+  }).join('');
+  var ae=document.getElementById('cogs-avg-margin'),ne=document.getElementById('cogs-no-recipe');
+  if(ae)ae.textContent=margins.length?Math.round(margins.reduce(function(a,b){return a+b;},0)/margins.length)+'%':'--';
+  if(ne)ne.textContent=noRecipe+' menu';
+}
+
+function renderCogsLaporan(){
+  var tbody=document.getElementById('cogs-lap-tbody');if(!tbody)return;
+  var opsPct=parseFloat((document.getElementById('cogs-ops-pct')||{value:15}).value)||15;
+  var periode=(document.getElementById('cogs-lap-periode')||{value:'bulan'}).value;
+  var now=new Date(),cutoff=new Date(0);
+  if(periode==='bulan')cutoff=new Date(now.getFullYear(),now.getMonth(),1);
+  else if(periode==='minggu')cutoff=new Date(now.getTime()-7*86400000);
+  var soldMap={};
+  ST.transactions.filter(function(t){return new Date(t.date)>=cutoff;}).forEach(function(t){(t.items||[]).forEach(function(it){var k=String(it.menuId||it.id||it.name);soldMap[k]=(soldMap[k]||0)+(it.qty||1);});});
+  var rows=ST.menus.filter(function(m){return m.status==='available'||!m.status;}).map(function(m){
+    var mid=String(m.id),sold=soldMap[mid]||soldMap[m.name]||0;
+    var resep=ST_recipes[mid]||[];
+    var cogsP=resep.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+    var opsP=m.price*(opsPct/100),profitP=m.price-cogsP-opsP;
+    var margin=m.price>0?Math.round(profitP/m.price*100):0;
+    var mc=margin>=50?'margin-high':margin>=25?'margin-mid':'margin-low';
+    return {m:m,sold:sold,rev:sold*m.price,cogs:sold*cogsP,ops:sold*opsP,profit:sold*profitP,margin:margin,mc:mc,noResep:!resep.length,mid:mid};
+  }).sort(function(a,b){return b.profit-a.profit;});
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Tidak ada data</td></tr>';return;}
+  tbody.innerHTML=rows.map(function(r){
+    var nr=r.noResep?'<div style="font-size:9px;color:var(--amber-dk)">Belum ada resep</div>':'';
+    return '<tr><td><div style="font-size:12px">'+(r.m.emoji||'&#127869;')+' '+escHtml(r.m.name)+'</div>'+nr+'</td>'
+      +'<td style="text-align:right">'+r.sold+'</td><td style="text-align:right">'+fmt(r.rev)+'</td>'
+      +'<td style="text-align:right;color:var(--red-dk)">'+fmt(r.cogs)+'</td>'
+      +'<td style="text-align:right;color:var(--txt2)">'+fmt(r.ops)+'</td>'
+      +'<td style="text-align:right;font-weight:700;color:'+(r.profit>=0?'var(--green-dk)':'var(--red-dk)')+'">'+fmt(r.profit)+'</td>'
+      +'<td style="text-align:right"><span class="margin-badge '+r.mc+'">'+r.margin+'%</span></td>'
+      +'<td><button data-mid="'+r.mid+'" onclick="openResepModal(this.dataset.mid)" style="font-size:10px;padding:2px 8px;background:var(--accent-bg);color:var(--accent);border:none;border-radius:20px;cursor:pointer">Resep</button></td></tr>';
+  }).join('');
+  var lowMargin=rows.filter(function(r){return !r.noResep&&r.margin<30&&r.sold>0;});
+  var alertEl=document.getElementById('cogs-lap-alert');
+  if(alertEl&&lowMargin.length){alertEl.innerHTML='<div style="background:var(--red-bg,#FEE2E2);border-radius:var(--radius,8px);padding:10px 12px;font-size:12px;color:var(--red-dk,#B91C1C)"><b>&#9888; Margin rendah (&lt;30%):</b> '+lowMargin.map(function(r){return escHtml(r.m.name)+' ('+r.margin+'%)';}).join(', ')+'</div>';}
+  else if(alertEl)alertEl.innerHTML='';
+}
+
+async function loadCogsData(){
+  if(!_sb||!CFG.restaurantId)return;
+  try{
+    var r1=await _sb.from('ingredients').select('*').eq('restaurant_id',CFG.restaurantId).order('nama');
+    if(!r1.error&&r1.data)ST_ingredients=r1.data;
+    var r2=await _sb.from('menu_recipes').select('*').eq('restaurant_id',CFG.restaurantId);
+    if(!r2.error&&r2.data){ST_recipes={};r2.data.forEach(function(r){if(!ST_recipes[r.menu_id])ST_recipes[r.menu_id]=[];ST_recipes[r.menu_id].push(r);});}
+    if(window._currentPage==='cogs')renderCogsPage();
+  }catch(e){console.warn('loadCogsData:',e.message);}
+}
 </script>
 
 
@@ -11764,6 +12017,136 @@ async function fetchShiftOnlineOrders(shift) {
   <span>&#x26A0;</span>
   <span id="offline-msg">Jaringan terputus — transaksi tetap berjalan &amp; akan tersync otomatis saat online</span>
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
+</div>
+
+<!-- KALKULATOR -->
+<div id="calc-overlay" class="calc-overlay" style="display:none" onclick="if(event.target===this)closeCalc()">
+  <div class="calc-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:700">Kalkulator</span>
+      <button onclick="closeCalc()" style="border:none;background:none;font-size:18px;cursor:pointer;color:var(--txt3)">&#10005;</button>
+    </div>
+    <div class="calc-display-sub" id="calc-sub"></div>
+    <div class="calc-display-main" id="calc-display">0</div>
+    <div class="calc-grid" style="margin-top:8px">
+      <button class="calc-key op" onclick="calcKey('C')">C</button>
+      <button class="calc-key op" onclick="calcKey('±')">&#177;</button>
+      <button class="calc-key op" onclick="calcKey('%')">%</button>
+      <button class="calc-key op" onclick="calcKey('÷')">&#247;</button>
+      <button class="calc-key" onclick="calcKey('7')">7</button>
+      <button class="calc-key" onclick="calcKey('8')">8</button>
+      <button class="calc-key" onclick="calcKey('9')">9</button>
+      <button class="calc-key op" onclick="calcKey('×')">&#215;</button>
+      <button class="calc-key" onclick="calcKey('4')">4</button>
+      <button class="calc-key" onclick="calcKey('5')">5</button>
+      <button class="calc-key" onclick="calcKey('6')">6</button>
+      <button class="calc-key op" onclick="calcKey('−')">&#8722;</button>
+      <button class="calc-key" onclick="calcKey('1')">1</button>
+      <button class="calc-key" onclick="calcKey('2')">2</button>
+      <button class="calc-key" onclick="calcKey('3')">3</button>
+      <button class="calc-key op" onclick="calcKey('+')">+</button>
+      <button class="calc-key fill" onclick="calcKey('isi')" style="grid-column:span 2;font-size:12px">&#8594; Isi Nominal</button>
+      <button class="calc-key" onclick="calcKey('0')">0</button>
+      <button class="calc-key eq" onclick="calcKey('=')">=</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL BAHAN -->
+<div class="modal-wrap" id="modal-bahan">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-hd"><h3 id="bahan-modal-title">Tambah Bahan</h3><button class="modal-close" onclick="closeModal('modal-bahan')">&#10005;</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-lbl">Nama Bahan *</label><input class="fi" id="bahan-nama" placeholder="mis: Beras, Telur..."></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group"><label class="form-lbl">Satuan</label>
+          <select class="fi" id="bahan-satuan"><option>gram</option><option>kg</option><option>ml</option><option>liter</option><option>butir</option><option>buah</option><option>sachet</option><option>sendok makan</option><option>pcs</option></select>
+        </div>
+        <div class="form-group"><label class="form-lbl">Harga per satuan (Rp) *</label><input class="fi" type="number" id="bahan-harga" placeholder="14000"></div>
+      </div>
+      <div class="form-group"><label class="form-lbl">Kategori</label>
+        <select class="fi" id="bahan-kategori"><option>Bahan Pokok</option><option>Bumbu</option><option>Sayuran</option><option>Protein</option><option>Minuman</option><option>Lainnya</option></select>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" onclick="simpanBahan()">Simpan</button><button class="btn" onclick="closeModal('modal-bahan')">Batal</button></div>
+  </div>
+</div>
+
+<!-- MODAL RESEP -->
+<div class="modal-wrap" id="modal-resep">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hd"><h3 id="resep-modal-title">Resep Menu</h3><button class="modal-close" onclick="closeModal('modal-resep')">&#10005;</button></div>
+    <div class="modal-body">
+      <div id="resep-menu-info" style="background:var(--bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px"></div>
+      <div style="font-size:12px;font-weight:700;color:var(--txt2);margin-bottom:8px">Bahan per 1 porsi:</div>
+      <div id="resep-bahan-list"></div>
+      <div style="margin-top:10px;background:var(--bg2);border-radius:var(--radius);padding:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:8px">+ Tambah Bahan ke Resep</div>
+        <select class="fi" id="resep-pilih-bahan" style="margin-bottom:8px"><option value="">-- Pilih bahan --</option></select>
+        <div style="display:flex;gap:8px">
+          <input class="fi" type="number" id="resep-jumlah" placeholder="Jumlah" min="0.01" step="any" style="width:110px">
+          <button class="btn btn-sm btn-primary" onclick="tambahBahanKeResep()">+ Tambah</button>
+        </div>
+      </div>
+      <div id="resep-cogs-summary" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius)"></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-primary" onclick="simpanResep()">Simpan Resep</button><button class="btn" onclick="closeModal('modal-resep')">Batal</button></div>
+  </div>
+</div>
+
+<!-- PAGE COGS -->
+<div class="page" id="page-cogs">
+  <div class="topbar">
+    <div><div class="topbar-title">&#128176; COGS &amp; Margin</div><div style="font-size:11px;color:var(--txt2)">Kelola bahan baku, resep, dan analisis profitabilitas</div></div>
+    <button class="btn btn-sm btn-primary" onclick="openModalBahan()">+ Bahan Baku</button>
+  </div>
+  <div style="padding:16px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+      <div class="metric" style="background:var(--green-bg);border-radius:var(--radius-lg);padding:14px 16px">
+        <div class="metric-lbl">Rata-rata Margin</div>
+        <div class="metric-val" id="cogs-avg-margin" style="color:var(--green-dk);font-size:22px">--</div>
+      </div>
+      <div class="metric" style="background:var(--accent-bg);border-radius:var(--radius-lg);padding:14px 16px">
+        <div class="metric-lbl">Menu Belum Ada Resep</div>
+        <div class="metric-val" id="cogs-no-recipe" style="color:var(--accent);font-size:22px">--</div>
+      </div>
+      <div class="metric" style="background:var(--bg2);border-radius:var(--radius-lg);padding:14px 16px">
+        <div style="font-size:11px;color:var(--txt2);margin-bottom:4px">Biaya Operasional (%)</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="cogs-ops-pct" value="15" min="0" max="100" style="width:60px;padding:4px 8px;border:1px solid var(--brd);border-radius:6px;font-size:16px;font-weight:700;text-align:center;background:var(--bg);color:var(--txt)" oninput="renderMenuCogs();renderCogsLaporan()">
+          <span style="font-size:11px;color:var(--txt3)">% dari harga jual (listrik, gas, dll)</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+          <span>&#128230; Master Bahan Baku</span>
+          <span id="bahan-count" style="font-size:11px;color:var(--txt3)"></span>
+        </div>
+        <div id="bahan-list-container"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Belum ada bahan.</div></div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#127869; Resep &amp; Margin per Menu</div>
+        <div id="menu-cogs-list"><div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Memuat...</div></div>
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700">&#128202; Laporan Profitabilitas</div>
+        <select class="fi" id="cogs-lap-periode" style="font-size:11px;padding:4px 8px;width:auto" onchange="renderCogsLaporan()">
+          <option value="bulan">Bulan ini</option><option value="minggu">7 hari terakhir</option><option value="all">Semua waktu</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Menu</th><th style="text-align:right">Terjual</th><th style="text-align:right">Revenue</th><th style="text-align:right">COGS</th><th style="text-align:right">Biaya Ops</th><th style="text-align:right">Profit</th><th style="text-align:right">Margin</th><th>Aksi</th></tr></thead>
+          <tbody id="cogs-lap-tbody"><tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Memuat...</td></tr></tbody>
+        </table>
+      </div>
+      <div id="cogs-lap-alert" style="margin-top:10px"></div>
+    </div>
+  </div>
 </div>
 
 </body>
