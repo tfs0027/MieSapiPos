@@ -5533,7 +5533,7 @@ async function autoSyncFromSupabase() {
       // Filter created_at sering gagal jika saat insert tidak ada created_at
       var shRes = await _sb.from('shifts').select('*')
         .eq('restaurant_id', rid)
-        .order('created_at', {ascending:false})
+        .order('id', {ascending:false})
         .limit(200);
       if (!shRes.error && shRes.data) {
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
@@ -6501,7 +6501,7 @@ async function syncShiftHistory() {
     var rid = CFG.restaurantId;
     var res = await _sb.from('shifts').select('*')
       .eq('restaurant_id', rid)
-      .order('created_at', {ascending: false})
+      .order('id', {ascending: false})
       .limit(500);
     if (res.error) throw res.error;
     if (!res.data || !res.data.length) {
@@ -7739,7 +7739,7 @@ async function pullAllFromSupabase() {
     var d90s = new Date(); d90s.setDate(d90s.getDate()-90);
     var { data: shifts, error: e5 } = await _sb.from('shifts')
       .select('*').eq('restaurant_id', rid)
-      .order('created_at', {ascending: false})
+      .order('id', {ascending: false})
       .limit(200);
     if (!e5 && shifts && shifts.length) {
       var existingCodes = ST.shifts.map(function(s){return s.id;});
