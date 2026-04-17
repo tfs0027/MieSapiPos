@@ -11784,24 +11784,190 @@ document.addEventListener('keydown',function(e){
 // MASTER BAHAN BAKU
 // ════════════════════════════════════════════════════════════════
 var ST_ingredients=[],ST_recipes={},_editBahanId=null,_editResepMenuId=null,_resepTemp=[];
+var _subBahanTemp=[];  // sub-bahan untuk bahan olahan
+
+// Harga efektif per satuan bahan (sudah termasuk komponen proses jika olahan)
+function hargaEfektif(b){
+  if(!b) return 0;
+  // Bahan olahan: harga sudah dihitung otomatis dari sub-bahan
+  return b.harga||0;
+}
+
+// Hitung harga per satuan bahan olahan dari sub-bahan
+function hitungHargaOlahan(){
+  var hasil=parseFloat(document.getElementById('bahan-hasil-batch').value)||0;
+  var biayaProses=parseFloat(document.getElementById('bahan-biaya-proses').value)||0;
+  var subCost=_subBahanTemp.reduce(function(s,r){
+    var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});
+    return s+(b?hargaEfektif(b)*r.jumlah:0);
+  },0);
+  var totalBatch=subCost+biayaProses;
+  var perSatuan=hasil>0?Math.round(totalBatch/hasil):0;
+
+  // Update preview
+  var prev=document.getElementById('harga-olahan-preview');
+  if(prev) prev.style.display=(_subBahanTemp.length||biayaProses>0)?'block':'none';
+  var elSub=document.getElementById('prev-sub-cost'); if(elSub) elSub.textContent=fmt(subCost);
+  var elPrs=document.getElementById('prev-proses');   if(elPrs) elPrs.textContent=fmt(biayaProses);
+  var elTot=document.getElementById('prev-total');    if(elTot) elTot.textContent=fmt(totalBatch);
+  var elPS =document.getElementById('prev-per-satuan'); if(elPS) elPS.textContent=fmt(perSatuan);
+
+  // Set ke field harga (readonly untuk olahan)
+  var hargaInp=document.getElementById('bahan-harga');
+  if(hargaInp) hargaInp.value=perSatuan;
+}
+
+function updateHargaOtomatis(){
+  // Saat mode olahan, harga dihitung otomatis — field readonly
+}
+
+function setBahanJenis(jenis){
+  var lm=document.getElementById('lbl-jenis-mentah');
+  var lo=document.getElementById('lbl-jenis-olahan');
+  var pm=document.getElementById('panel-mentah');
+  var po=document.getElementById('panel-olahan');
+  var hf=document.getElementById('harga-field');
+  var hi=document.getElementById('bahan-harga');
+
+  if(jenis==='olahan'){
+    if(lm){lm.style.borderColor='var(--brd)';lm.style.background='';}
+    if(lo){lo.style.borderColor='var(--accent)';lo.style.background='var(--accent-bg)';}
+    if(po) po.style.display='block';
+    if(pm) pm.style.display='none';
+    // Field harga jadi readonly, diisi otomatis
+    if(hi){hi.readOnly=true;hi.style.opacity='.6';hi.placeholder='Dihitung otomatis';}
+    document.querySelector('input[name="bahanJenis"][value="olahan"]').checked=true;
+    populasiSubBahanSelect();
+    renderSubBahanList();
+    hitungHargaOlahan();
+  } else {
+    if(lm){lm.style.borderColor='var(--accent)';lm.style.background='var(--accent-bg)';}
+    if(lo){lo.style.borderColor='var(--brd)';lo.style.background='';}
+    if(po) po.style.display='none';
+    if(pm) pm.style.display='block';
+    if(hi){hi.readOnly=false;hi.style.opacity='';hi.placeholder='14000';}
+    document.querySelector('input[name="bahanJenis"][value="mentah"]').checked=true;
+  }
+}
+
+function populasiSubBahanSelect(){
+  var sel=document.getElementById('sub-pilih-bahan');
+  if(!sel)return;
+  // Hanya tampilkan bahan mentah (jangan circular)
+  var mentah=ST_ingredients.filter(function(b){
+    return b.jenis!=='olahan' && b.id!==_editBahanId;
+  });
+  sel.innerHTML='<option value="">-- Pilih bahan mentah --</option>'
+    +mentah.map(function(b){
+      return '<option value="'+b.id+'">'+escHtml(b.nama)+' ('+escHtml(b.satuan)+' = '+fmt(hargaEfektif(b))+')</option>';
+    }).join('');
+}
+
+function renderSubBahanList(){
+  var el=document.getElementById('sub-bahan-list');if(!el)return;
+  if(!_subBahanTemp.length){
+    el.innerHTML='<div style="font-size:11px;color:var(--txt3);padding:4px 0">Belum ada sub-bahan. Tambah dari panel di bawah.</div>';
+    return;
+  }
+  el.innerHTML=_subBahanTemp.map(function(r,i){
+    var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});
+    if(!b)return '';
+    return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:0.5px solid #FDE68A">'
+      +'<div style="flex:2;font-size:12px">'+escHtml(b.nama)+'</div>'
+      +'<input type="number" value="'+r.jumlah+'" min="0.01" step="any"'
+      +' style="width:70px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;font-size:11px;text-align:center;background:var(--bg);color:var(--txt)"'
+      +' onchange="_subBahanTemp['+i+'].jumlah=parseFloat(this.value)||0;hitungHargaOlahan()">'
+      +'<div style="font-size:10px;color:var(--txt3);min-width:40px">'+escHtml(b.satuan)+'</div>'
+      +'<div style="font-size:11px;color:var(--txt2);min-width:65px;text-align:right">'+fmt(hargaEfektif(b)*r.jumlah)+'</div>'
+      +'<button data-idx="'+i+'" onclick="hapusSubBahan(parseInt(this.dataset.idx))"'
+      +' style="border:none;background:none;cursor:pointer;color:var(--red-dk);font-size:16px;padding:0 3px">&times;</button>'
+      +'</div>';
+  }).join('');
+}
+
+function tambahSubBahan(){
+  var sel=document.getElementById('sub-pilih-bahan');
+  var id=sel?sel.value:'';
+  if(!id){showNotif('Pilih bahan dulu','#E17055');return;}
+  var jumlah=parseFloat(document.getElementById('sub-jumlah').value)||1;
+  var ex=_subBahanTemp.findIndex(function(r){return r.ingredient_id===id;});
+  if(ex>-1) _subBahanTemp[ex].jumlah=Math.round((_subBahanTemp[ex].jumlah+jumlah)*1000)/1000;
+  else _subBahanTemp.push({ingredient_id:id,jumlah:jumlah});
+  document.getElementById('sub-jumlah').value='';
+  sel.value='';
+  renderSubBahanList();
+  hitungHargaOlahan();
+}
+
+function hapusSubBahan(i){
+  _subBahanTemp.splice(i,1);
+  renderSubBahanList();
+  hitungHargaOlahan();
+}
 
 function openModalBahan(id){
   _editBahanId=id||null;
   var b=id?ST_ingredients.find(function(x){return x.id===id;}):null;
   document.getElementById('bahan-modal-title').textContent=b?'Edit Bahan':'Tambah Bahan';
   document.getElementById('bahan-nama').value=b?b.nama:'';
-  document.getElementById('bahan-satuan').value=b?b.satuan:'gram';
+  document.getElementById('bahan-satuan').value=b?(b.satuan||'gram'):'gram';
   document.getElementById('bahan-harga').value=b?b.harga:'';
   document.getElementById('bahan-kategori').value=b?(b.kategori||'Bahan Pokok'):'Bahan Pokok';
+
+  // Reset sub-bahan
+  _subBahanTemp=b&&b.sub_ingredients?JSON.parse(JSON.stringify(b.sub_ingredients)):[];
+
+  // Set jenis
+  var jenis=b&&b.jenis==='olahan'?'olahan':'mentah';
+  // Reset UI dulu
+  document.querySelector('input[name="bahanJenis"][value="mentah"]').checked=true;
+  document.querySelector('input[name="bahanJenis"][value="olahan"]').checked=false;
+  setBahanJenis(jenis);
+
+  if(jenis==='olahan'){
+    document.getElementById('bahan-hasil-batch').value=b.hasil_batch||'';
+    document.getElementById('bahan-biaya-proses').value=b.biaya_proses||'';
+    renderSubBahanList();
+    hitungHargaOlahan();
+  }
+
   document.getElementById('modal-bahan').classList.add('open');
 }
+
 async function simpanBahan(){
   var nama=document.getElementById('bahan-nama').value.trim();
   var satuan=document.getElementById('bahan-satuan').value;
-  var harga=parseFloat(document.getElementById('bahan-harga').value)||0;
   var kategori=document.getElementById('bahan-kategori').value;
   if(!nama){showNotif('Nama bahan wajib','#E17055');return;}
-  var payload={nama:nama,satuan:satuan,harga:harga,kategori:kategori,restaurant_id:CFG.restaurantId};
+
+  var jenis=document.querySelector('input[name="bahanJenis"]:checked').value;
+  var harga=0,hasilBatch=0,biayaProses=0,subIngredients=[];
+
+  if(jenis==='olahan'){
+    hasilBatch=parseFloat(document.getElementById('bahan-hasil-batch').value)||0;
+    biayaProses=parseFloat(document.getElementById('bahan-biaya-proses').value)||0;
+    subIngredients=JSON.parse(JSON.stringify(_subBahanTemp));
+    if(hasilBatch<=0){showNotif('Isi hasil per batch','#E17055');return;}
+    if(!subIngredients.length){showNotif('Tambah minimal 1 sub-bahan','#E17055');return;}
+    // Hitung harga otomatis
+    var subCost=subIngredients.reduce(function(s,r){
+      var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});
+      return s+(b?hargaEfektif(b)*r.jumlah:0);
+    },0);
+    harga=Math.round((subCost+biayaProses)/hasilBatch);
+  } else {
+    harga=parseFloat(document.getElementById('bahan-harga').value)||0;
+  }
+
+  var payload={
+    nama:nama,satuan:satuan,harga:harga,kategori:kategori,
+    jenis:jenis,
+    hasil_batch:jenis==='olahan'?hasilBatch:0,
+    biaya_proses:jenis==='olahan'?biayaProses:0,
+    sub_ingredients:jenis==='olahan'?subIngredients:[],
+    restaurant_id:CFG.restaurantId
+  };
+
   if(_editBahanId){
     var ix=ST_ingredients.findIndex(function(x){return x.id===_editBahanId;});
     if(ix>-1)Object.assign(ST_ingredients[ix],payload);
@@ -11812,26 +11978,69 @@ async function simpanBahan(){
   }
   closeModal('modal-bahan');renderBahanList();renderMenuCogs();showNotif('Bahan disimpan','#00B894');
 }
+
 async function hapusBahan(id){
   var b=ST_ingredients.find(function(x){return x.id===id;});
   if(!b||!confirm('Hapus bahan '+b.nama+'?'))return;
+  // Cek apakah dipakai sebagai sub-bahan
+  var dipakai=ST_ingredients.filter(function(x){
+    return x.jenis==='olahan'&&x.sub_ingredients&&x.sub_ingredients.find(function(r){return r.ingredient_id===id;});
+  });
+  if(dipakai.length){
+    showNotif('Bahan ini dipakai di: '+dipakai.map(function(x){return x.nama;}).join(', '),'#E17055');return;
+  }
   ST_ingredients=ST_ingredients.filter(function(x){return x.id!==id;});
   if(_sb)await _sb.from('ingredients').delete().eq('id',id).eq('restaurant_id',CFG.restaurantId);
   renderBahanList();renderMenuCogs();showNotif('Bahan dihapus','#A8A5BE');
 }
+
 function renderBahanList(){
   var el=document.getElementById('bahan-list-container');if(!el)return;
   var cnt=document.getElementById('bahan-count');if(cnt)cnt.textContent=ST_ingredients.length+' bahan';
   if(!ST_ingredients.length){el.innerHTML='<div style="text-align:center;padding:24px;color:var(--txt3);font-size:12px">Belum ada bahan. Klik "+ Bahan Baku".</div>';return;}
-  el.innerHTML=ST_ingredients.map(function(b){
+
+  // Group: mentah dulu, lalu olahan
+  var mentah=ST_ingredients.filter(function(b){return b.jenis!=='olahan';});
+  var olahan=ST_ingredients.filter(function(b){return b.jenis==='olahan';});
+
+  function renderRow(b){
+    var isOlahan=b.jenis==='olahan';
+    var badge=isOlahan
+      ?'<span style="font-size:9px;background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;border-radius:10px;padding:1px 7px;margin-left:5px">🍳 Olahan</span>'
+      :'';
+    var sub='';
+    if(isOlahan&&b.sub_ingredients&&b.sub_ingredients.length){
+      sub='<div style="font-size:10px;color:var(--txt3);margin-top:2px">'
+        +'Dari: '+b.sub_ingredients.map(function(r){
+          var bhn=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});
+          return bhn?escHtml(bhn.nama)+' '+r.jumlah+escHtml(bhn.satuan):'?';
+        }).join(', ')
+        +(b.hasil_batch?' → '+b.hasil_batch+' '+escHtml(b.satuan||''):'')
+        +(b.biaya_proses?' + proses Rp'+b.biaya_proses.toLocaleString('id-ID'):'')
+      +'</div>';
+    }
     return '<div class="bahan-row">'
-      +'<div style="flex:1"><div style="font-size:12px;font-weight:600">'+escHtml(b.nama)+'</div>'
-      +'<div style="font-size:10px;color:var(--txt3)">per '+escHtml(b.satuan)+' &middot; '+escHtml(b.kategori||'')+'</div></div>'
+      +'<div style="flex:1">'
+        +'<div style="font-size:12px;font-weight:600">'+escHtml(b.nama)+badge+'</div>'
+        +'<div style="font-size:10px;color:var(--txt3)">'+fmt(b.harga)+' per '+escHtml(b.satuan||'')+' &middot; '+escHtml(b.kategori||'')+'</div>'
+        +sub
+      +'</div>'
       +'<div style="font-size:13px;font-weight:700;color:var(--accent);min-width:80px;text-align:right">'+fmt(b.harga)+'</div>'
       +'<button data-bid="'+b.id+'" onclick="openModalBahan(this.dataset.bid)" style="border:none;background:none;cursor:pointer;font-size:14px;padding:2px 6px">&#9999;</button>'
       +'<button data-bid="'+b.id+'" onclick="hapusBahan(this.dataset.bid)" style="border:none;background:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--red-dk)">&#128465;</button>'
       +'</div>';
-  }).join('');
+  }
+
+  var html='';
+  if(mentah.length){
+    html+='<div style="font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.04em;padding:6px 0 4px">🥩 Bahan Mentah ('+mentah.length+')</div>';
+    html+=mentah.map(renderRow).join('');
+  }
+  if(olahan.length){
+    html+='<div style="font-size:10px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:.04em;padding:10px 0 4px">🍳 Bahan Olahan ('+olahan.length+')</div>';
+    html+=olahan.map(renderRow).join('');
+  }
+  el.innerHTML=html;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -11845,7 +12054,11 @@ function openResepModal(menuId){
   document.getElementById('resep-modal-title').textContent='Resep — '+menu.name;
   document.getElementById('resep-menu-info').innerHTML='<b>'+escHtml(menu.name)+'</b> &nbsp;&middot;&nbsp; Harga jual: <b style="color:var(--accent)">'+fmt(menu.price)+'</b>';
   var sel=document.getElementById('resep-pilih-bahan');
-  sel.innerHTML='<option value="">-- Pilih bahan --</option>'+ST_ingredients.map(function(b){return '<option value="'+b.id+'">'+escHtml(b.nama)+' ('+escHtml(b.satuan)+' = '+fmt(b.harga)+')</option>';}).join('');
+  sel.innerHTML='<option value="">-- Pilih bahan --</option>'+ST_ingredients.map(function(b){
+    var he=hargaEfektif(b);
+    var tag=b.jenis==='olahan'?' 🍳':'';
+    return '<option value="'+b.id+'">'+escHtml(b.nama)+tag+' ('+escHtml(b.satuan||'')+' = '+fmt(he)+')</option>';
+  }).join('');
   renderResepTemp(menu.price);
   document.getElementById('modal-resep').classList.add('open');
 }
@@ -11854,23 +12067,30 @@ function renderResepTemp(hargaJual){
   var opsPct=parseFloat((document.getElementById('cogs-ops-pct')||{value:15}).value)||15;
   el.innerHTML=_resepTemp.length?_resepTemp.map(function(r,i){
     var bhn=ST_ingredients.find(function(b){return b.id===r.ingredient_id;});if(!bhn)return '';
+    var he=hargaEfektif(bhn);
+    var masakInfo=bhn.biaya_masak>0?'<span style="font-size:9px;color:#92400E;margin-left:4px">🔥 termasuk proses</span>':'';
     return '<div class="bahan-row">'
-      +'<div style="flex:2;font-size:12px">'+escHtml(bhn.nama)+'</div>'
+      +'<div style="flex:2;font-size:12px">'+escHtml(bhn.nama)+masakInfo+'</div>'
       +'<input type="number" value="'+r.jumlah+'" min="0.01" step="any" data-idx="'+i+'"'
       +' style="width:75px;padding:4px 6px;border:1px solid var(--brd);border-radius:6px;font-size:12px;text-align:center;background:var(--bg);color:var(--txt)"'
       +' onchange="_resepTemp['+i+'].jumlah=parseFloat(this.value)||0;renderResepTemp('+hargaJual+')">'
       +'<div style="font-size:10px;color:var(--txt3);min-width:35px">'+escHtml(bhn.satuan)+'</div>'
-      +'<div style="font-size:12px;color:var(--txt2);min-width:70px;text-align:right">'+fmt(bhn.harga*r.jumlah)+'</div>'
+      +'<div style="font-size:12px;color:var(--txt2);min-width:70px;text-align:right">'+fmt(he*r.jumlah)+'</div>'
       +'<button data-idx="'+i+'" onclick="_resepTemp.splice(parseInt(this.dataset.idx),1);renderResepTemp('+hargaJual+')" style="border:none;background:none;cursor:pointer;color:var(--red-dk);font-size:16px;padding:0 4px">&times;</button>'
       +'</div>';
   }).join(''):'<div style="text-align:center;padding:12px;color:var(--txt3);font-size:12px">Belum ada bahan. Tambah dari panel di bawah.</div>';
-  var totalCogs=_resepTemp.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+  // COGS summary: pakai harga efektif (bahan + proses)
+  var cogsB=_resepTemp.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+  var cogsP=_resepTemp.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?(b.biaya_masak||0)*r.jumlah:0);},0);
+  var totalCogs=cogsB+cogsP;
   var ops=(hargaJual||0)*(opsPct/100),profit=(hargaJual||0)-totalCogs-ops;
   var margin=hargaJual>0?Math.round(profit/hargaJual*100):0;
   var mc=margin>=50?'margin-high':margin>=25?'margin-mid':'margin-low';
   var se=document.getElementById('resep-cogs-summary');if(!se)return;
-  se.innerHTML='<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>Total COGS bahan</span><b style="color:var(--red-dk)">'+fmt(totalCogs)+'</b></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:var(--txt2)">Biaya ops ('+opsPct+'%)</span><span style="color:var(--txt2)">'+fmt(ops)+'</span></div>'
+  se.innerHTML='<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Biaya bahan baku</span><span>'+fmt(cogsB)+'</span></div>'
+    +(cogsP>0?'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>🔥 Biaya proses/masak</span><b style="color:#92400E">'+fmt(cogsP)+'</b></div>':'')
+    +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;padding-top:4px;border-top:1px dashed var(--brd)"><span><b>Total COGS</b></span><b style="color:var(--red-dk)">'+fmt(totalCogs)+'</b></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="color:var(--txt2)">Biaya ops ('+opsPct+'%)</span><span style="color:var(--txt2)">'+fmt(ops)+'</span></div>'
     +'<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:8px;border-top:1px solid var(--brd)">'
     +'<span>Profit per porsi</span><span class="margin-badge '+mc+'">'+fmt(profit)+' ('+margin+'%)</span></div>';
 }
@@ -11910,14 +12130,16 @@ function renderMenuCogs(){
   var margins=[],noRecipe=0;
   el.innerHTML=actives.map(function(m){
     var mid=String(m.id),resep=ST_recipes[mid]||[];
-    var cogs=resep.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+    // COGS = bahan + proses
+    var cogs=resep.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?hargaEfektif(b)*r.jumlah:0);},0);
     var ops=m.price*(opsPct/100),profit=m.price-cogs-ops;
     var margin=m.price>0?Math.round(profit/m.price*100):0;
     var mc=margin>=50?'margin-high':margin>=25?'margin-mid':'margin-low';
     if(!resep.length)noRecipe++;else margins.push(margin);
     var img=m.img?'<img src="'+m.img+'" style="width:34px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0">':'<span style="font-size:22px;width:34px;text-align:center;flex-shrink:0">'+(m.emoji||'&#127869;')+'</span>';
+    var hasMasak=resep.some(function(r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return b&&b.biaya_masak>0;});
     return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--brd)">'
-      +img+'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(m.name)+'</div>'
+      +img+'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(m.name)+(hasMasak?' <span style="font-size:9px;color:#92400E">🔥</span>':'')+'</div>'
       +'<div style="font-size:10px;color:var(--txt3)">'+fmt(m.price)+(resep.length?' &middot; COGS: '+fmt(cogs):'')+'</div></div>'
       +(resep.length?'<span class="margin-badge '+mc+'" style="flex-shrink:0">'+margin+'%</span>':'<span style="font-size:9px;color:var(--amber-dk);flex-shrink:0">Belum ada resep</span>')
       +'<button data-mid="'+mid+'" onclick="openResepModal(this.dataset.mid)" style="font-size:10px;padding:3px 10px;background:var(--accent-bg);color:var(--accent);border:none;border-radius:20px;cursor:pointer;flex-shrink:0">'+(resep.length?'&#9999; Edit':'+ Resep')+'</button>'
@@ -11940,18 +12162,21 @@ function renderCogsLaporan(){
   var rows=ST.menus.filter(function(m){return m.status==='available'||!m.status;}).map(function(m){
     var mid=String(m.id),sold=soldMap[mid]||soldMap[m.name]||0;
     var resep=ST_recipes[mid]||[];
-    var cogsP=resep.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+    var cogsB=resep.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?b.harga*r.jumlah:0);},0);
+    var cogsProses=resep.reduce(function(s,r){var b=ST_ingredients.find(function(x){return x.id===r.ingredient_id;});return s+(b?(b.biaya_masak||0)*r.jumlah:0);},0);
+    var cogsP=cogsB+cogsProses;
     var opsP=m.price*(opsPct/100),profitP=m.price-cogsP-opsP;
     var margin=m.price>0?Math.round(profitP/m.price*100):0;
     var mc=margin>=50?'margin-high':margin>=25?'margin-mid':'margin-low';
-    return {m:m,sold:sold,rev:sold*m.price,cogs:sold*cogsP,ops:sold*opsP,profit:sold*profitP,margin:margin,mc:mc,noResep:!resep.length,mid:mid};
+    return {m:m,sold:sold,rev:sold*m.price,cogs:sold*cogsP,cogsB:sold*cogsB,cogsProses:sold*cogsProses,ops:sold*opsP,profit:sold*profitP,margin:margin,mc:mc,noResep:!resep.length,mid:mid};
   }).sort(function(a,b){return b.profit-a.profit;});
   if(!rows.length){tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--txt3)">Tidak ada data</td></tr>';return;}
   tbody.innerHTML=rows.map(function(r){
     var nr=r.noResep?'<div style="font-size:9px;color:var(--amber-dk)">Belum ada resep</div>':'';
+    var cogsTip=r.cogsProses>0?'<span title="Bahan: '+fmt(r.cogsB)+' + Proses: '+fmt(r.cogsProses)+'" style="font-size:9px;cursor:help"> 🔥</span>':'';
     return '<tr><td><div style="font-size:12px">'+(r.m.emoji||'&#127869;')+' '+escHtml(r.m.name)+'</div>'+nr+'</td>'
       +'<td style="text-align:right">'+r.sold+'</td><td style="text-align:right">'+fmt(r.rev)+'</td>'
-      +'<td style="text-align:right;color:var(--red-dk)">'+fmt(r.cogs)+'</td>'
+      +'<td style="text-align:right;color:var(--red-dk)">'+fmt(r.cogs)+cogsTip+'</td>'
       +'<td style="text-align:right;color:var(--txt2)">'+fmt(r.ops)+'</td>'
       +'<td style="text-align:right;font-weight:700;color:'+(r.profit>=0?'var(--green-dk)':'var(--red-dk)')+'">'+fmt(r.profit)+'</td>'
       +'<td style="text-align:right"><span class="margin-badge '+r.mc+'">'+r.margin+'%</span></td>'
@@ -12009,21 +12234,78 @@ async function loadCogsData(){
 
 <!-- MODAL BAHAN BAKU -->
 <div class="modal-wrap" id="modal-bahan">
-  <div class="modal" style="max-width:460px">
+  <div class="modal" style="max-width:520px">
     <div class="modal-hd"><h3 id="bahan-modal-title">Tambah Bahan</h3><button class="modal-close" onclick="closeModal('modal-bahan')">&#10005;</button></div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-lbl">Nama Bahan *</label><input class="fi" id="bahan-nama" placeholder="mis: Beras, Telur..."></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="form-group"><label class="form-lbl">Satuan</label>
-          <select class="fi" id="bahan-satuan"><option>gram</option><option>kg</option><option>ml</option><option>liter</option><option>butir</option><option>buah</option><option>sachet</option><option>sendok makan</option><option>pcs</option></select>
-        </div>
-        <div class="form-group"><label class="form-lbl">Harga per satuan (Rp) *</label><input class="fi" type="number" id="bahan-harga" placeholder="14000"></div>
+
+      <div class="form-group"><label class="form-lbl">Nama Bahan *</label><input class="fi" id="bahan-nama" placeholder="mis: Beras, Ayam Tumis, Kuah Kaldu..."></div>
+
+      <!-- Jenis bahan -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <label id="lbl-jenis-mentah" onclick="setBahanJenis('mentah')" style="cursor:pointer;border:2px solid var(--accent);background:var(--accent-bg);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px">
+          <input type="radio" name="bahanJenis" value="mentah" checked style="accent-color:var(--accent)">
+          <div><div style="font-size:12px;font-weight:700">🥩 Bahan Mentah</div><div style="font-size:10px;color:var(--txt2)">Dibeli langsung, harga isi manual</div></div>
+        </label>
+        <label id="lbl-jenis-olahan" onclick="setBahanJenis('olahan')" style="cursor:pointer;border:2px solid var(--brd);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px">
+          <input type="radio" name="bahanJenis" value="olahan" style="accent-color:var(--accent)">
+          <div><div style="font-size:12px;font-weight:700">🍳 Bahan Olahan</div><div style="font-size:10px;color:var(--txt2)">Dibuat dari bahan lain (tumis, rebus, dll)</div></div>
+        </label>
       </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group"><label class="form-lbl">Satuan hasil</label>
+          <select class="fi" id="bahan-satuan"><option>gram</option><option>kg</option><option>ml</option><option>liter</option><option>butir</option><option>buah</option><option>sachet</option><option>sendok makan</option><option>porsi</option><option>pcs</option></select>
+        </div>
+        <div class="form-group" id="harga-field"><label class="form-lbl">Harga per satuan (Rp)</label><input class="fi" type="number" id="bahan-harga" placeholder="14000" oninput="updateHargaOtomatis()"></div>
+      </div>
+
+      <!-- PANEL BAHAN MENTAH -->
+      <div id="panel-mentah">
+        <!-- kosong, harga sudah di atas -->
+      </div>
+
+      <!-- PANEL BAHAN OLAHAN -->
+      <div id="panel-olahan" style="display:none">
+        <div style="background:var(--amber-bg,#FFFBEB);border:1px solid #FDE68A;border-radius:10px;padding:12px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:10px">🍳 Komposisi Bahan Olahan</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-lbl">Hasil per 1 batch (dalam satuan di atas)</label>
+              <input class="fi" type="number" id="bahan-hasil-batch" placeholder="mis: 500" min="0.01" step="any" oninput="hitungHargaOlahan()">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-lbl">Biaya proses per batch (gas, listrik, tenaga)</label>
+              <input class="fi" type="number" id="bahan-biaya-proses" placeholder="mis: 5000" min="0" oninput="hitungHargaOlahan()">
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--txt2);margin-bottom:6px">Sub-bahan yang dibutuhkan (per 1 batch):</div>
+          <div id="sub-bahan-list"></div>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:flex-end">
+            <div style="flex:2"><label class="form-lbl" style="font-size:10px">Pilih bahan</label>
+              <select class="fi" id="sub-pilih-bahan" style="font-size:11px"><option value="">-- Pilih bahan mentah --</option></select>
+            </div>
+            <div style="width:90px"><label class="form-lbl" style="font-size:10px">Jumlah</label>
+              <input class="fi" type="number" id="sub-jumlah" placeholder="0" min="0.01" step="any" style="font-size:11px">
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="tambahSubBahan()" style="flex-shrink:0;margin-bottom:0">+ Tambah</button>
+          </div>
+          <div id="harga-olahan-preview" style="margin-top:10px;padding:8px 10px;background:rgba(146,64,14,.08);border-radius:8px;font-size:12px;display:none">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>Total biaya sub-bahan</span><b id="prev-sub-cost">Rp 0</b></div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>Biaya proses</span><b id="prev-proses">Rp 0</b></div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>Total per batch</span><b id="prev-total">Rp 0</b></div>
+            <div style="display:flex;justify-content:space-between;font-weight:700;padding-top:6px;border-top:1px dashed #FDE68A"><span>Harga per satuan otomatis</span><span id="prev-per-satuan" style="color:#92400E">Rp 0</span></div>
+          </div>
+        </div>
+      </div>
+
       <div class="form-group"><label class="form-lbl">Kategori</label>
-        <select class="fi" id="bahan-kategori"><option>Bahan Pokok</option><option>Bumbu</option><option>Sayuran</option><option>Protein</option><option>Minuman</option><option>Lainnya</option></select>
+        <select class="fi" id="bahan-kategori"><option>Bahan Pokok</option><option>Bumbu</option><option>Sayuran</option><option>Protein</option><option>Minuman</option><option>Bahan Olahan</option><option>Lainnya</option></select>
       </div>
     </div>
-    <div class="modal-actions"><button class="btn btn-primary" onclick="simpanBahan()">Simpan</button><button class="btn" onclick="closeModal('modal-bahan')">Batal</button></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="simpanBahan()">Simpan</button>
+      <button class="btn" onclick="closeModal('modal-bahan')">Batal</button>
+    </div>
   </div>
 </div>
 
