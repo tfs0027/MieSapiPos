@@ -687,6 +687,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         <div class="card">
           <div class="card-hd"><span class="card-title">Riwayat Shift</span>
             <span id="manual-peng-btn-wrap"></span>
+            <button class="btn btn-sm" onclick="syncShiftHistory()" style="font-size:11px">🔄 Muat Ulang Riwayat</button>
           </div>
           <div class="tbl-wrap"><table><thead><tr><th>Shift</th><th>Kasir</th><th>Tanggal</th><th>Buka</th><th>Tutup</th><th>Penjualan</th><th>Pengeluaran</th><th>Laba Bersih</th><th>Online</th><th>Selisih Kas</th><th>Aksi</th></tr></thead><tbody id="shift-hist"></tbody></table></div>
         </div>
@@ -5528,18 +5529,21 @@ async function autoSyncFromSupabase() {
 
     // 8. Shifts
     try {
+      // Query tanpa filter created_at — gunakan waktu_buka_iso atau tanggal sebagai fallback
+      // Filter created_at sering gagal jika saat insert tidak ada created_at
       var shRes = await _sb.from('shifts').select('*')
-        .eq('restaurant_id', rid).gte('created_at', iso90)
-        .order('created_at', {ascending:false});
+        .eq('restaurant_id', rid)
+        .order('created_at', {ascending:false})
+        .limit(200);
       if (!shRes.error && shRes.data) {
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
         // Simpan shift aktif (open) yang mungkin belum tersync
         var openShift = ST.currentShift && ST.currentShift.status === 'open' ? ST.currentShift : null;
-        ST.shifts = shRes.data
-          .filter(function(sh){ return sh.status === 'closed'; })
+        var sbShifts = shRes.data
+          .filter(function(sh){ return sh.status !== 'open'; })
           .map(function(sh){
             return {
-              id: sh.shift_code, kasir: sh.kasir_nama||'', status: sh.status,
+              id: sh.shift_code, kasir: sh.kasir_nama||'', status: sh.status||'closed',
               tanggal: sh.tanggal||'', modalAwal: sh.modal_awal||0,
               totalPenjualan: sh.total_penjualan||0, totalPengeluaran: sh.total_pengeluaran||0,
               labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
@@ -5550,6 +5554,13 @@ async function autoSyncFromSupabase() {
               isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
             };
           });
+        // Merge: Supabase sebagai referensi + lokal yang belum tersync
+        var sbCodes = new Set(sbShifts.map(function(s){return s.id;}));
+        var localOnly = ST.shifts.filter(function(s){
+          return !sbCodes.has(s.id) && s.status !== 'open';
+        });
+        ST.shifts = sbShifts.concat(localOnly);
+        _dbg('[Shift] Loaded', ST.shifts.length, 'shifts dari Supabase +', localOnly.length, 'lokal');
       }
     } catch(e) { console.warn('sync shifts:', e.message); }
 
@@ -6483,6 +6494,49 @@ function renderShiftPage() {
   renderShiftHist();
 }
 
+async function syncShiftHistory() {
+  if (!_sb || !CFG.restaurantId) { showNotif('Belum terhubung Supabase','#E17055'); return; }
+  showNotif('⏳ Memuat riwayat shift...','#6C5CE7');
+  try {
+    var rid = CFG.restaurantId;
+    var res = await _sb.from('shifts').select('*')
+      .eq('restaurant_id', rid)
+      .order('created_at', {ascending: false})
+      .limit(500);
+    if (res.error) throw res.error;
+    if (!res.data || !res.data.length) {
+      showNotif('Tidak ada riwayat shift di Supabase','#F59E0B'); 
+      renderShiftHist();
+      return;
+    }
+    var sbShifts = res.data
+      .filter(function(sh){ return sh.status !== 'open'; })
+      .map(function(sh){
+        return {
+          id: sh.shift_code||sh.id, kasir: sh.kasir_nama||'', status: sh.status||'closed',
+          tanggal: sh.tanggal||'', modalAwal: sh.modal_awal||0,
+          totalPenjualan: sh.total_penjualan||0, totalPengeluaran: sh.total_pengeluaran||0,
+          labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
+          transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
+          kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
+          totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
+          waktuTutup: sh.waktu_tutup||'', isoOpen: sh.waktu_buka_iso||null,
+          isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
+        };
+      });
+    // Merge dengan data lokal yang belum ada di Supabase
+    var sbCodes = new Set(sbShifts.map(function(s){return s.id;}));
+    var localOnly = ST.shifts.filter(function(s){return !sbCodes.has(s.id) && s.status!=='open';});
+    ST.shifts = sbShifts.concat(localOnly);
+    saveShiftLocal();
+    renderShiftHist();
+    showNotif('✅ '+ST.shifts.length+' riwayat shift dimuat','#00B894');
+  } catch(e) {
+    showNotif('Gagal: '+e.message,'#E17055');
+    console.error('syncShiftHistory:', e);
+  }
+}
+
 function shiftTab(tab, btn) {
   document.querySelectorAll('.shift-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -6795,7 +6849,10 @@ function renderShiftHist() {
       ? '<button class="btn btn-danger btn-sm" onclick="openManualPengModal()" style="font-size:11px">📝 Input Pengeluaran Manual</button>'
       : '';
   }
-  const closed = ST.shifts.filter(s=>s.status==='closed');
+  // Tampilkan semua shift yang sudah selesai (closed atau apapun statusnya selain open aktif)
+  const closed = ST.shifts.filter(function(s){
+    return s.status==='closed' || (s.status && s.status!=='open');
+  });
   $('shift-hist').innerHTML = closed.length
     ? closed.map(s => {
         const sc=s.selisih===0?'b-green':s.selisih>0?'b-blue':'b-red';
@@ -7682,8 +7739,8 @@ async function pullAllFromSupabase() {
     var d90s = new Date(); d90s.setDate(d90s.getDate()-90);
     var { data: shifts, error: e5 } = await _sb.from('shifts')
       .select('*').eq('restaurant_id', rid)
-      .gte('created_at', d90s.toISOString())
-      .order('created_at', {ascending: false});
+      .order('created_at', {ascending: false})
+      .limit(200);
     if (!e5 && shifts && shifts.length) {
       var existingCodes = ST.shifts.map(function(s){return s.id;});
       shifts.forEach(function(sh) {
@@ -7843,6 +7900,20 @@ async function sbSyncShift(sh) {
   if (!_sb || !CFG.restaurantId) return;
   var rid = CFG.restaurantId;
   try {
+    // Bangun created_at dari isoOpen atau tanggal+waktuBuka shift
+    var _shCreatedAt = (function(){
+      if(sh.isoOpen) return sh.isoOpen;
+      try {
+        var ts = parseTanggalShift(sh.tanggal);
+        if(ts){
+          var d=new Date(ts);
+          var tp=(sh.waktuBuka||'00:00').replace(/[.:]/g,':').split(':');
+          d.setHours(parseInt(tp[0])||0,parseInt(tp[1])||0,0,0);
+          if(!isNaN(d)) return d.toISOString();
+        }
+      }catch(e){}
+      return new Date().toISOString();
+    })();
     var data = {
       restaurant_id: rid,
       shift_code: sh.id,
@@ -7850,6 +7921,7 @@ async function sbSyncShift(sh) {
       modal_awal: sh.modalAwal||0,
       status: sh.status||'open',
       tanggal: sh.tanggal||'',
+      created_at: _shCreatedAt,
       waktu_buka: sh.waktuBuka||'',
       waktu_tutup: sh.waktuTutup||null,
       waktu_buka_iso: sh.isoOpen||null,
