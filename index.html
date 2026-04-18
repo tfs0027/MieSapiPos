@@ -1669,6 +1669,139 @@ tr:hover td{background:rgba(108,92,231,.03)}
   </div>
 </div>
 
+    <!-- KEUANGAN HARIAN PAGE -->
+    <div class="page" id="page-keuangan">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:16px;font-weight:700">&#128181; Keuangan Harian</div>
+          <div style="font-size:11px;color:var(--txt2)">Rekap arus kas, saldo, penarikan &amp; setoran</div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="openMutasiModal('setoran')" id="btn-setoran" style="display:none">+ Setoran / Penarikan</button>
+      </div>
+
+      <!-- Filter periode -->
+      <div class="tab-bar" style="display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px">
+        <button class="shift-tab active" id="keu-tab-hari"   onclick="setKeuPeriode('hari',this)">Hari ini</button>
+        <button class="shift-tab"        id="keu-tab-kemarin" onclick="setKeuPeriode('kemarin',this)">Kemarin</button>
+        <button class="shift-tab"        id="keu-tab-minggu" onclick="setKeuPeriode('minggu',this)">7 hari</button>
+        <button class="shift-tab"        id="keu-tab-bulan"  onclick="setKeuPeriode('bulan',this)">Bulan ini</button>
+        <button class="shift-tab"        id="keu-tab-custom" onclick="setKeuPeriode('custom',this)">Custom</button>
+      </div>
+      <div id="keu-custom-range" style="display:none;gap:8px;margin-bottom:12px;flex-wrap:wrap" class="frow">
+        <input type="date" class="fi" id="keu-dari" style="flex:1" onchange="renderKeuanganPage()">
+        <input type="date" class="fi" id="keu-sampai" style="flex:1" onchange="renderKeuanganPage()">
+      </div>
+
+      <!-- Saldo awal box -->
+      <div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:11px;color:var(--green-dk);font-weight:600">SALDO AWAL</div>
+            <div style="font-size:22px;font-weight:700;color:var(--green-dk)" id="keu-saldo-awal">Rp 0</div>
+            <div style="font-size:10px;color:var(--green-dk);opacity:.7" id="keu-saldo-awal-src">dari saldo akhir kemarin</div>
+          </div>
+          <div id="keu-edit-saldo-btn" style="display:none">
+            <button class="btn btn-sm" onclick="openEditSaldoAwal()" style="font-size:11px;border-color:#0F6E56;color:#0F6E56">&#9999; Edit Saldo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 Metric cards -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div class="metric" style="background:var(--green-bg)">
+          <div class="metric-lbl">Pemasukan</div>
+          <div class="metric-val" id="keu-pemasukan" style="color:var(--green-dk);font-size:18px">Rp 0</div>
+          <div id="keu-pemasukan-sub" style="font-size:10px;color:var(--green-dk);opacity:.7">0 transaksi</div>
+        </div>
+        <div class="metric" style="background:var(--red-bg,#FEE2E2)">
+          <div class="metric-lbl">Pengeluaran</div>
+          <div class="metric-val" id="keu-pengeluaran" style="color:var(--red-dk);font-size:18px">Rp 0</div>
+          <div id="keu-pengeluaran-sub" style="font-size:10px;color:var(--red-dk);opacity:.7">0 item</div>
+        </div>
+        <div class="metric">
+          <div class="metric-lbl">Laba bersih</div>
+          <div class="metric-val" id="keu-laba" style="font-size:18px">Rp 0</div>
+          <div id="keu-margin" style="font-size:10px;color:var(--txt3)">margin 0%</div>
+        </div>
+        <div class="metric" style="background:var(--accent-bg)">
+          <div class="metric-lbl">Estimasi saldo akhir</div>
+          <div class="metric-val" id="keu-saldo-akhir" style="color:var(--accent);font-size:18px">Rp 0</div>
+          <div style="font-size:10px;color:var(--accent);opacity:.7">kas + laba - penarikan</div>
+        </div>
+      </div>
+
+      <!-- Rincian pemasukan -->
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#128200; Rincian Pemasukan</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">&#128722; Penjualan kasir</span>
+          <span style="font-weight:600;color:var(--green-dk)" id="keu-kasir-rev">Rp 0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">&#128665; Pesanan online</span>
+          <span style="font-weight:600;color:var(--green-dk)" id="keu-online-rev">Rp 0</span>
+        </div>
+        <div id="keu-setoran-masuk-row" style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">&#8679; Setoran masuk</span>
+          <span style="font-weight:600;color:var(--green-dk)" id="keu-setoran-masuk">Rp 0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:8px;border-top:1.5px solid var(--brd)">
+          <span>Total masuk</span><span style="color:var(--green-dk)" id="keu-total-masuk">Rp 0</span>
+        </div>
+      </div>
+
+      <!-- Rincian pengeluaran -->
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#128197; Rincian Pengeluaran</div>
+        <div id="keu-peng-detail"></div>
+        <div id="keu-penarikan-row" style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">&#8681; Penarikan kas</span>
+          <span style="font-weight:600;color:var(--red-dk)" id="keu-penarikan">Rp 0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:8px;border-top:1.5px solid var(--brd)">
+          <span>Total keluar</span><span style="color:var(--red-dk)" id="keu-total-keluar">Rp 0</span>
+        </div>
+      </div>
+
+      <!-- Rekap kas -->
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#128200; Rekap Kas Harian</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">Saldo awal</span>
+          <span id="keu-rekap-awal">Rp 0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">+ Pemasukan</span>
+          <span style="color:var(--green-dk)" id="keu-rekap-masuk">Rp 0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">- Pengeluaran operasional</span>
+          <span style="color:var(--red-dk)" id="keu-rekap-peng">Rp 0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
+          <span style="color:var(--txt2)">- Penarikan / setoran bank</span>
+          <span style="color:var(--red-dk)" id="keu-rekap-penarikan">Rp 0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding-top:10px;margin-top:4px;border-top:2px solid var(--brd)">
+          <span>Estimasi saldo akhir</span>
+          <span id="keu-rekap-akhir" style="color:var(--accent)">Rp 0</span>
+        </div>
+      </div>
+
+      <!-- Riwayat mutasi kas -->
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700">&#128260; Mutasi Kas</div>
+          <div id="keu-mutasi-add-btn" style="display:none">
+            <button class="btn btn-sm" onclick="openMutasiModal('setoran')" style="font-size:11px">+ Catat</button>
+          </div>
+        </div>
+        <div id="keu-mutasi-list"><div style="text-align:center;padding:20px;color:var(--txt3);font-size:12px">Belum ada mutasi kas</div></div>
+      </div>
+
+    </div>
+
+
 <!-- MODALS -->
 
 <div class="modal-wrap" id="split-modal">
@@ -2793,6 +2926,7 @@ function doLogin(u) {
       if (!ST.transactions.length) loadShiftLocal();
       loadSubscription();
       loadSystemConfig();
+      loadKeuMutasiLocal();
       checkForceLogout();
       startRealtimeOrders();
       autoSyncFromSupabase(); // sync semua data dari Supabase saat login/refresh
@@ -2850,6 +2984,7 @@ const NAV_ITEMS = [
   {id:'online-order',  label:'Pesanan Online',        icon:'🛵', perm:'online-order', sec:'Operasional Online'},
   {id:'rekrutmen',     label:'Rekrutmen',             icon:'📝', perm:'rekrutmen',    sec:'SDM & Rekrutmen'},
   {id:'cogs',          label:'COGS & Margin',         icon:'💰', perm:'laporan',      sec:'Laporan'},
+  {id:'keuangan',      label:'Keuangan Harian',       icon:'💵', perm:'laporan',      sec:null},
   {id:'users',         label:'Manajemen User',        icon:'👥', perm:'users',        sec:'Pengaturan'},
   {id:'settings',      label:'Pengaturan Toko',       icon:'⚙️', perm:'settings',    sec:null},
 ];
@@ -2857,7 +2992,7 @@ const PAGE_TITLES = {
   order:'🛒 Kasir & Order', meja:'🪑 Manajemen Meja', shift:'🔓 Buka / Tutup Kasir',
   menu:'🍽️ Menu & Harga', stok:'📦 Stok Bahan Baku', laporan:'📊 Laporan Penjualan',
   riwayat:'📋 Riwayat Transaksi', 'online-order':'🛵 Pesanan Online',
-  rekrutmen:'📝 Rekrutmen & Pelamar', cogs:'💰 COGS & Margin', users:'👥 Manajemen User',
+  rekrutmen:'📝 Rekrutmen & Pelamar', cogs:'💰 COGS & Margin', keuangan:'💵 Keuangan Harian', users:'👥 Manajemen User',
   settings:'⚙️ Pengaturan Toko', locked:'🔒 Akses Ditolak'
 };
 
@@ -2949,6 +3084,7 @@ function nav(p) {
   }
   if (p === 'rekrutmen') { renderRekrutmenPage(); }
   if (p === 'cogs') { renderCogsPage(); }
+  if (p === 'keuangan') { renderKeuanganPage(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
   if (p === 'shift') renderShiftPage();
   if (p === 'settings') renderSettings();
@@ -12296,6 +12432,363 @@ function renderCogsLaporan(){
   var alertEl=document.getElementById('cogs-lap-alert');
   if(alertEl&&lowMargin.length){alertEl.innerHTML='<div style="background:var(--red-bg,#FEE2E2);border-radius:var(--radius,8px);padding:10px 12px;font-size:12px;color:var(--red-dk,#B91C1C)"><b>&#9888; Margin rendah (&lt;30%):</b> '+lowMargin.map(function(r){return escHtml(r.m.name)+' ('+r.margin+'%)';}).join(', ')+'</div>';}
   else if(alertEl)alertEl.innerHTML='';
+}
+
+// ════════════════════════════════════════════════════════════════
+// KEUANGAN HARIAN
+// ════════════════════════════════════════════════════════════════
+var _keuPeriode = 'hari';
+var _keuSaldoAwal = 0;          // bisa di-override manual oleh admin
+var _keuSaldoAwalManual = null; // jika admin override, nilai disimpan di sini
+var _keuMutasi = [];            // [{id, tipe:'setoran'|'penarikan', nominal, ket, waktu, tanggal, kasir}]
+var _keuSaldoKey = 'wkpos_saldo_awal_';
+
+// Simpan/load saldo awal manual ke localStorage (per hari)
+function _keuSaldoStorageKey(dateStr) {
+  return _keuSaldoKey + (CFG.restaurantId||'x') + '_' + (dateStr||getTodayStr());
+}
+function getTodayStr() {
+  var d = new Date(); 
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function loadKeuSaldoManual(dateStr) {
+  try { return JSON.parse(localStorage.getItem(_keuSaldoStorageKey(dateStr))); } catch(e) { return null; }
+}
+function saveKeuSaldoManual(dateStr, val) {
+  try { localStorage.setItem(_keuSaldoStorageKey(dateStr), JSON.stringify(val)); } catch(e) {}
+}
+
+// Hitung saldo akhir dari shift kemarin (auto)
+function getAutoSaldoAwal() {
+  // Ambil dari kasFisik shift terakhir yang ditutup kemarin atau sebelumnya
+  var closed = ST.shifts.filter(function(s){ return s.status !== 'open'; });
+  if (!closed.length) return 0;
+  // Shift terbaru (urutan pertama setelah sort)
+  var latest = closed.slice().sort(function(a,b){
+    var da = parseTanggalShift(a.tanggal) || ''; 
+    var db = parseTanggalShift(b.tanggal) || '';
+    return db > da ? 1 : -1;
+  })[0];
+  if (!latest) return 0;
+  // Pakai kasFisik (kas yang dihitung saat tutup) sebagai saldo awal
+  return latest.kasFisik || latest.ekspektasiKas || 0;
+}
+
+function getKeuDateRange() {
+  var now = new Date();
+  var dari, sampai;
+  var today = getTodayStr();
+  if (_keuPeriode === 'hari') {
+    dari = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    sampai = new Date(dari); sampai.setDate(sampai.getDate()+1);
+  } else if (_keuPeriode === 'kemarin') {
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    dari = new Date(sampai); dari.setDate(dari.getDate()-1);
+  } else if (_keuPeriode === 'minggu') {
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-7);
+  } else if (_keuPeriode === 'bulan') {
+    sampai = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+    dari = new Date(sampai); dari.setDate(dari.getDate()-30);
+  } else if (_keuPeriode === 'custom') {
+    var dEl=$('keu-dari'), sEl=$('keu-sampai');
+    dari = dEl&&dEl.value ? new Date(dEl.value) : null;
+    sampai = sEl&&sEl.value ? new Date(sEl.value+'T23:59:59') : null;
+  }
+  return {dari: dari, sampai: sampai};
+}
+
+function filterKeuTrx() {
+  var rng = getKeuDateRange();
+  return ST.transactions.filter(function(t) {
+    if (t.voided) return false;
+    var d = parseTrxDate(t.date, t.time);
+    if (isNaN(d)) return false;
+    if (rng.dari && d < rng.dari) return false;
+    if (rng.sampai && d > rng.sampai) return false;
+    return true;
+  });
+}
+
+function filterKeuPengeluaran() {
+  var rng = getKeuDateRange();
+  var all = getAllPengeluaran();
+  return all.filter(function(p) {
+    var d = parseTrxDate(p.tanggal, p.waktu);
+    if (isNaN(d)) return false;
+    if (rng.dari && d < rng.dari) return false;
+    if (rng.sampai && d > rng.sampai) return false;
+    return true;
+  });
+}
+
+function filterKeuOnlineOrders() {
+  var rng = getKeuDateRange();
+  var cache = ST._onlineOrdersCache || [];
+  return cache.filter(function(o) {
+    if (!o.created_at) return false;
+    var d = new Date(o.created_at);
+    if (isNaN(d)) return false;
+    if (rng.dari && d < rng.dari) return false;
+    if (rng.sampai && d > rng.sampai) return false;
+    return true;
+  });
+}
+
+function filterKeuMutasi() {
+  var rng = getKeuDateRange();
+  return _keuMutasi.filter(function(m) {
+    var d = parseTrxDate(m.tanggal, m.waktu);
+    if (isNaN(d)) return false;
+    if (rng.dari && d < rng.dari) return false;
+    if (rng.sampai && d > rng.sampai) return false;
+    return true;
+  });
+}
+
+function setKeuPeriode(p, btn) {
+  _keuPeriode = p;
+  document.querySelectorAll('[id^="keu-tab-"]').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  var customEl = $('keu-custom-range');
+  if (customEl) customEl.style.display = p==='custom' ? 'flex' : 'none';
+  if (p !== 'custom') renderKeuanganPage();
+}
+
+function renderKeuanganPage() {
+  // Tampilkan tombol admin only
+  var isAdmin = ST.cu && ST.cu.role === 'admin';
+  var btnSetoran = $('btn-setoran');
+  var btnEditSaldo = $('keu-edit-saldo-btn');
+  var btnMutasiAdd = $('keu-mutasi-add-btn');
+  if (btnSetoran) btnSetoran.style.display = isAdmin ? '' : 'none';
+  if (btnEditSaldo) btnEditSaldo.style.display = isAdmin ? '' : 'none';
+  if (btnMutasiAdd) btnMutasiAdd.style.display = isAdmin ? '' : 'none';
+
+  // Tentukan saldo awal
+  var dateKey = getTodayStr();
+  var manualSaldo = loadKeuSaldoManual(dateKey);
+  var saldoAwal = (manualSaldo !== null && manualSaldo !== undefined) 
+    ? manualSaldo 
+    : getAutoSaldoAwal();
+  
+  var saldoSrc = $('keu-saldo-awal-src');
+  if (saldoSrc) {
+    saldoSrc.textContent = (manualSaldo !== null) 
+      ? 'diisi manual oleh admin' 
+      : 'otomatis dari saldo akhir shift kemarin';
+  }
+  var saldoEl = $('keu-saldo-awal');
+  if (saldoEl) saldoEl.textContent = fmt(saldoAwal);
+
+  // Data
+  var trxs = filterKeuTrx();
+  var pengs = filterKeuPengeluaran();
+  var onlines = filterKeuOnlineOrders();
+  var mutasi = filterKeuMutasi();
+
+  var kasirRev = trxs.reduce(function(a,t){return a+t.total;},0);
+  var onlineRev = onlines.reduce(function(a,o){return a+(o.total||0);},0);
+  var setoranMasuk = mutasi.filter(function(m){return m.tipe==='setoran';}).reduce(function(a,m){return a+m.nominal;},0);
+  var penarikan = mutasi.filter(function(m){return m.tipe==='penarikan';}).reduce(function(a,m){return a+m.nominal;},0);
+
+  var totalPemasukan = kasirRev + onlineRev + setoranMasuk;
+  var totalPengeluaran = pengs.reduce(function(a,p){return a+p.nominal;},0);
+  var totalKeluar = totalPengeluaran + penarikan;
+  var labaBersih = kasirRev + onlineRev - totalPengeluaran;
+  var margin = (kasirRev+onlineRev) > 0 ? Math.round(labaBersih/(kasirRev+onlineRev)*100) : 0;
+  var saldoAkhir = saldoAwal + totalPemasukan - totalKeluar;
+
+  // Update metric cards
+  var el;
+  el=$('keu-pemasukan'); if(el) el.textContent=fmt(totalPemasukan);
+  el=$('keu-pemasukan-sub'); if(el) el.textContent=trxs.length+' trx kasir'+(onlines.length?' + '+onlines.length+' online':'');
+  el=$('keu-pengeluaran'); if(el) el.textContent=fmt(totalKeluar);
+  el=$('keu-pengeluaran-sub'); if(el) el.textContent=pengs.length+' item'+(penarikan?' + penarikan '+fmt(penarikan):'');
+  el=$('keu-laba'); if(el){ el.textContent=fmt(labaBersih); el.style.color=labaBersih>=0?'var(--green-dk)':'var(--red-dk)'; }
+  el=$('keu-margin'); if(el) el.textContent='margin '+margin+'%';
+  el=$('keu-saldo-akhir'); if(el){ el.textContent=fmt(saldoAkhir); el.style.color=saldoAkhir>=0?'var(--accent)':'var(--red-dk)'; }
+
+  // Pemasukan detail
+  el=$('keu-kasir-rev'); if(el) el.textContent=fmt(kasirRev);
+  el=$('keu-online-rev'); if(el) el.textContent=fmt(onlineRev);
+  el=$('keu-setoran-masuk'); if(el) el.textContent=fmt(setoranMasuk);
+  var setoranRow=$('keu-setoran-masuk-row'); if(setoranRow) setoranRow.style.display=setoranMasuk?'flex':'none';
+  el=$('keu-total-masuk'); if(el) el.textContent=fmt(totalPemasukan);
+
+  // Pengeluaran detail per kategori
+  var catMap={};
+  pengs.forEach(function(p){ catMap[p.kategori]=(catMap[p.kategori]||0)+p.nominal; });
+  var CAT_CLR={'Bahan Baku':'#E17055','Operasional':'#FDCB6E','Utilitas':'#74B9FF','Gaji / Upah':'#A29BFE','Pemeliharaan':'#00B894','Lain-lain':'#A8A5BE'};
+  var pengDetail=$('keu-peng-detail');
+  if (pengDetail) {
+    pengDetail.innerHTML = Object.keys(catMap).length 
+      ? Object.entries(catMap).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+          return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">'
+            +'<span style="color:var(--txt2)"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(CAT_CLR[e[0]]||'#888')+';margin-right:6px"></span>'+escHtml(e[0])+'</span>'
+            +'<span style="font-weight:600;color:var(--red-dk)">'+fmt(e[1])+'</span></div>';
+        }).join('')
+      : '<div style="font-size:12px;color:var(--txt3);padding:6px 0">Tidak ada pengeluaran operasional</div>';
+  }
+  el=$('keu-penarikan'); if(el) el.textContent=fmt(penarikan);
+  var penarikanRow=$('keu-penarikan-row'); if(penarikanRow) penarikanRow.style.display='flex';
+  el=$('keu-total-keluar'); if(el) el.textContent=fmt(totalKeluar);
+
+  // Rekap kas
+  el=$('keu-rekap-awal'); if(el) el.textContent=fmt(saldoAwal);
+  el=$('keu-rekap-masuk'); if(el) el.textContent='+'+fmt(totalPemasukan);
+  el=$('keu-rekap-peng'); if(el) el.textContent='-'+fmt(totalPengeluaran);
+  el=$('keu-rekap-penarikan'); if(el) el.textContent='-'+fmt(penarikan);
+  el=$('keu-rekap-akhir'); if(el){ el.textContent=fmt(saldoAkhir); el.style.color=saldoAkhir>=0?'var(--accent)':'var(--red-dk)'; }
+
+  // Riwayat mutasi
+  renderKeuMutasiList(mutasi);
+}
+
+function renderKeuMutasiList(mutasi) {
+  var el=$('keu-mutasi-list'); if(!el) return;
+  if (!mutasi.length) {
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--txt3);font-size:12px">Belum ada mutasi kas di periode ini</div>';
+    return;
+  }
+  el.innerHTML=mutasi.slice().reverse().map(function(m){
+    var isSetoran=m.tipe==='setoran';
+    var icon=isSetoran?'&#8679;':'&#8681;';
+    var clr=isSetoran?'var(--green-dk)':'var(--red-dk)';
+    var bg=isSetoran?'var(--green-bg)':'var(--red-bg,#FEE2E2)';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--brd2)">'
+      +'<div style="width:32px;height:32px;border-radius:var(--radius);background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:16px;color:'+clr+';flex-shrink:0">'+icon+'</div>'
+      +'<div style="flex:1">'
+        +'<div style="font-size:12px;font-weight:600">'+escHtml(m.ket||m.tipe)+'</div>'
+        +'<div style="font-size:10px;color:var(--txt3)">'+escHtml(m.waktu||'')+(m.tanggal?' · '+escHtml(m.tanggal):'')+(m.kasir?' · '+escHtml(m.kasir):'')+'</div>'
+      +'</div>'
+      +'<div style="font-weight:700;font-size:13px;color:'+clr+'">'+(isSetoran?'+':'-')+fmt(m.nominal)+'</div>'
+      +(ST.cu&&ST.cu.role==='admin'?'<button data-mid="'+m.id+'" onclick="hapusKeuMutasi(this.dataset.mid)" style="border:none;background:none;cursor:pointer;color:var(--txt3);font-size:14px;padding:0 4px">&times;</button>':'')
+      +'</div>';
+  }).join('');
+}
+
+// ── Edit saldo awal (admin only) ────────────────────────────────────────────
+function openEditSaldoAwal() {
+  if (!ST.cu || ST.cu.role !== 'admin') { showNotif('Hanya admin yang bisa edit saldo awal','#E17055'); return; }
+  var dateKey = getTodayStr();
+  var current = loadKeuSaldoManual(dateKey) ?? getAutoSaldoAwal();
+  var val = prompt('Edit saldo awal hari ini (Rp):\n(Kosongkan untuk reset ke otomatis dari shift kemarin)', current || 0);
+  if (val === null) return; // batal
+  if (val.trim() === '') {
+    // Reset ke otomatis
+    localStorage.removeItem(_keuSaldoStorageKey(dateKey));
+    showNotif('✅ Saldo awal direset ke otomatis','#00B894');
+  } else {
+    var nominal = parseFloat(val.replace(/[^0-9]/g,''))||0;
+    saveKeuSaldoManual(dateKey, nominal);
+    showNotif('✅ Saldo awal diperbarui: '+fmt(nominal),'#00B894');
+  }
+  renderKeuanganPage();
+}
+
+// ── Modal setoran / penarikan ────────────────────────────────────────────────
+function openMutasiModal(tipeDefault) {
+  if (!ST.cu || ST.cu.role !== 'admin') { showNotif('Hanya admin yang bisa mencatat mutasi kas','#E17055'); return; }
+  var now = new Date();
+  var pad = function(n){return String(n).padStart(2,'0');};
+  var dateStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  var timeStr = pad(now.getHours())+':'+pad(now.getMinutes());
+
+  var modal = document.createElement('div');
+  modal.className = 'modal-wrap';
+  modal.id = 'mutasi-modal-wrap';
+  modal.innerHTML = '<div class="modal" style="max-width:440px">'
+    +'<div class="modal-hd"><h3>&#128260; Catat Mutasi Kas</h3><button class="modal-close" onclick="document.getElementById(\'mutasi-modal-wrap\').remove()">&#10005;</button></div>'
+    +'<div class="modal-body">'
+      +'<div class="form-group"><label class="form-lbl">Jenis</label>'
+        +'<select class="fi" id="mutasi-tipe">'
+          +'<option value="setoran"'+(tipeDefault==='setoran'?' selected':'')+'>&#8679; Setoran masuk (uang masuk dari luar)</option>'
+          +'<option value="penarikan"'+(tipeDefault==='penarikan'?' selected':'')+'>&#8681; Penarikan kas (setor bank, ambil modal, dll)</option>'
+        +'</select></div>'
+      +'<div class="form-group"><label class="form-lbl">Nominal (Rp) *</label><input class="fi" type="number" id="mutasi-nominal" placeholder="0" min="0"></div>'
+      +'<div class="form-group"><label class="form-lbl">Keterangan *</label><input class="fi" id="mutasi-ket" placeholder="mis: setor bank BCA, ambil modal, dll"></div>'
+      +'<div class="frow">'
+        +'<div class="form-group"><label class="form-lbl">Tanggal</label><input class="fi" type="date" id="mutasi-tanggal" value="'+dateStr+'"></div>'
+        +'<div class="form-group"><label class="form-lbl">Waktu</label><input class="fi" type="time" id="mutasi-waktu" value="'+timeStr+'"></div>'
+      +'</div>'
+    +'</div>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-primary" onclick="simpanKeuMutasi()">&#128190; Simpan</button>'
+      +'<button class="btn" onclick="document.getElementById(\'mutasi-modal-wrap\').remove()">Batal</button>'
+    +'</div>'
+  +'</div>';
+  document.body.appendChild(modal);
+  modal.classList.add('open');
+}
+
+function simpanKeuMutasi() {
+  var tipe = ($('mutasi-tipe')||{}).value;
+  var nominal = parseFloat(($('mutasi-nominal')||{}).value)||0;
+  var ket = ($('mutasi-ket')||{value:''}).value.trim();
+  var tanggal = ($('mutasi-tanggal')||{value:''}).value;
+  var waktu = ($('mutasi-waktu')||{value:''}).value;
+  if (!nominal || nominal <= 0) { showNotif('Isi nominal','#E17055'); return; }
+  if (!ket) { showNotif('Isi keterangan','#E17055'); return; }
+
+  // Format tanggal ke display format
+  var tglDisplay = tanggal;
+  if (tanggal) {
+    var parts = tanggal.split('-');
+    var mn = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    tglDisplay = parseInt(parts[2])+' '+mn[parseInt(parts[1])-1]+' '+parts[0];
+  }
+
+  var entry = {
+    id: 'MUT-'+Date.now(),
+    tipe: tipe, nominal: nominal, ket: ket,
+    waktu: waktu, tanggal: tglDisplay,
+    tanggalISO: tanggal,
+    kasir: ST.cu ? ST.cu.name : ''
+  };
+  _keuMutasi.push(entry);
+  saveKeuMutasiLocal();
+
+  // Sync ke Supabase expenses (penarikan sebagai pengeluaran kategori khusus)
+  if (_sb && CFG.restaurantId) {
+    _sb.from('expenses').insert({
+      restaurant_id: CFG.restaurantId,
+      nama: (tipe==='penarikan'?'[PENARIKAN] ':'[SETORAN] ')+ket,
+      nominal: nominal,
+      kategori: tipe==='penarikan'?'Penarikan Kas':'Setoran Masuk',
+      keterangan: ket,
+      waktu: waktu,
+      tanggal: tglDisplay,
+      kasir_nama: ST.cu ? ST.cu.name : '',
+      shift_code: ST.currentShift ? ST.currentShift.id : null
+    }).then(function(){});
+  }
+
+  var wrap = document.getElementById('mutasi-modal-wrap');
+  if (wrap) wrap.remove();
+  renderKeuanganPage();
+  showNotif('✅ Mutasi kas dicatat: '+(tipe==='penarikan'?'-':'+')+'Rp'+nominal.toLocaleString('id-ID'), tipe==='penarikan'?'#E17055':'#00B894');
+}
+
+function hapusKeuMutasi(id) {
+  if (!confirm('Hapus mutasi kas ini?')) return;
+  _keuMutasi = _keuMutasi.filter(function(m){return m.id!==id;});
+  saveKeuMutasiLocal();
+  renderKeuanganPage();
+  showNotif('Mutasi dihapus','#A8A5BE');
+}
+
+function saveKeuMutasiLocal() {
+  try {
+    localStorage.setItem('wkpos_keu_mutasi_'+(CFG.restaurantId||'x'), JSON.stringify(_keuMutasi));
+  } catch(e) {}
+}
+
+function loadKeuMutasiLocal() {
+  try {
+    var raw = localStorage.getItem('wkpos_keu_mutasi_'+(CFG.restaurantId||'x'));
+    if (raw) _keuMutasi = JSON.parse(raw) || [];
+  } catch(e) { _keuMutasi = []; }
 }
 
 async function loadCogsData(){
