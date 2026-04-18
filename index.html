@@ -3032,6 +3032,11 @@ function buildSidebar() {
 }
 
 function nav(p) {
+  // Tutup semua dropdown yang mungkin terbuka
+  var exportMenu = $('keu-export-menu');
+  if (exportMenu) exportMenu.style.display = 'none';
+  var chevron = $('keu-chevron');
+  if (chevron) chevron.style.transform = '';
   // Cek permission sebelum tampilkan halaman
   var navItem = NAV_ITEMS.find(function(item){ return item.id === p; });
   if (navItem && !can(navItem.perm)) {
