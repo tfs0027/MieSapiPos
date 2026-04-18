@@ -444,6 +444,9 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .calc-key.eq{background:var(--accent);color:#fff}
 .calc-key.fill{background:var(--green-bg);color:var(--green-dk);font-size:12px}
 .keu-export-btn{display:block;width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:13px;color:var(--txt);cursor:pointer;font-family:var(--font-sans,inherit)}.keu-export-btn:hover{background:var(--bg2)}
+.keu-export-btn2{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:7px 8px;border:none;background:none;font-size:13px;color:var(--txt);cursor:pointer;font-family:inherit;border-radius:8px;transition:background .1s}
+.keu-export-btn2:hover{background:var(--bg2)}
+.keu-export-btn2 span:last-child{font-weight:500}
 .bahan-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)}
 .bahan-row:last-child{border-bottom:none}
 .margin-badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;display:inline-block}
@@ -1597,13 +1600,32 @@ tr:hover td{background:rgba(108,92,231,.03)}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-sm btn-primary" onclick="openMutasiModal('setoran')" id="btn-setoran" style="display:none">+ Setoran / Penarikan</button>
-          <div style="position:relative" id="keu-export-wrap">
-            <button class="btn btn-sm" onclick="toggleKeuExportMenu()" style="font-size:11px">&#128229; Export &#9660;</button>
-            <div id="keu-export-menu" style="display:none;position:absolute;right:0;top:32px;background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:100;min-width:180px;overflow:hidden">
-              <button onclick="keuExportCSV()" class="keu-export-btn">&#128202; Download CSV</button>
-              <button onclick="keuCetak()" class="keu-export-btn">&#128424; Cetak / PDF</button>
-              <button onclick="keuKirimWA()" class="keu-export-btn" style="color:#25D366">&#128172; Kirim via WhatsApp</button>
-              <button onclick="keuKirimEmail()" class="keu-export-btn">&#9993; Kirim via Email</button>
+          <div id="keu-export-wrap" style="position:relative;display:inline-block">
+            <button id="keu-export-btn-main" onclick="toggleKeuExportMenu()" style="display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--brd);border-radius:var(--radius-lg);background:var(--bg);color:var(--txt);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0"><path d="M7 1v8M4 6l3 3 3-3M2 10v1.5A.5.5 0 002.5 12h9a.5.5 0 00.5-.5V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Export
+              <svg id="keu-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" style="transition:transform .2s;flex-shrink:0"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="keu-export-menu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:9999;min-width:200px;overflow:hidden;transform-origin:top right">
+              <div style="padding:6px">
+                <button onclick="keuExportCSV()" class="keu-export-btn2">
+                  <span style="width:28px;height:28px;border-radius:6px;background:var(--green-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">&#128202;</span>
+                  <span>Download CSV</span>
+                </button>
+                <button onclick="keuCetak()" class="keu-export-btn2">
+                  <span style="width:28px;height:28px;border-radius:6px;background:var(--blue-bg,#EFF6FF);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">&#128424;</span>
+                  <span>Cetak / PDF</span>
+                </button>
+                <div style="height:1px;background:var(--brd);margin:4px 0"></div>
+                <button onclick="keuKirimWA()" class="keu-export-btn2">
+                  <span style="width:28px;height:28px;border-radius:6px;background:#DCFCE7;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">&#128172;</span>
+                  <span>Kirim WhatsApp</span>
+                </button>
+                <button onclick="keuKirimEmail()" class="keu-export-btn2">
+                  <span style="width:28px;height:28px;border-radius:6px;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">&#9993;</span>
+                  <span>Kirim Email</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -12755,21 +12777,31 @@ function loadKeuMutasiLocal() {
 // ── Keuangan Export Functions ─────────────────────────────────────────────
 function toggleKeuExportMenu() {
   var menu = $('keu-export-menu');
+  var chevron = $('keu-chevron');
   if (!menu) return;
   var isOpen = menu.style.display !== 'none';
-  if (isOpen) { menu.style.display = 'none'; return; }
-  // Posisikan menu berdasarkan posisi tombol Export
-  var btn = document.querySelector('[onclick="toggleKeuExportMenu()"]');
-  if (btn) {
-    var rect = btn.getBoundingClientRect();
-    menu.style.top = (rect.bottom + 4) + 'px';
-    menu.style.right = (window.innerWidth - rect.right) + 'px';
+  if (isOpen) {
+    menu.style.display = 'none';
+    if (chevron) chevron.style.transform = '';
+    return;
   }
   menu.style.display = 'block';
+  if (chevron) chevron.style.transform = 'rotate(180deg)';
+  // Animasi masuk
+  menu.style.opacity = '0';
+  menu.style.transform = 'scale(.96) translateY(-4px)';
+  menu.style.transition = 'opacity .15s, transform .15s';
+  requestAnimationFrame(function(){
+    menu.style.opacity = '1';
+    menu.style.transform = 'scale(1) translateY(0)';
+  });
+  // Tutup saat klik luar
   setTimeout(function() {
     document.addEventListener('click', function closeMenu(e) {
-      if (!menu.contains(e.target) && e.target !== btn) {
+      var wrap = $('keu-export-wrap');
+      if (wrap && !wrap.contains(e.target)) {
         menu.style.display = 'none';
+        if (chevron) chevron.style.transform = '';
         document.removeEventListener('click', closeMenu);
       }
     });
