@@ -443,6 +443,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
 .calc-key.op{background:var(--accent-bg);color:var(--accent)}
 .calc-key.eq{background:var(--accent);color:#fff}
 .calc-key.fill{background:var(--green-bg);color:var(--green-dk);font-size:12px}
+.keu-export-btn{display:block;width:100%;text-align:left;padding:10px 16px;border:none;background:none;font-size:13px;color:var(--txt);cursor:pointer;font-family:var(--font-sans,inherit)}.keu-export-btn:hover{background:var(--bg2)}
 .bahan-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)}
 .bahan-row:last-child{border-bottom:none}
 .margin-badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;display:inline-block}
@@ -1594,7 +1595,18 @@ tr:hover td{background:rgba(108,92,231,.03)}
           <div style="font-size:16px;font-weight:700">&#128181; Keuangan Harian</div>
           <div style="font-size:11px;color:var(--txt2)">Rekap arus kas, saldo, penarikan &amp; setoran</div>
         </div>
-        <button class="btn btn-sm btn-primary" onclick="openMutasiModal('setoran')" id="btn-setoran" style="display:none">+ Setoran / Penarikan</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-sm btn-primary" onclick="openMutasiModal('setoran')" id="btn-setoran" style="display:none">+ Setoran / Penarikan</button>
+          <div style="position:relative" id="keu-export-wrap">
+            <button class="btn btn-sm" onclick="toggleKeuExportMenu()" style="font-size:11px">&#128229; Export &#9660;</button>
+            <div id="keu-export-menu" style="display:none;position:absolute;right:0;top:32px;background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:100;min-width:180px;overflow:hidden">
+              <button onclick="keuExportCSV()" class="keu-export-btn">&#128202; Download CSV</button>
+              <button onclick="keuCetak()" class="keu-export-btn">&#128424; Cetak / PDF</button>
+              <button onclick="keuKirimWA()" class="keu-export-btn" style="color:#25D366">&#128172; Kirim via WhatsApp</button>
+              <button onclick="keuKirimEmail()" class="keu-export-btn">&#9993; Kirim via Email</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div style="display:flex;gap:4px;margin-bottom:14px;overflow-x:auto">
         <button class="shift-tab active" id="keu-tab-hari"    onclick="setKeuPeriode('hari',this)">Hari ini</button>
@@ -12739,6 +12751,261 @@ function loadKeuMutasiLocal() {
     if (raw) _keuMutasi = JSON.parse(raw) || [];
   } catch(e) { _keuMutasi = []; }
 }
+
+// ── Keuangan Export Functions ─────────────────────────────────────────────
+function toggleKeuExportMenu() {
+  var menu = $('keu-export-menu');
+  if (!menu) return;
+  var isOpen = menu.style.display !== 'none';
+  if (isOpen) { menu.style.display = 'none'; return; }
+  // Posisikan menu berdasarkan posisi tombol Export
+  var btn = document.querySelector('[onclick="toggleKeuExportMenu()"]');
+  if (btn) {
+    var rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+  }
+  menu.style.display = 'block';
+  setTimeout(function() {
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target) && e.target !== btn) {
+        menu.style.display = 'none';
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+  }, 10);
+}
+
+function _buildKeuanganData() {
+  var trxs = filterKeuTrx();
+  var pengs = filterKeuPengeluaran();
+  var onlines = filterKeuOnlineOrders();
+  var mutasi = filterKeuMutasi();
+  var dateKey = getTodayStr();
+  var manualSaldo = loadKeuSaldoManual(dateKey);
+  var saldoAwal = (manualSaldo !== null) ? manualSaldo : getAutoSaldoAwal();
+
+  var kasirRev = trxs.reduce(function(a,t){return a+t.total;},0);
+  var onlineRev = onlines.reduce(function(a,o){return a+(o.total||0);},0);
+  var setoranMasuk = mutasi.filter(function(m){return m.tipe==='setoran';}).reduce(function(a,m){return a+m.nominal;},0);
+  var penarikan = mutasi.filter(function(m){return m.tipe==='penarikan';}).reduce(function(a,m){return a+m.nominal;},0);
+  var totalPemasukan = kasirRev + onlineRev + setoranMasuk;
+  var totalPengeluaran = pengs.reduce(function(a,p){return a+p.nominal;},0);
+  var totalKeluar = totalPengeluaran + penarikan;
+  var labaBersih = kasirRev + onlineRev - totalPengeluaran;
+  var margin = (kasirRev+onlineRev)>0 ? Math.round(labaBersih/(kasirRev+onlineRev)*100) : 0;
+  var saldoAkhir = saldoAwal + totalPemasukan - totalKeluar;
+
+  // Per kategori pengeluaran
+  var catMap = {};
+  pengs.forEach(function(p){ catMap[p.kategori]=(catMap[p.kategori]||0)+p.nominal; });
+
+  var periodeLabel = {hari:'Hari ini ('+getTodayStr()+')',kemarin:'Kemarin',minggu:'7 hari terakhir',bulan:'Bulan ini',custom:'Custom'}[_keuPeriode]||_keuPeriode;
+
+  return {
+    toko: CFG.nama||'WarungKu', periodeLabel: periodeLabel,
+    tanggalCetak: new Date().toLocaleString('id-ID'),
+    saldoAwal, kasirRev, onlineRev, setoranMasuk, totalPemasukan,
+    catMap, totalPengeluaran, penarikan, totalKeluar,
+    labaBersih, margin, saldoAkhir,
+    trxCount: trxs.length, onlineCount: onlines.length,
+    mutasi: mutasi
+  };
+}
+
+function keuExportCSV() {
+  $('keu-export-menu').style.display='none';
+  var d = _buildKeuanganData();
+  var NL = '\n';
+  var rows = [];
+  rows.push(['LAPORAN KEUANGAN HARIAN - '+d.toko]);
+  rows.push(['Periode',d.periodeLabel]);
+  rows.push(['Dicetak',d.tanggalCetak]);
+  rows.push([]);
+  rows.push(['=== RINGKASAN ===']);
+  rows.push(['Saldo Awal',d.saldoAwal]);
+  rows.push([]);
+  rows.push(['--- PEMASUKAN ---']);
+  rows.push(['Penjualan Kasir',d.kasirRev,'('+d.trxCount+' transaksi)']);
+  rows.push(['Pesanan Online',d.onlineRev,'('+d.onlineCount+' order)']);
+  if(d.setoranMasuk) rows.push(['Setoran Masuk',d.setoranMasuk]);
+  rows.push(['TOTAL PEMASUKAN',d.totalPemasukan]);
+  rows.push([]);
+  rows.push(['--- PENGELUARAN ---']);
+  Object.entries(d.catMap).forEach(function(e){ rows.push([e[0],e[1]]); });
+  if(d.penarikan) rows.push(['Penarikan Kas',d.penarikan]);
+  rows.push(['TOTAL PENGELUARAN',d.totalKeluar]);
+  rows.push([]);
+  rows.push(['--- LABA & SALDO ---']);
+  rows.push(['Laba Bersih',d.labaBersih,'(margin '+d.margin+'%)']);
+  rows.push(['Estimasi Saldo Akhir',d.saldoAkhir]);
+  rows.push([]);
+  if(d.mutasi.length){
+    rows.push(['=== RIWAYAT MUTASI KAS ===']);
+    rows.push(['Tanggal','Waktu','Jenis','Keterangan','Nominal','Kasir']);
+    d.mutasi.forEach(function(m){
+      rows.push([m.tanggal||'',m.waktu||'',m.tipe,m.ket||'',m.tipe==='setoran'?m.nominal:-m.nominal,m.kasir||'']);
+    });
+  }
+
+  var csv = rows.map(function(row){
+    return row.map(function(cell){
+      var s=String(cell===null||cell===undefined?'':cell);
+      if(s.indexOf(',')>-1||s.indexOf('"')>-1||s.indexOf('\n')>-1) s='"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }).join(',');
+  }).join(NL);
+
+  var blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href=url; a.download='keuangan-harian-'+(getTodayStr())+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showNotif('✅ CSV berhasil diunduh','#00B894');
+}
+
+function keuCetak() {
+  $('keu-export-menu').style.display='none';
+  var d = _buildKeuanganData();
+  var fmt2 = function(n){ return 'Rp '+Math.round(n).toLocaleString('id-ID'); };
+
+  var catRows = Object.entries(d.catMap).map(function(e){
+    return '<tr><td style="padding:4px 0;color:#555">'+e[0]+'</td><td style="text-align:right;color:#d63031">'+fmt2(e[1])+'</td></tr>';
+  }).join('');
+
+  var mutasiRows = d.mutasi.length ? d.mutasi.slice().reverse().map(function(m){
+    return '<tr><td style="padding:3px 0;font-size:10pt">'+(m.tanggal||'')+' '+(m.waktu||'')+'</td>'
+      +'<td>'+(m.tipe==='setoran'?'&#8679; Setoran':'&#8681; Penarikan')+'</td>'
+      +'<td>'+escHtml(m.ket||'')+'</td>'
+      +'<td style="text-align:right;color:'+(m.tipe==='setoran'?'#0F6E56':'#d63031')+'">'+(m.tipe==='setoran'?'+':'-')+fmt2(m.nominal)+'</td></tr>';
+  }).join('') : '<tr><td colspan="4" style="color:#aaa;text-align:center;padding:8px">Tidak ada mutasi</td></tr>';
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>Laporan Keuangan Harian - '+escHtml(d.toko)+'</title>'
+    +'<style>body{font-family:Arial,sans-serif;font-size:11pt;margin:24px;color:#222}'
+    +'h1{font-size:15pt;margin:0 0 2px}h2{font-size:12pt;margin:14px 0 6px;border-bottom:1.5px solid #eee;padding-bottom:3px}'
+    +'.info{color:#888;font-size:10pt;margin:0 0 16px}'
+    +'table{width:100%;border-collapse:collapse}.th{background:#f5f5f5}'
+    +'th,td{padding:5px 8px;font-size:10pt;border-bottom:1px solid #eee}'
+    +'.total-row{font-weight:bold;font-size:11pt;border-top:2px solid #333!important}'
+    +'.green{color:#0F6E56}.red{color:#d63031}'
+    +'@media print{button{display:none}}</style></head><body>'
+    +'<button onclick="window.print()" style="margin-bottom:14px;padding:7px 18px;cursor:pointer">&#128424; Cetak</button>'
+    +'<h1>'+escHtml(d.toko)+' — Laporan Keuangan Harian</h1>'
+    +'<p class="info">Periode: '+escHtml(d.periodeLabel)+' &nbsp;|&nbsp; Dicetak: '+escHtml(d.tanggalCetak)+'</p>'
+
+    +'<h2>Saldo Awal</h2>'
+    +'<table><tr><td>Saldo dari hari sebelumnya</td><td style="text-align:right;font-weight:bold;color:#0F6E56">'+fmt2(d.saldoAwal)+'</td></tr></table>'
+
+    +'<h2>Pemasukan</h2><table>'
+    +'<tr><td>Penjualan kasir ('+d.trxCount+' transaksi)</td><td style="text-align:right" class="green">'+fmt2(d.kasirRev)+'</td></tr>'
+    +'<tr><td>Pesanan online ('+d.onlineCount+' order)</td><td style="text-align:right" class="green">'+fmt2(d.onlineRev)+'</td></tr>'
+    +(d.setoranMasuk?'<tr><td>Setoran masuk</td><td style="text-align:right" class="green">'+fmt2(d.setoranMasuk)+'</td></tr>':'')
+    +'<tr class="total-row"><td>Total Pemasukan</td><td style="text-align:right" class="green">'+fmt2(d.totalPemasukan)+'</td></tr>'
+    +'</table>'
+
+    +'<h2>Pengeluaran</h2><table>'+catRows
+    +(d.penarikan?'<tr><td>Penarikan kas</td><td style="text-align:right" class="red">'+fmt2(d.penarikan)+'</td></tr>':'')
+    +'<tr class="total-row"><td>Total Pengeluaran</td><td style="text-align:right" class="red">'+fmt2(d.totalKeluar)+'</td></tr>'
+    +'</table>'
+
+    +'<h2>Laba &amp; Saldo Akhir</h2><table>'
+    +'<tr><td>Laba bersih hari ini</td><td style="text-align:right;font-weight:bold;color:'+(d.labaBersih>=0?'#0F6E56':'#d63031')+'">'+fmt2(d.labaBersih)+' ('+d.margin+'%)</td></tr>'
+    +'<tr><td>Saldo awal</td><td style="text-align:right">'+fmt2(d.saldoAwal)+'</td></tr>'
+    +'<tr class="total-row"><td>Estimasi Saldo Akhir</td><td style="text-align:right;color:'+(d.saldoAkhir>=0?'#0F6E56':'#d63031')+'">'+fmt2(d.saldoAkhir)+'</td></tr>'
+    +'</table>'
+
+    +'<h2>Riwayat Mutasi Kas</h2><table>'
+    +'<tr class="th"><th>Tanggal</th><th>Jenis</th><th>Keterangan</th><th style="text-align:right">Nominal</th></tr>'
+    +mutasiRows+'</table>'
+    +'</body></html>';
+
+  var win = window.open('','_blank');
+  if(!win){ showNotif('Popup diblokir browser. Izinkan popup!','#E17055'); return; }
+  win.document.write(html); win.document.close();
+  setTimeout(function(){ win.print(); }, 400);
+}
+
+function keuKirimWA() {
+  $('keu-export-menu').style.display='none';
+  var d = _buildKeuanganData();
+  var fmt2 = function(n){ return 'Rp '+Math.round(n).toLocaleString('id-ID'); };
+  var NL = String.fromCharCode(10);
+
+  var catLines = Object.entries(d.catMap).map(function(e){
+    return '  • '+e[0]+': '+fmt2(e[1]);
+  }).join(NL);
+
+  var msg = [
+    '💵 *LAPORAN KEUANGAN HARIAN*',
+    escHtml(d.toko)+' | '+d.periodeLabel,
+    '',
+    '💰 *Saldo Awal: '+fmt2(d.saldoAwal)+'*',
+    '',
+    '📈 *PEMASUKAN*',
+    '  Kasir ('+d.trxCount+' trx): '+fmt2(d.kasirRev),
+    '  Online ('+d.onlineCount+' order): '+fmt2(d.onlineRev),
+    (d.setoranMasuk?'  Setoran masuk: '+fmt2(d.setoranMasuk):''),
+    '  *Total masuk: '+fmt2(d.totalPemasukan)+'*',
+    '',
+    '📉 *PENGELUARAN*',
+    catLines,
+    (d.penarikan?'  • Penarikan: '+fmt2(d.penarikan):''),
+    '  *Total keluar: '+fmt2(d.totalKeluar)+'*',
+    '',
+    '─────────────────',
+    '✅ Laba bersih: *'+fmt2(d.labaBersih)+'* ('+d.margin+'%)',
+    '🏦 Estimasi saldo akhir: *'+fmt2(d.saldoAkhir)+'*',
+    '',
+    '_Dikirim dari '+escHtml(d.toko)+' POS_'
+  ].filter(function(l){return l!==''||true;}).join(NL);
+
+  var hp = prompt('Nomor WhatsApp tujuan (tanpa +62, tanpa angka 0 depan):\ncontoh: 812xxxxxxxx');
+  if(!hp||hp.trim().length<9){ showNotif('Nomor tidak valid','#E17055'); return; }
+  var fullHp = '62'+hp.trim().replace(/^0/,'').replace(/^62/,'');
+  window.open('https://wa.me/'+fullHp+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+function keuKirimEmail() {
+  $('keu-export-menu').style.display='none';
+  var d = _buildKeuanganData();
+  var fmt2 = function(n){ return 'Rp '+Math.round(n).toLocaleString('id-ID'); };
+  var NL = '%0A';
+
+  var subject = encodeURIComponent('Laporan Keuangan Harian - '+d.toko+' - '+d.periodeLabel);
+  var catLines = Object.entries(d.catMap).map(function(e){
+    return '  '+e[0]+': '+fmt2(e[1]);
+  }).join('%0A');
+
+  var body = [
+    'LAPORAN KEUANGAN HARIAN',
+    d.toko+' | '+d.periodeLabel,
+    'Dicetak: '+d.tanggalCetak,
+    '',
+    '== SALDO AWAL ==',
+    fmt2(d.saldoAwal),
+    '',
+    '== PEMASUKAN ==',
+    'Penjualan Kasir ('+d.trxCount+' transaksi): '+fmt2(d.kasirRev),
+    'Pesanan Online ('+d.onlineCount+' order): '+fmt2(d.onlineRev),
+    (d.setoranMasuk?'Setoran Masuk: '+fmt2(d.setoranMasuk):''),
+    'TOTAL MASUK: '+fmt2(d.totalPemasukan),
+    '',
+    '== PENGELUARAN ==',
+    Object.entries(d.catMap).map(function(e){return e[0]+': '+fmt2(e[1]);}).join('\n'),
+    (d.penarikan?'Penarikan Kas: '+fmt2(d.penarikan):''),
+    'TOTAL KELUAR: '+fmt2(d.totalKeluar),
+    '',
+    '== HASIL ==',
+    'Laba Bersih: '+fmt2(d.labaBersih)+' ('+d.margin+'%)',
+    'Estimasi Saldo Akhir: '+fmt2(d.saldoAkhir)
+  ].filter(Boolean).join('\n');
+
+  window.open('mailto:?subject='+subject+'&body='+encodeURIComponent(body));
+  showNotif('✅ Membuka aplikasi email...','#6C5CE7');
+}
+
 
 async function loadCogsData(){
   if(!_sb||!CFG.restaurantId)return;
