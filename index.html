@@ -8027,7 +8027,7 @@ async function _doSyncTrxToSupabase(trx) {
       pay_method: trx.pay==='split'?'split':trx.pay,
       split_pay: trx.splitPay ? JSON.stringify(trx.splitPay) : null,
       kasir_nama: trx.kasir||'',
-      // kasir_id: tidak ada di schema, skip
+      kasir_id: trx.userId || null,
       items_json: trx.items ? JSON.stringify(trx.items) : '[]',
       order_note: trx.orderNote||'',
       voided: trx.voided||false,
