@@ -5733,7 +5733,7 @@ async function autoSyncFromSupabase() {
       var cp = window._currentPage;
       if (cp === 'laporan') { renderLaporan(); fetchLaporanFromSupabase(); }
       else if (cp === 'riwayat') renderRiwayat();
-      else if (cp === 'shift') renderShiftPage();
+      else if (cp === 'shift') { renderShiftPage(); syncShiftHistory(); }
       else if (cp === 'order') { renderMenuGrid(); updateTotals(); }
       else if (cp === 'keuangan') renderKeuanganPage();
       updateLastSync('ok');
@@ -6697,6 +6697,7 @@ async function syncShiftHistory() {
     ST.shifts = sbShifts.concat(localOnly);
     saveShiftLocal();
     renderShiftHist();
+    if (window._currentPage === 'shift') renderShiftPage();
     showNotif('✅ '+ST.shifts.length+' riwayat shift dimuat','#00B894');
   } catch(e) {
     showNotif('Gagal: '+e.message,'#E17055');
@@ -8035,7 +8036,7 @@ async function _doSyncTrxToSupabase(trx) {
       created_at: _trxCreatedAt  // FIX 2: simpan waktu transaksi yang akurat
     };
     // Coba upsert dulu (update jika sudah ada, insert jika belum)
-    var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code,restaurant_id'});
+    var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code'});
     console.log('[SyncTrx] Upsert result:', trx.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (!res.error) return true;
     // Jika upsert gagal karena constraint belum ada, coba insert biasa
