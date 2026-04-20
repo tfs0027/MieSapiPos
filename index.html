@@ -13306,46 +13306,38 @@ async function loadCogsData(){
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
 </div>
 
+<!-- TEST BUTTON langsung di HTML, tidak butuh JS -->
+<div id="wkdbg" style="position:fixed;bottom:10px;right:10px;z-index:99999;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+  <div id="wkdbg-out" style="background:#2d3436;color:#fff;padding:8px 12px;border-radius:10px;font-size:11px;max-width:280px;display:none;word-break:break-all;line-height:1.6"></div>
+  <button onclick="wkTest()" style="background:#6C5CE7;color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">🧪 Test JS</button>
+</div>
 <script>
-// ─── DEBUG TOOLS ─────────────────────────────────────────
-window.onerror = function(msg, src, line, col, err) {
-  var d = document.createElement('div');
-  d.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:8px 12px;background:#d63031;color:#fff;font-size:11px;z-index:99999;word-break:break-all';
-  d.innerHTML = '&#10060; JS ERROR: '+msg+' (line '+line+') <button onclick="this.parentNode.remove()" style="background:none;border:none;color:#fff;float:right;cursor:pointer;font-size:14px">&#10005;</button>';
-  document.body.appendChild(d);
+function wkShow(msg) {
+  var el = document.getElementById('wkdbg-out');
+  if (!el) return;
+  el.innerHTML = msg;
+  el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.style.display='none'; }, 8000);
+}
+function wkTest() {
+  var lines = [];
+  var fns = ['showBukaModal','openCalc','nav','showNotif','renderKeuanganPage'];
+  fns.forEach(function(f){ lines.push(f+': '+(typeof window[f]==='function'?'OK':'MISSING')); });
+  lines.push('ST.cu: '+(window.ST&&ST.cu?ST.cu.name+' ('+ST.cu.role+')':'NULL'));
+  lines.push('_sb: '+(window._sb?'OK':'NULL'));
+  lines.push('DOM ready: '+(document.readyState));
+  wkShow(lines.join('<br>'));
+}
+window.onerror = function(msg, src, line) {
+  wkShow('<b style="color:#ff7675">ERR:</b> '+msg+' (L'+line+')');
 };
-
-document.addEventListener('DOMContentLoaded', function() {
-  // Tombol test di pojok kanan bawah
-  var testBtn = document.createElement('button');
-  testBtn.textContent = '🧪 Test';
-  testBtn.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:99999;background:#6C5CE7;color:#fff;border:none;padding:8px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:700';
-  testBtn.onclick = function() {
-    var results = [];
-    var fns = ['showBukaModal','openCalc','nav','renderKeuanganPage','toggleKeuExportMenu','showBukaModal'];
-    fns.forEach(function(fn) {
-      results.push(fn + ': ' + (typeof window[fn] === 'function' ? '✅' : '❌'));
-    });
-    // Cek ST.cu
-    results.push('ST.cu: ' + (window.ST && window.ST.cu ? '✅ ' + ST.cu.name : '❌ null'));
-    results.push('_sb: ' + (window._sb ? '✅' : '❌ null'));
-    alert(results.join('
-'));
-  };
-  document.body.appendChild(testBtn);
-
-  // Toast setiap klik
-  document.addEventListener('click', function(e) {
-    var el = e.target;
-    if (el === testBtn || testBtn.contains(el)) return;
-    var d = document.createElement('div');
-    d.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#2d3436;color:#fff;padding:6px 14px;border-radius:20px;font-size:11px;z-index:99998;pointer-events:none;max-width:92vw;text-align:center';
-    var onclickInfo = el.getAttribute('onclick') || (el.onclick ? el.onclick.toString().substring(9,50) : 'none');
-    d.textContent = 'TAP: '+el.tagName+' onclick="'+onclickInfo+'"';
-    document.body.appendChild(d);
-    setTimeout(function(){ d.remove(); }, 3000);
-  }, true);
-});
+document.addEventListener('click', function(e) {
+  var el = e.target;
+  if (el.id==='wkdbg'||document.getElementById('wkdbg').contains(el)) return;
+  var oc = el.getAttribute('onclick')||'';
+  wkShow('TAP: '+el.tagName+(el.id?' #'+el.id:'')+' class='+el.className.toString().substring(0,20)+'<br>onclick: '+(oc||'none'));
+}, true);
 </script>
 </body>
 </html>
