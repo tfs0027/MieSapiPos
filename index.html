@@ -565,16 +565,6 @@ tr:hover td{background:rgba(108,92,231,.03)}
     <div class="topbar">
       <span class="topbar-title" id="page-title">Kasir &amp; Order</span>
       <button onclick="openCalc()" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:20px;opacity:.65;flex-shrink:0" title="Kalkulator">🧮</button>
-      <button id="btn-test-static" style="background:#e17055;color:#fff;border:none;padding:4px 10px;border-radius:8px;font-size:11px;cursor:pointer;max-width:200px;word-break:break-all;line-height:1.4;text-align:left" onclick="(function(){
-  var out = '';
-  try {
-    out += 'ST.cu=' + (ST.cu ? ST.cu.name : 'NULL') + ' | ';
-    out += 'buka-modal=' + (document.getElementById('buka-modal') ? 'ADA' : 'TIDAK ADA') + ' | ';
-    showBukaModal();
-    out += 'modal.class=' + (document.getElementById('buka-modal') ? document.getElementById('buka-modal').className : '?');
-  } catch(e) { out += 'ERR:' + e.message; }
-  document.getElementById('btn-test-static').textContent = out;
-})()">TEST BUKA</button>
       <div id="topbar-right" style="display:flex;gap:8px;align-items:center"></div>
     </div>
     <div class="content">
@@ -1791,6 +1781,14 @@ tr:hover td{background:rgba(108,92,231,.03)}
     </div>
 
     <div style="font-size:11px;color:rgba(255,255,255,.25);margin-top:14px">Kode toko dikirim admin via WhatsApp · WarungKu POS v2
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
 <!-- MODALS -->
 
 <div class="modal-wrap" id="split-modal">
@@ -2202,7 +2200,6 @@ tr:hover td{background:rgba(108,92,231,.03)}
 
 <script>
 'use strict';
-console.log('=== WARUNGKU SCRIPT LOADED ===');
 // ═══════════════════════════════
 // DATA
 // ═══════════════════════════════
@@ -6402,7 +6399,6 @@ function updateShiftTopbar() {
 }
 
 function showBukaModal() {
-  try {
   const now = new Date();
   $('buka-info').innerHTML =
     '<div class="sum-row"><span>Kasir</span><b>' + ST.cu.name + '</b></div>' +
@@ -6411,13 +6407,6 @@ function showBukaModal() {
     '<div class="sum-row"><span>Jam Buka</span><b>' + fmtTime(now) + '</b></div>' +
     '<div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 10px;margin-top:8px;font-size:11px;color:var(--blue-dk)">ℹ️ Shift ini akan terkunci untuk kasir <b>' + ST.cu.name + '</b>. Hanya akun ini yang dapat menutup shift.</div>';
   $('buka-modal').classList.add('open');
-  } catch(e) {
-    var d=document.createElement('div');
-    d.style.cssText='position:fixed;top:60px;left:10px;right:10px;background:#d63031;color:#fff;padding:12px 16px;border-radius:10px;font-size:12px;z-index:99999;word-break:break-all';
-    d.innerHTML='<b>showBukaModal ERROR:</b> '+e.message+'<br>Stack: '+e.stack.substring(0,200);
-    document.body.appendChild(d);
-    setTimeout(function(){d.remove();},10000);
-  }
 }
 
 function prosesBukaKasir() {
@@ -6655,7 +6644,6 @@ async function prosesTutupKasir() {
 }
 
 function renderShiftPage() {
-  console.log('[renderShiftPage] called, ST.cu=', ST.cu, 'currentShift=', ST.currentShift);
   const sh = ST.currentShift;
   const bannerEl = $('shift-banner'), liveEl = $('shift-live');
   if (sh && sh.status==='open') {
@@ -13319,13 +13307,6 @@ async function loadCogsData(){
   <span>&#x26A0;</span>
   <span id="offline-msg">Jaringan terputus — transaksi tetap berjalan &amp; akan tersync otomatis saat online</span>
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
 </div>
 
 </body>
