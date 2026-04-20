@@ -3080,7 +3080,11 @@ function nav(p) {
     // Auto-fetch dari Supabase berdasarkan restaurant_id (tanpa confirm)
     if (_sb && CFG.restaurantId && !_autoSyncing) fetchLaporanFromSupabase(); // skip jika autoSync sedang jalan
   }
-  if (p === 'riwayat') renderRiwayat();
+  if (p === 'riwayat') {
+    renderRiwayat();
+    // Fetch transaksi terbaru dari Supabase
+    if (_sb && CFG.restaurantId && !_autoSyncing) fetchLaporanFromSupabase();
+  }
   if (p === 'online-order') { window._currentPage = p; renderRestoStatusUI(); loadOnlineOrders();
     refreshOrderLink(); // update link display
     window._initOrderDelegation && window._initOrderDelegation();
@@ -3092,7 +3096,11 @@ function nav(p) {
   if (p === 'cogs') { renderCogsPage(); }
   if (p === 'keuangan') { renderKeuanganPage(); }
   if (p === 'users') { renderUsers(); renderMemberList2(); renderPoinSettingsPage(); var lbl=$('member-count-lbl');if(lbl)lbl.textContent=ST.members.length+' member'; }
-  if (p === 'shift') renderShiftPage();
+  if (p === 'shift') {
+    renderShiftPage();
+    // Sync riwayat shift dari Supabase
+    if (_sb && CFG.restaurantId) syncShiftHistory();
+  }
   if (p === 'settings') renderSettings();
 }
 
@@ -5720,6 +5728,16 @@ async function autoSyncFromSupabase() {
     console.warn('autoSync error:', e.message);
   } finally {
     _autoSyncing = false;
+    // Re-render halaman aktif setelah data dari Supabase dimuat
+    try {
+      var cp = window._currentPage;
+      if (cp === 'laporan') { renderLaporan(); fetchLaporanFromSupabase(); }
+      else if (cp === 'riwayat') renderRiwayat();
+      else if (cp === 'shift') renderShiftPage();
+      else if (cp === 'order') { renderMenuGrid(); updateTotals(); }
+      else if (cp === 'keuangan') renderKeuanganPage();
+      updateLastSync('ok');
+    } catch(e2) { console.warn('post-sync render:', e2.message); }
   }
 }
 async function fetchLaporanFromSupabase() {
@@ -5825,6 +5843,7 @@ async function fetchLaporanFromSupabase() {
     updateLastSync('error');
     console.warn('fetchLaporanFromSupabase error:', e.message);
     renderLaporan();
+    if (window._currentPage === 'riwayat') renderRiwayat();
   } finally {
     _fetchingLapTrx = false;
   }
