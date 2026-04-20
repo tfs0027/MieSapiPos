@@ -564,7 +564,9 @@ tr:hover td{background:rgba(108,92,231,.03)}
   <div class="main">
     <div class="topbar">
       <span class="topbar-title" id="page-title">Kasir &amp; Order</span>
-      <button onclick="openCalc()" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:20px;opacity:.65;flex-shrink:0" title="Kalkulator">🧮</button><div id="topbar-right" style="display:flex;gap:8px;align-items:center"></div>
+      <button onclick="openCalc()" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:20px;opacity:.65;flex-shrink:0" title="Kalkulator">🧮</button>
+      <button id="btn-test-static" style="background:#e17055;color:#fff;border:none;padding:4px 10px;border-radius:8px;font-size:11px;cursor:pointer" onclick="document.getElementById('btn-test-static').textContent='KLIK OK! fn='+typeof showBukaModal">TEST</button>
+      <div id="topbar-right" style="display:flex;gap:8px;align-items:center"></div>
     </div>
     <div class="content">
 
@@ -2191,6 +2193,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
 
 <script>
 'use strict';
+console.log('=== WARUNGKU SCRIPT LOADED ===');
 // ═══════════════════════════════
 // DATA
 // ═══════════════════════════════
@@ -6390,6 +6393,7 @@ function updateShiftTopbar() {
 }
 
 function showBukaModal() {
+  console.log('[showBukaModal] called! ST.cu=', ST.cu);
   const now = new Date();
   $('buka-info').innerHTML =
     '<div class="sum-row"><span>Kasir</span><b>' + ST.cu.name + '</b></div>' +
@@ -6635,6 +6639,7 @@ async function prosesTutupKasir() {
 }
 
 function renderShiftPage() {
+  console.log('[renderShiftPage] called, ST.cu=', ST.cu, 'currentShift=', ST.currentShift);
   const sh = ST.currentShift;
   const bannerEl = $('shift-banner'), liveEl = $('shift-live');
   if (sh && sh.status==='open') {
