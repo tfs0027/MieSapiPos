@@ -8047,9 +8047,12 @@ async function _doSyncTrxToSupabase(trx) {
     console.log('[SyncTrx] Insert result:', trx.id, res2.error ? 'FAIL:'+res2.error.message : 'OK');
     if (!res2.error) return true;
     console.warn('sbSync gagal (' + trx.id + '):', res2.error.message);
+    showNotif('Gagal sync: ' + res2.error.message, '#E17055');
     return false;
   } catch(e) {
     console.warn('sbSyncTransaction error (' + trx.id + '):', e.message);
+    // Tampilkan error di layar agar tidak terlewat
+    showNotif('Sync error TRX: ' + e.message, '#E17055');
     return false;
   }
 }
