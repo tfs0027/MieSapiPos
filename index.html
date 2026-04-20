@@ -5447,7 +5447,8 @@ var _autoSyncing = false;
 
 async function autoSyncFromSupabase() {
   updateLastSync('syncing');
-  if (!_sb || !CFG.restaurantId) return;
+  if (!_sb || !CFG.restaurantId) { console.warn('[Sync] Skip: no _sb or restaurantId'); return; }
+  console.log('[Sync] Start, restaurantId=', CFG.restaurantId);
   if (_autoSyncing) {
     // Sudah ada sync berjalan — tunggu selesai dulu, jangan jalankan paralel
     _dbg('[WarungKu] autoSync sudah berjalan, skip');
@@ -5594,6 +5595,7 @@ async function autoSyncFromSupabase() {
         .eq('restaurant_id', rid)
         .order('trx_code', {ascending: false})
         .limit(500);
+      console.log('[Sync] Transactions result:', tRes.error ? 'ERROR:'+tRes.error.message : tRes.data.length+' rows');
       if (!tRes.error && tRes.data) {
         var sbMapped = tRes.data.map(function(t) {
           // Ambil tanggal dari created_at, jika NULL coba tanggal dari shift
@@ -5685,6 +5687,7 @@ async function autoSyncFromSupabase() {
         .eq('restaurant_id', rid)
         .order('shift_code', {ascending:false})
         .limit(200);
+      console.log('[Sync] Shifts result:', shRes.error ? 'ERROR:'+shRes.error.message : shRes.data.length+' rows');
       if (!shRes.error && shRes.data) {
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
         // Simpan shift aktif (open) yang mungkin belum tersync
@@ -8001,6 +8004,7 @@ async function flushPendingQueue() {
 async function _doSyncTrxToSupabase(trx) {
   var rid = CFG.restaurantId;
   try {
+    console.log('[SyncTrx] Syncing trx', trx.id, 'to Supabase...');
     // Konversi tanggal+jam lokal ke ISO timestamp untuk created_at
     var _trxCreatedAt = (function() {
       try {
