@@ -6663,7 +6663,17 @@ function renderShiftPage() {
 
 async function syncShiftHistory() {
   if (!_sb || !CFG.restaurantId) { showNotif('Belum terhubung Supabase','#E17055'); return; }
-  showNotif('⏳ Memuat riwayat shift...','#6C5CE7');
+  showNotif('⏳ Sync & memuat riwayat shift...','#6C5CE7');
+  
+  // STEP 1: Upload semua shift dari localStorage ke Supabase dulu
+  var allShifts = ST.shifts.concat(ST.currentShift ? [ST.currentShift] : []);
+  if (allShifts.length > 0) {
+    console.log('[SyncShift] Uploading', allShifts.length, 'shifts to Supabase...');
+    for (var i = 0; i < allShifts.length; i++) {
+      await sbSyncShift(allShifts[i]);
+    }
+  }
+  
   try {
     var rid = CFG.restaurantId;
     var res = await _sb.from('shifts').select('*')
