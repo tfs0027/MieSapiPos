@@ -5581,28 +5581,11 @@ async function autoSyncFromSupabase() {
     try {
       // Filter transaksi berdasarkan shift_code yang diketahui
       // Jika ada shifts, ambil transaksi dari shift tersebut saja
-      var tRes;
-      if (ST.shifts && ST.shifts.length > 0) {
-        var knownShiftCodes = ST.shifts.map(function(s){return s.id;}).filter(Boolean);
-        if (ST.currentShift) knownShiftCodes.push(ST.currentShift.id);
-        tRes = await _sb.from('transactions').select('*')
-          .eq('restaurant_id', rid)
-          .in('shift_code', knownShiftCodes)
-          .order('trx_code', {ascending: false})
-          .limit(500);
-        // Fallback jika kosong: ambil semua (shift baru belum punya history)
-        if (!tRes.error && (!tRes.data || !tRes.data.length)) {
-          tRes = await _sb.from('transactions').select('*')
-            .eq('restaurant_id', rid)
-            .order('trx_code', {ascending: false})
-            .limit(500);
-        }
-      } else {
-        tRes = await _sb.from('transactions').select('*')
-          .eq('restaurant_id', rid)
-          .order('trx_code', {ascending: false})
-          .limit(500);
-      }
+      // Ambil semua transaksi milik toko ini (diproteksi RLS per restaurant_id)
+      var tRes = await _sb.from('transactions').select('*')
+        .eq('restaurant_id', rid)
+        .order('trx_code', {ascending: false})
+        .limit(500);
       if (!tRes.error && tRes.data) {
         var sbMapped = tRes.data.map(function(t) {
           // Ambil tanggal dari created_at, jika NULL coba tanggal dari shift
@@ -5748,28 +5731,11 @@ async function fetchLaporanFromSupabase() {
     var iso90 = d90.toISOString();
 
     // 1. Transaksi kasir
-    // Filter transaksi berdasarkan shift yang diketahui
-    var trxRes;
-    if (ST.shifts && ST.shifts.length > 0) {
-      var _knownCodes = ST.shifts.map(function(s){return s.id;}).filter(Boolean);
-      if (ST.currentShift) _knownCodes.push(ST.currentShift.id);
-      trxRes = await _sb.from('transactions').select('*')
-        .eq('restaurant_id', rid)
-        .in('shift_code', _knownCodes)
-        .order('trx_code', {ascending: false})
-        .limit(500);
-      if (!trxRes.error && (!trxRes.data || !trxRes.data.length)) {
-        trxRes = await _sb.from('transactions').select('*')
-          .eq('restaurant_id', rid)
-          .order('trx_code', {ascending: false})
-          .limit(500);
-      }
-    } else {
-      trxRes = await _sb.from('transactions').select('*')
-        .eq('restaurant_id', rid)
-        .order('trx_code', {ascending: false})
-        .limit(500);
-    }
+    // Ambil semua transaksi milik toko (diproteksi RLS per restaurant_id)
+    var trxRes = await _sb.from('transactions').select('*')
+      .eq('restaurant_id', rid)
+      .order('trx_code', {ascending: false})
+      .limit(500);
     if (!trxRes.error && trxRes.data) {
       var sbMapped2 = trxRes.data.map(function(t) {
         var dt = t.created_at ? new Date(t.created_at) : new Date();
