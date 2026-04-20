@@ -8040,9 +8040,11 @@ async function _doSyncTrxToSupabase(trx) {
     };
     // Coba upsert dulu (update jika sudah ada, insert jika belum)
     var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code,restaurant_id'});
+    console.log('[SyncTrx] Upsert result:', trx.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (!res.error) return true;
     // Jika upsert gagal karena constraint belum ada, coba insert biasa
     var res2 = await _sb.from('transactions').insert(data);
+    console.log('[SyncTrx] Insert result:', trx.id, res2.error ? 'FAIL:'+res2.error.message : 'OK');
     if (!res2.error) return true;
     console.warn('sbSync gagal (' + trx.id + '):', res2.error.message);
     return false;
@@ -8111,6 +8113,7 @@ async function sbSyncShift(sh) {
     };
     // Coba upsert by shift_code
     var res = await _sb.from('shifts').upsert(data, {onConflict:'shift_code'});
+    console.log('[SyncShift]', sh.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (res.error) console.warn('sbSyncShift:', res.error.message);
   } catch(e) { console.warn('sbSyncShift:', e.message); }
 }
