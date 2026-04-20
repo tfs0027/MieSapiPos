@@ -12674,7 +12674,7 @@ function renderKeuMutasiList(mutasi) {
 function openEditSaldoAwal() {
   if (!ST.cu || ST.cu.role !== 'admin') { showNotif('Hanya admin yang bisa edit saldo awal','#E17055'); return; }
   var dateKey = getTodayStr();
-  var current = loadKeuSaldoManual(dateKey) ?? getAutoSaldoAwal();
+  var current = (loadKeuSaldoManual(dateKey) !== null && loadKeuSaldoManual(dateKey) !== undefined) ? loadKeuSaldoManual(dateKey) : getAutoSaldoAwal();
   var val = prompt('Edit saldo awal hari ini (Rp):\n(Kosongkan untuk reset ke otomatis dari shift kemarin)', current || 0);
   if (val === null) return; // batal
   if (val.trim() === '') {
@@ -12852,9 +12852,11 @@ function _buildKeuanganData() {
   return {
     toko: CFG.nama||'WarungKu', periodeLabel: periodeLabel,
     tanggalCetak: new Date().toLocaleString('id-ID'),
-    saldoAwal, kasirRev, onlineRev, setoranMasuk, totalPemasukan,
-    catMap, totalPengeluaran, penarikan, totalKeluar,
-    labaBersih, margin, saldoAkhir,
+    saldoAwal: saldoAwal, kasirRev: kasirRev, onlineRev: onlineRev,
+    setoranMasuk: setoranMasuk, totalPemasukan: totalPemasukan,
+    catMap: catMap, totalPengeluaran: totalPengeluaran,
+    penarikan: penarikan, totalKeluar: totalKeluar,
+    labaBersih: labaBersih, margin: margin, saldoAkhir: saldoAkhir,
     trxCount: trxs.length, onlineCount: onlines.length,
     mutasi: mutasi
   };
@@ -13303,30 +13305,5 @@ async function loadCogsData(){
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
 </div>
 
-<script>
-// Tangkap semua error JS dan tampilkan di layar
-window.onerror = function(msg, src, line, col, err) {
-  var info = document.createElement('div');
-  info.style.cssText = 'position:fixed;top:60px;left:0;right:0;background:#d63031;color:#fff;padding:8px 14px;font-size:11px;z-index:99999;word-break:break-all;';
-  info.textContent = '❌ JS ERROR: '+msg+' (line '+line+')';
-  var btn = document.createElement('button');
-  btn.textContent = '✕';
-  btn.style.cssText = 'background:none;border:none;color:#fff;float:right;cursor:pointer;font-size:14px;';
-  btn.onclick = function(){ info.remove(); };
-  info.appendChild(btn);
-  document.body.appendChild(info);
-  return false;
-};
-document.addEventListener('DOMContentLoaded', function() {
-  document.addEventListener('click', function(e) {
-    var info = document.createElement('div');
-    info.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2d3436;color:#fff;padding:6px 14px;border-radius:20px;font-size:11px;z-index:99999;pointer-events:none;max-width:90vw;text-align:center';
-    var el = e.target;
-    info.textContent = 'KLIK: '+el.tagName+(el.id?' #'+el.id:'')+(el.className?' .'+el.className.toString().substring(0,20):'');
-    document.body.appendChild(info);
-    setTimeout(function(){ info.remove(); }, 2500);
-  }, true);
-});
-</script>
 </body>
 </html>
