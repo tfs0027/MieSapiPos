@@ -1703,12 +1703,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         </div>
         <div id="keu-mutasi-list"><div style="text-align:center;padding:20px;color:var(--txt3);font-size:12px">Belum ada mutasi kas</div></div>
       </div>
-    </div>
-
-
-</div>
-  </div>
-</div>
+    
 
 <!-- Kode Toko Splash (muncul jika belum ada restaurant_id) -->
 <div id="splash-screen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#1A120A,#2D1B0E);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:20px;overflow-y:auto">
@@ -6395,7 +6390,6 @@ function updateShiftTopbar() {
 }
 
 function showBukaModal() {
-  console.log('[DEBUG] showBukaModal called, ST.cu=', ST.cu ? ST.cu.name : 'NULL');
   const now = new Date();
   $('buka-info').innerHTML =
     '<div class="sum-row"><span>Kasir</span><b>' + ST.cu.name + '</b></div>' +
@@ -13305,39 +13299,13 @@ async function loadCogsData(){
   <span id="offline-msg">Jaringan terputus — transaksi tetap berjalan &amp; akan tersync otomatis saat online</span>
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
 </div>
-
-<!-- TEST BUTTON langsung di HTML, tidak butuh JS -->
-<div id="wkdbg" style="position:fixed;bottom:10px;right:10px;z-index:99999;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-  <div id="wkdbg-out" style="background:#2d3436;color:#fff;padding:8px 12px;border-radius:10px;font-size:11px;max-width:280px;display:none;word-break:break-all;line-height:1.6"></div>
-  <button onclick="wkTest()" style="background:#6C5CE7;color:#fff;border:none;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer">🧪 Test JS</button>
 </div>
-<script>
-function wkShow(msg) {
-  var el = document.getElementById('wkdbg-out');
-  if (!el) return;
-  el.innerHTML = msg;
-  el.style.display = 'block';
-  clearTimeout(el._t);
-  el._t = setTimeout(function(){ el.style.display='none'; }, 8000);
-}
-function wkTest() {
-  var lines = [];
-  var fns = ['showBukaModal','openCalc','nav','showNotif','renderKeuanganPage'];
-  fns.forEach(function(f){ lines.push(f+': '+(typeof window[f]==='function'?'OK':'MISSING')); });
-  lines.push('ST.cu: '+(window.ST&&ST.cu?ST.cu.name+' ('+ST.cu.role+')':'NULL'));
-  lines.push('_sb: '+(window._sb?'OK':'NULL'));
-  lines.push('DOM ready: '+(document.readyState));
-  wkShow(lines.join('<br>'));
-}
-window.onerror = function(msg, src, line) {
-  wkShow('<b style="color:#ff7675">ERR:</b> '+msg+' (L'+line+')');
-};
-document.addEventListener('click', function(e) {
-  var el = e.target;
-  if (el.id==='wkdbg'||document.getElementById('wkdbg').contains(el)) return;
-  var oc = el.getAttribute('onclick')||'';
-  wkShow('TAP: '+el.tagName+(el.id?' #'+el.id:'')+' class='+el.className.toString().substring(0,20)+'<br>onclick: '+(oc||'none'));
-}, true);
-</script>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
 </body>
 </html>
