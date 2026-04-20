@@ -13304,6 +13304,19 @@ async function loadCogsData(){
 </div>
 
 <script>
+// Tangkap semua error JS dan tampilkan di layar
+window.onerror = function(msg, src, line, col, err) {
+  var info = document.createElement('div');
+  info.style.cssText = 'position:fixed;top:60px;left:0;right:0;background:#d63031;color:#fff;padding:8px 14px;font-size:11px;z-index:99999;word-break:break-all;';
+  info.textContent = '❌ JS ERROR: '+msg+' (line '+line+')';
+  var btn = document.createElement('button');
+  btn.textContent = '✕';
+  btn.style.cssText = 'background:none;border:none;color:#fff;float:right;cursor:pointer;font-size:14px;';
+  btn.onclick = function(){ info.remove(); };
+  info.appendChild(btn);
+  document.body.appendChild(info);
+  return false;
+};
 document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('click', function(e) {
     var info = document.createElement('div');
@@ -13311,7 +13324,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var el = e.target;
     info.textContent = 'KLIK: '+el.tagName+(el.id?' #'+el.id:'')+(el.className?' .'+el.className.toString().substring(0,20):'');
     document.body.appendChild(info);
-    setTimeout(function(){ info.remove(); }, 2000);
+    setTimeout(function(){ info.remove(); }, 2500);
   }, true);
 });
 </script>
