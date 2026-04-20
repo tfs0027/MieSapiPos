@@ -4647,7 +4647,7 @@ function exportLaporanHTML() {
     html += '<p style="color:#999;font-style:italic">Tidak ada pesanan online di periode ini.</p>';
   }
 
-  html += '</body></html>';
+  html += '<\/body><\/html>';
   var blob = new Blob([html], {type:'text/html;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var win = window.open(url, '_blank');
@@ -5237,7 +5237,7 @@ function cetakLaporanPengeluaran() {
     html += '<td style="font-size:9pt;color:#aaa">'+( p.shiftId||'')+'</td>';
     html += '</tr>';
   });
-  html += '</table></body></html>';
+  html += '</table><\/body><\/html>';
 
   var blob = new Blob([html], {type:'text/html;charset=utf-8'});
   var url = URL.createObjectURL(blob);
@@ -12966,7 +12966,7 @@ function keuCetak() {
     +'<h2>Riwayat Mutasi Kas</h2><table>'
     +'<tr class="th"><th>Tanggal</th><th>Jenis</th><th>Keterangan</th><th style="text-align:right">Nominal</th></tr>'
     +mutasiRows+'</table>'
-    +'</body></html>';
+    +'<\/body><\/html>';
 
   var win = window.open('','_blank');
   if(!win){ showNotif('Popup diblokir browser. Izinkan popup!','#E17055'); return; }
@@ -13303,103 +13303,17 @@ async function loadCogsData(){
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('click', function(e) {
+    var info = document.createElement('div');
+    info.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#2d3436;color:#fff;padding:6px 14px;border-radius:20px;font-size:11px;z-index:99999;pointer-events:none;max-width:90vw;text-align:center';
+    var el = e.target;
+    info.textContent = 'KLIK: '+el.tagName+(el.id?' #'+el.id:'')+(el.className?' .'+el.className.toString().substring(0,20):'');
+    document.body.appendChild(info);
+    setTimeout(function(){ info.remove(); }, 2000);
+  }, true);
+});
+</script>
 </body>
-</html          <div style="font-size:11px;color:var(--txt2)">Rekap arus kas, saldo, penarikan &amp; setoran</div>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="openMutasiModal('setoran')" id="btn-setoran" style="display:none">+ Setoran / Penarikan</button>
-      </div>
-      <div style="display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px">
-        <button class="shift-tab active" id="keu-tab-hari"    onclick="setKeuPeriode('hari',this)">Hari ini</button>
-        <button class="shift-tab"        id="keu-tab-kemarin" onclick="setKeuPeriode('kemarin',this)">Kemarin</button>
-        <button class="shift-tab"        id="keu-tab-minggu"  onclick="setKeuPeriode('minggu',this)">7 hari</button>
-        <button class="shift-tab"        id="keu-tab-bulan"   onclick="setKeuPeriode('bulan',this)">Bulan ini</button>
-        <button class="shift-tab"        id="keu-tab-custom"  onclick="setKeuPeriode('custom',this)">Custom</button>
-      </div>
-      <div id="keu-custom-range" style="display:none;gap:8px;margin-bottom:12px;flex-wrap:wrap" class="frow">
-        <input type="date" class="fi" id="keu-dari" style="flex:1" onchange="renderKeuanganPage()">
-        <input type="date" class="fi" id="keu-sampai" style="flex:1" onchange="renderKeuanganPage()">
-      </div>
-      <div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <div>
-            <div style="font-size:11px;color:var(--green-dk);font-weight:600">SALDO AWAL</div>
-            <div style="font-size:22px;font-weight:700;color:var(--green-dk)" id="keu-saldo-awal">Rp 0</div>
-            <div style="font-size:10px;color:var(--green-dk);opacity:.7" id="keu-saldo-awal-src">dari saldo akhir shift kemarin</div>
-          </div>
-          <div id="keu-edit-saldo-btn" style="display:none">
-            <button class="btn btn-sm" onclick="openEditSaldoAwal()" style="font-size:11px;border-color:#0F6E56;color:#0F6E56">&#9999; Edit Saldo</button>
-          </div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <div class="metric" style="background:var(--green-bg)">
-          <div class="metric-lbl">Pemasukan</div>
-          <div class="metric-val" id="keu-pemasukan" style="color:var(--green-dk);font-size:18px">Rp 0</div>
-          <div id="keu-pemasukan-sub" style="font-size:10px;color:var(--green-dk);opacity:.7">0 transaksi</div>
-        </div>
-        <div class="metric" style="background:var(--red-bg,#FEE2E2)">
-          <div class="metric-lbl">Pengeluaran</div>
-          <div class="metric-val" id="keu-pengeluaran" style="color:var(--red-dk);font-size:18px">Rp 0</div>
-          <div id="keu-pengeluaran-sub" style="font-size:10px;color:var(--red-dk);opacity:.7">0 item</div>
-        </div>
-        <div class="metric">
-          <div class="metric-lbl">Laba bersih</div>
-          <div class="metric-val" id="keu-laba" style="font-size:18px">Rp 0</div>
-          <div id="keu-margin" style="font-size:10px;color:var(--txt3)">margin 0%</div>
-        </div>
-        <div class="metric" style="background:var(--accent-bg)">
-          <div class="metric-lbl">Estimasi saldo akhir</div>
-          <div class="metric-val" id="keu-saldo-akhir" style="color:var(--accent);font-size:18px">Rp 0</div>
-          <div style="font-size:10px;color:var(--accent);opacity:.7">kas + laba - penarikan</div>
-        </div>
-      </div>
-      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#128200; Rincian Pemasukan</div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
-          <span style="color:var(--txt2)">&#128722; Penjualan kasir</span>
-          <span style="font-weight:600;color:var(--green-dk)" id="keu-kasir-rev">Rp 0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
-          <span style="color:var(--txt2)">&#128665; Pesanan online</span>
-          <span style="font-weight:600;color:var(--green-dk)" id="keu-online-rev">Rp 0</span>
-        </div>
-        <div id="keu-setoran-masuk-row" style="display:none;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)">
-          <span style="color:var(--txt2)">&#8679; Setoran masuk</span>
-          <span style="font-weight:600;color:var(--green-dk)" id="keu-setoran-masuk">Rp 0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:8px;border-top:1.5px solid var(--brd)">
-          <span>Total masuk</span><span style="color:var(--green-dk)" id="keu-total-masuk">Rp 0</span>
-        </div>
-      </div>
-      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#128197; Rincian Pengeluaran</div>
-        <div id="keu-peng-detail"></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)" id="keu-penarikan-row">
-          <span style="color:var(--txt2)">&#8681; Penarikan kas</span>
-          <span style="font-weight:600;color:var(--red-dk)" id="keu-penarikan">Rp 0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:8px;border-top:1.5px solid var(--brd)">
-          <span>Total keluar</span><span style="color:var(--red-dk)" id="keu-total-keluar">Rp 0</span>
-        </div>
-      </div>
-      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px">&#128200; Rekap Kas Harian</div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)"><span style="color:var(--txt2)">Saldo awal</span><span id="keu-rekap-awal">Rp 0</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)"><span style="color:var(--txt2)">+ Pemasukan</span><span style="color:var(--green-dk)" id="keu-rekap-masuk">Rp 0</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)"><span style="color:var(--txt2)">- Pengeluaran operasional</span><span style="color:var(--red-dk)" id="keu-rekap-peng">Rp 0</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--brd2)"><span style="color:var(--txt2)">- Penarikan / setoran bank</span><span style="color:var(--red-dk)" id="keu-rekap-penarikan">Rp 0</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding-top:10px;border-top:2px solid var(--brd)">
-          <span>Estimasi saldo akhir</span><span id="keu-rekap-akhir" style="color:var(--accent)">Rp 0</span>
-        </div>
-      </div>
-      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div style="font-size:13px;font-weight:700">&#128260; Mutasi Kas</div>
-          <div id="keu-mutasi-add-btn" style="display:none">
-            <button class="btn btn-sm" onclick="openMutasiModal('setoran')" style="font-size:11px">+ Catat</button>
-          </div>
-        </div>
-        <div id="keu-mutasi-list"><div style="text-align:center;padding:20px;color:var(--txt3);font-size:12px">Belum ada mutasi kas</div></div>
-      </div>
-    </div>
->
+</html>
