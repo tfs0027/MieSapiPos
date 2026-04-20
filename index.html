@@ -565,7 +565,16 @@ tr:hover td{background:rgba(108,92,231,.03)}
     <div class="topbar">
       <span class="topbar-title" id="page-title">Kasir &amp; Order</span>
       <button onclick="openCalc()" style="background:none;border:none;cursor:pointer;padding:4px 8px;font-size:20px;opacity:.65;flex-shrink:0" title="Kalkulator">🧮</button>
-      <button id="btn-test-static" style="background:#e17055;color:#fff;border:none;padding:4px 10px;border-radius:8px;font-size:11px;cursor:pointer" onclick="document.getElementById('btn-test-static').textContent='KLIK OK! fn='+typeof showBukaModal">TEST</button>
+      <button id="btn-test-static" style="background:#e17055;color:#fff;border:none;padding:4px 10px;border-radius:8px;font-size:11px;cursor:pointer;max-width:200px;word-break:break-all;line-height:1.4;text-align:left" onclick="(function(){
+  var out = '';
+  try {
+    out += 'ST.cu=' + (ST.cu ? ST.cu.name : 'NULL') + ' | ';
+    out += 'buka-modal=' + (document.getElementById('buka-modal') ? 'ADA' : 'TIDAK ADA') + ' | ';
+    showBukaModal();
+    out += 'modal.class=' + (document.getElementById('buka-modal') ? document.getElementById('buka-modal').className : '?');
+  } catch(e) { out += 'ERR:' + e.message; }
+  document.getElementById('btn-test-static').textContent = out;
+})()">TEST BUKA</button>
       <div id="topbar-right" style="display:flex;gap:8px;align-items:center"></div>
     </div>
     <div class="content">
