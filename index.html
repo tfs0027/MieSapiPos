@@ -6395,6 +6395,7 @@ function updateShiftTopbar() {
 }
 
 function showBukaModal() {
+  console.log('[DEBUG] showBukaModal called, ST.cu=', ST.cu ? ST.cu.name : 'NULL');
   const now = new Date();
   $('buka-info').innerHTML =
     '<div class="sum-row"><span>Kasir</span><b>' + ST.cu.name + '</b></div>' +
@@ -11995,7 +11996,7 @@ async function fetchShiftOnlineOrders(shift) {
 // KALKULATOR
 // ════════════════════════════════════════════════════════════════
 var _cV='0',_cOp=null,_cPrev=null,_cNew=true;
-function openCalc(){_cV='0';_cOp=null;_cPrev=null;_cNew=true;var o=document.getElementById('calc-overlay');if(o){o.style.display='flex';_updCalc();}}
+function openCalc(){console.log('[DEBUG] openCalc called');_cV='0';_cOp=null;_cPrev=null;_cNew=true;var o=document.getElementById('calc-overlay');if(o){o.style.display='flex';_updCalc();}}
 function closeCalc(){var o=document.getElementById('calc-overlay');if(o)o.style.display='none';}
 function _updCalc(){var d=document.getElementById('calc-display'),s=document.getElementById('calc-sub');if(d)d.textContent=parseFloat(_cV).toLocaleString('id-ID');if(s)s.textContent=(_cPrev!=null&&_cOp)?_cPrev+' '+_cOp:'';}
 function calcKey(k){
@@ -13305,5 +13306,24 @@ async function loadCogsData(){
   <span id="offline-pending-count" style="background:rgba(255,255,255,.2);padding:1px 8px;border-radius:10px;font-size:11px"></span>
 </div>
 
+<script>
+// ─── DEBUG TOOLS ─────────────────────────────────────────
+window.onerror = function(msg, src, line, col, err) {
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:8px 12px;background:#d63031;color:#fff;font-size:11px;z-index:99999;word-break:break-all';
+  d.innerHTML = '&#10060; JS ERROR: '+msg+' (line '+line+') <button onclick="this.parentNode.remove()" style="background:none;border:none;color:#fff;float:right;cursor:pointer;font-size:14px">&#10005;</button>';
+  document.body.appendChild(d);
+};
+document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('click', function(e) {
+    var el = e.target;
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#2d3436;color:#fff;padding:6px 14px;border-radius:20px;font-size:11px;z-index:99999;pointer-events:none;max-width:90vw;text-align:center;white-space:nowrap';
+    d.textContent = 'KLIK → '+el.tagName+(el.id?' #'+el.id:'')+(el.onclick?' [onclick:'+el.onclick.toString().substring(0,30)+']':'');
+    document.body.appendChild(d);
+    setTimeout(function(){ d.remove(); }, 3000);
+  }, true);
+});
+</script>
 </body>
 </html>
