@@ -8081,7 +8081,7 @@ async function sbSyncShift(sh) {
   try {
     // Bangun created_at dari isoOpen atau tanggal+waktuBuka shift
     var _shCreatedAt = (function(){
-      if(sh.isoOpen) return sh.isoOpen;
+      if(sh.isoOpen && sh.isoOpen.includes('T')) return sh.isoOpen;
       try {
         var ts = parseTanggalShift(sh.tanggal);
         if(ts){
