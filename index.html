@@ -6663,16 +6663,18 @@ function renderShiftPage() {
 
 async function syncShiftHistory() {
   if (!_sb || !CFG.restaurantId) { showNotif('Belum terhubung Supabase','#E17055'); return; }
-  showNotif('⏳ Sync & memuat riwayat shift...','#6C5CE7');
   
   // STEP 1: Upload semua shift dari localStorage ke Supabase dulu
   var allShifts = ST.shifts.concat(ST.currentShift ? [ST.currentShift] : []);
+  showNotif('⏳ Upload '+allShifts.length+' shift ke Supabase...','#6C5CE7');
+  var uploadOk = 0, uploadFail = 0;
   if (allShifts.length > 0) {
-    console.log('[SyncShift] Uploading', allShifts.length, 'shifts to Supabase...');
     for (var i = 0; i < allShifts.length; i++) {
-      await sbSyncShift(allShifts[i]);
+      var ok = await sbSyncShift(allShifts[i]);
+      if (ok) uploadOk++; else uploadFail++;
     }
   }
+  showNotif('Upload: '+uploadOk+' OK, '+uploadFail+' gagal. Memuat...','#6C5CE7');
   
   try {
     var rid = CFG.restaurantId;
@@ -8147,9 +8149,10 @@ async function sbSyncShift(sh) {
     };
     // Coba upsert by shift_code
     var res = await _sb.from('shifts').upsert(data, {onConflict:'shift_code'});
-    console.log('[sbSyncShift]', sh.id, res.error ? 'FAIL:'+res.error.message : 'OK, status='+data.status);
-    if (res.error) console.warn('sbSyncShift:', res.error.message);
-  } catch(e) { console.warn('sbSyncShift:', e.message); }
+    console.log('[sbSyncShift]', sh.id, res.error ? 'FAIL:'+res.error.message : 'OK');
+    if (res.error) { console.warn('sbSyncShift:', res.error.message); return false; }
+    return true;
+  } catch(e) { console.warn('sbSyncShift:', e.message); return false; }
 }
 
 async function sbSyncMenu(m) {
