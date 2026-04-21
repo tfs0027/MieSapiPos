@@ -2696,7 +2696,6 @@ function loadShiftLocal() {
       if (ST.currentShift) ST.currentShift.onlineOrders = [];
     }
     if (d.shifts) {
-      console.log('[loadShiftLocal] replace ST.shifts:', ST.shifts.length, '→', d.shifts.length);
       ST.shifts = d.shifts;
       // Bersihkan onlineOrders dari semua shift historis — sumber data sudah Supabase
       ST.shifts.forEach(function(s){ s.onlineOrders = []; });
@@ -5446,6 +5445,17 @@ function resetFetchFlags() {
 }
 var _autoSyncing = false;
 
+// Helper: ekstrak jam HH.MM lokal dari ISO timestamp
+function _isoToJam(iso) {
+  if (!iso) return '';
+  try {
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return String(d.getHours()).padStart(2,'0') + '.' + String(d.getMinutes()).padStart(2,'0');
+  } catch(e) { return ''; }
+}
+
+
 async function autoSyncFromSupabase() {
   updateLastSync('syncing');
   if (!_sb || !CFG.restaurantId) { console.warn('[Sync] Skip: no _sb or restaurantId'); return; }
@@ -5690,7 +5700,6 @@ async function autoSyncFromSupabase() {
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
         // Simpan shift aktif (open) yang mungkin belum tersync
         var openShift = ST.currentShift && ST.currentShift.status === 'open' ? ST.currentShift : null;
-        console.log('[AutoSync] raw shifts dari Supabase:', shRes.data.map(function(s){return s.shift_code+':'+s.status;}).join(', '));
         var sbShifts = shRes.data
           .filter(function(sh){ return sh.status !== 'open'; })
           .map(function(sh){
@@ -5701,8 +5710,8 @@ async function autoSyncFromSupabase() {
               labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
               transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
               kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
-              totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
-              waktuTutup: sh.waktu_tutup||'', isoOpen: sh.waktu_buka_iso||null,
+              totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||_isoToJam(sh.waktu_buka_iso),
+              waktuTutup: sh.waktu_tutup||_isoToJam(sh.waktu_tutup_iso), isoOpen: sh.waktu_buka_iso||null,
               isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
             };
           });
@@ -5711,7 +5720,6 @@ async function autoSyncFromSupabase() {
         var localOnly = ST.shifts.filter(function(s){
           return !sbCodes.has(s.id) && s.status !== 'open';
         });
-        console.log('[AutoSync] ST.shifts sebelum:', ST.shifts.length, '→ replace dengan:', sbShifts.length, 'sb +', localOnly.length, 'local');
         ST.shifts = sbShifts.concat(localOnly);
         _dbg('[Shift] Loaded', ST.shifts.length, 'shifts dari Supabase +', localOnly.length, 'lokal');
       }
@@ -6589,9 +6597,7 @@ async function prosesTutupKasir() {
     onlinePlatforms: validOnline, totalOnline: totalOnlineManual,
     onlineOrders: onlineOrdersShift,  // simpan orders final shift ini
   };
-  console.log('[TutupKasir] unshift closed, ST.shifts.length:', ST.shifts.length+1);
   ST.shifts.unshift(closed); ST.currentShift = null;
-  console.log('[TutupKasir] setelah unshift, ST.shifts.length:', ST.shifts.length);
   closeModal('tutup-modal'); updateShiftTopbar(); renderShiftPage();
   showNotif('🔒 Kasir ditutup — ' + closed.id, '#6C5CE7');
   lihatLaporanShift(closed.id);
@@ -6693,7 +6699,6 @@ async function syncShiftHistory() {
       renderShiftHist();
       return;
     }
-    console.log('[SyncHist] raw shifts dari Supabase:', res.data.map(function(s){return s.shift_code+':'+s.status;}).join(', '));
     var sbShifts = res.data
       .filter(function(sh){ return sh.status !== 'open'; })
       .map(function(sh){
@@ -6704,15 +6709,14 @@ async function syncShiftHistory() {
           labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
           transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
           kasFisik: sh.kas_fisik||0, selisih: sh.selisih||0,
-          totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||'',
-          waktuTutup: sh.waktu_tutup||'', isoOpen: sh.waktu_buka_iso||null,
+          totalOnline: sh.total_online||0, waktuBuka: sh.waktu_buka||_isoToJam(sh.waktu_buka_iso),
+          waktuTutup: sh.waktu_tutup||_isoToJam(sh.waktu_tutup_iso), isoOpen: sh.waktu_buka_iso||null,
           isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
         };
       });
     // Merge dengan data lokal yang belum ada di Supabase
     var sbCodes = new Set(sbShifts.map(function(s){return s.id;}));
     var localOnly = ST.shifts.filter(function(s){return !sbCodes.has(s.id) && s.status!=='open';});
-    console.log('[SyncHist] ST.shifts sebelum:', ST.shifts.length, '→ replace dengan:', sbShifts.length, 'sb +', localOnly.length, 'local');
     ST.shifts = sbShifts.concat(localOnly);
     saveShiftLocal();
     renderShiftHist();
@@ -7029,7 +7033,6 @@ function renderLabaRugi() {
 }
 
 function renderShiftHist() {
-  console.log('[renderShiftHist] ST.shifts.length:', ST.shifts.length, 'closed:', ST.shifts.filter(function(s){return s.status==='closed'||(s.status&&s.status!=='open');}).length);
   // Show manual peng button only for admin
   var wrap = $('manual-peng-btn-wrap');
   if (wrap) {
@@ -8036,28 +8039,6 @@ async function _doSyncTrxToSupabase(trx) {
       return new Date().toISOString();
     })();
 
-    // Helper: pastikan nilai adalah ISO timestamp, atau null
-    var _toISO = function(val, tanggal, jam) {
-      // Jika sudah ISO format
-      if (val && typeof val === 'string' && val.includes('T') && val.length > 10) return val;
-      // Coba bangun dari tanggal + jam
-      try {
-        if (!tanggal) return null;
-        var tgl = parseTanggalShift(tanggal);
-        if (!tgl) return null;
-        var d = new Date(tgl);
-        if (jam) {
-          var t = jam.toString().replace(/[.:]/g,':').split(':');
-          d.setHours(parseInt(t[0])||0, parseInt(t[1])||0, 0, 0);
-        }
-        if (!isNaN(d)) return d.toISOString();
-      } catch(e) {}
-      return null;
-    };
-    var _shCreatedAt = _toISO(sh.isoOpen, sh.tanggal, sh.waktuBuka) || new Date().toISOString();
-    var _shUpdatedAt = new Date().toISOString();
-    var _shBukaISO   = _toISO(sh.isoOpen,  sh.tanggal, sh.waktuBuka);
-    var _shTutupISO  = _toISO(sh.isoClose, sh.tanggal, sh.waktuTutup);
     var data = {
       restaurant_id: rid,
       trx_code: trx.id,
@@ -8157,9 +8138,7 @@ async function sbSyncShift(sh) {
       updated_at: new Date().toISOString()
     };
     // Coba upsert by shift_code
-    console.log('[sbSyncShift] kirim', sh.id, 'status=', data.status);
     var res = await _sb.from('shifts').upsert(data, {onConflict:'shift_code'});
-    console.log('[sbSyncShift] hasil', sh.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (res.error) { console.warn('sbSyncShift:', res.error.message); return false; }
     return true;
   } catch(e) { console.warn('sbSyncShift:', e.message); return false; }
