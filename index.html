@@ -8028,6 +8028,29 @@ async function _doSyncTrxToSupabase(trx) {
       } catch(e) {}
       return new Date().toISOString();
     })();
+
+    // Helper: pastikan nilai adalah ISO timestamp, atau null
+    var _toISO = function(val, tanggal, jam) {
+      // Jika sudah ISO format
+      if (val && typeof val === 'string' && val.includes('T') && val.length > 10) return val;
+      // Coba bangun dari tanggal + jam
+      try {
+        if (!tanggal) return null;
+        var tgl = parseTanggalShift(tanggal);
+        if (!tgl) return null;
+        var d = new Date(tgl);
+        if (jam) {
+          var t = jam.toString().replace(/[.:]/g,':').split(':');
+          d.setHours(parseInt(t[0])||0, parseInt(t[1])||0, 0, 0);
+        }
+        if (!isNaN(d)) return d.toISOString();
+      } catch(e) {}
+      return null;
+    };
+    var _shCreatedAt = _toISO(sh.isoOpen, sh.tanggal, sh.waktuBuka) || new Date().toISOString();
+    var _shUpdatedAt = new Date().toISOString();
+    var _shBukaISO   = _toISO(sh.isoOpen,  sh.tanggal, sh.waktuBuka);
+    var _shTutupISO  = _toISO(sh.isoClose, sh.tanggal, sh.waktuTutup);
     var data = {
       restaurant_id: rid,
       trx_code: trx.id,
@@ -8078,23 +8101,28 @@ async function sbSyncTransaction(trx) {
 }
 
 async function sbSyncShift(sh) {
-  if (!_sb || !CFG.restaurantId) return;
+  if (!_sb || !CFG.restaurantId) return false;
   var rid = CFG.restaurantId;
   try {
-    // Bangun created_at dari isoOpen atau tanggal+waktuBuka shift
-    var _shCreatedAt = (function(){
-      if(sh.isoOpen && sh.isoOpen.includes('T')) return sh.isoOpen;
+    // Konversi timestamp - pastikan format ISO valid
+    var _toISO = function(val, tanggal, jam) {
+      if (val && typeof val === 'string' && val.length > 10 && val.includes('T')) return val;
       try {
-        var ts = parseTanggalShift(sh.tanggal);
-        if(ts){
-          var d=new Date(ts);
-          var tp=(sh.waktuBuka||'00:00').replace(/[.:]/g,':').split(':');
-          d.setHours(parseInt(tp[0])||0,parseInt(tp[1])||0,0,0);
-          if(!isNaN(d)) return d.toISOString();
+        if (!tanggal) return null;
+        var tgl = parseTanggalShift(tanggal);
+        if (!tgl) return null;
+        var d = new Date(tgl);
+        if (jam) {
+          var t = jam.toString().replace(/[.:]/g,':').split(':');
+          d.setHours(parseInt(t[0])||0, parseInt(t[1])||0, 0, 0);
         }
-      }catch(e){}
-      return new Date().toISOString();
-    })();
+        return isNaN(d) ? null : d.toISOString();
+      } catch(e) { return null; }
+    };
+    var _shBukaISO  = _toISO(sh.isoOpen,  sh.tanggal, sh.waktuBuka);
+    var _shTutupISO = _toISO(sh.isoClose, sh.tanggal, sh.waktuTutup);
+    var _shCreatedAt = _shBukaISO || new Date().toISOString();
+
     var data = {
       restaurant_id: rid,
       shift_code: sh.id,
@@ -8105,34 +8133,8 @@ async function sbSyncShift(sh) {
       created_at: _shCreatedAt,
       waktu_buka: sh.waktuBuka||'',
       waktu_tutup: sh.waktuTutup||null,
-      waktu_buka_iso: (function(){
-        // Pastikan format ISO valid, bukan jam lokal seperti "23.31"
-        if (sh.isoOpen && sh.isoOpen.includes('T')) return sh.isoOpen;
-        // Bangun dari tanggal + waktuBuka
-        try {
-          var tgl = parseTanggalShift(sh.tanggal);
-          if (tgl) {
-            var tp = (sh.waktuBuka||'00:00').replace('.',':').split(':');
-            var d = new Date(tgl);
-            d.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0, 0, 0);
-            if (!isNaN(d)) return d.toISOString();
-          }
-        } catch(e) {}
-        return null;
-      })(),
-      waktu_tutup_iso: (function(){
-        if (sh.isoClose && sh.isoClose.includes('T')) return sh.isoClose;
-        try {
-          var tgl2 = parseTanggalShift(sh.tanggal);
-          if (tgl2 && sh.waktuTutup) {
-            var tp2 = sh.waktuTutup.replace('.',':').split(':');
-            var d2 = new Date(tgl2);
-            d2.setHours(parseInt(tp2[0])||0, parseInt(tp2[1])||0, 0, 0);
-            if (!isNaN(d2)) return d2.toISOString();
-          }
-        } catch(e) {}
-        return null;
-      })(),
+      waktu_buka_iso: _shBukaISO,
+      waktu_tutup_iso: _shTutupISO,
       catatan_buka: sh.catatanBuka||'',
       catatan_tutup: sh.catatanTutup||'',
       total_penjualan: sh.totalPenjualan||0,
