@@ -2696,6 +2696,7 @@ function loadShiftLocal() {
       if (ST.currentShift) ST.currentShift.onlineOrders = [];
     }
     if (d.shifts) {
+      console.log('[loadShiftLocal] replace ST.shifts:', ST.shifts.length, '→', d.shifts.length);
       ST.shifts = d.shifts;
       // Bersihkan onlineOrders dari semua shift historis — sumber data sudah Supabase
       ST.shifts.forEach(function(s){ s.onlineOrders = []; });
@@ -7028,6 +7029,7 @@ function renderLabaRugi() {
 }
 
 function renderShiftHist() {
+  console.log('[renderShiftHist] ST.shifts.length:', ST.shifts.length, 'closed:', ST.shifts.filter(function(s){return s.status==='closed'||(s.status&&s.status!=='open');}).length);
   // Show manual peng button only for admin
   var wrap = $('manual-peng-btn-wrap');
   if (wrap) {
