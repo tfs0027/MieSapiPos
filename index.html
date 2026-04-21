@@ -5689,6 +5689,7 @@ async function autoSyncFromSupabase() {
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
         // Simpan shift aktif (open) yang mungkin belum tersync
         var openShift = ST.currentShift && ST.currentShift.status === 'open' ? ST.currentShift : null;
+        console.log('[AutoSync] raw shifts dari Supabase:', shRes.data.map(function(s){return s.shift_code+':'+s.status;}).join(', '));
         var sbShifts = shRes.data
           .filter(function(sh){ return sh.status !== 'open'; })
           .map(function(sh){
@@ -6691,6 +6692,7 @@ async function syncShiftHistory() {
       renderShiftHist();
       return;
     }
+    console.log('[SyncHist] raw shifts dari Supabase:', res.data.map(function(s){return s.shift_code+':'+s.status;}).join(', '));
     var sbShifts = res.data
       .filter(function(sh){ return sh.status !== 'open'; })
       .map(function(sh){
@@ -8153,7 +8155,9 @@ async function sbSyncShift(sh) {
       updated_at: new Date().toISOString()
     };
     // Coba upsert by shift_code
+    console.log('[sbSyncShift] kirim', sh.id, 'status=', data.status);
     var res = await _sb.from('shifts').upsert(data, {onConflict:'shift_code'});
+    console.log('[sbSyncShift] hasil', sh.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (res.error) { console.warn('sbSyncShift:', res.error.message); return false; }
     return true;
   } catch(e) { console.warn('sbSyncShift:', e.message); return false; }
