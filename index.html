@@ -8103,8 +8103,34 @@ async function sbSyncShift(sh) {
       created_at: _shCreatedAt,
       waktu_buka: sh.waktuBuka||'',
       waktu_tutup: sh.waktuTutup||null,
-      waktu_buka_iso: sh.isoOpen||null,
-      waktu_tutup_iso: sh.isoClose||null,
+      waktu_buka_iso: (function(){
+        // Pastikan format ISO valid, bukan jam lokal seperti "23.31"
+        if (sh.isoOpen && sh.isoOpen.includes('T')) return sh.isoOpen;
+        // Bangun dari tanggal + waktuBuka
+        try {
+          var tgl = parseTanggalShift(sh.tanggal);
+          if (tgl) {
+            var tp = (sh.waktuBuka||'00:00').replace('.',':').split(':');
+            var d = new Date(tgl);
+            d.setHours(parseInt(tp[0])||0, parseInt(tp[1])||0, 0, 0);
+            if (!isNaN(d)) return d.toISOString();
+          }
+        } catch(e) {}
+        return null;
+      })(),
+      waktu_tutup_iso: (function(){
+        if (sh.isoClose && sh.isoClose.includes('T')) return sh.isoClose;
+        try {
+          var tgl2 = parseTanggalShift(sh.tanggal);
+          if (tgl2 && sh.waktuTutup) {
+            var tp2 = sh.waktuTutup.replace('.',':').split(':');
+            var d2 = new Date(tgl2);
+            d2.setHours(parseInt(tp2[0])||0, parseInt(tp2[1])||0, 0, 0);
+            if (!isNaN(d2)) return d2.toISOString();
+          }
+        } catch(e) {}
+        return null;
+      })(),
       catatan_buka: sh.catatanBuka||'',
       catatan_tutup: sh.catatanTutup||'',
       total_penjualan: sh.totalPenjualan||0,
