@@ -7066,6 +7066,12 @@ function renderShiftHist() {
 function lihatLaporanShift(id) {
   const sh = ST.shifts.find(s=>s.id===id); if(!sh) return;
 
+  // FIX: populate transaksi dari ST.transactions jika kosong
+  // (shift yang dimuat dari Supabase punya transaksi:[] karena detail ada di tabel terpisah)
+  if (!sh.transaksi || sh.transaksi.length === 0) {
+    sh.transaksi = ST.transactions.filter(function(t){ return t.shiftId === sh.id; });
+  }
+
   // FIX: rekalkkulasi tunai/qris/transfer dari data transaksi (include split payment)
   function _getPayAmt(trx, method) {
     if (trx.pay === method) return trx.total;
