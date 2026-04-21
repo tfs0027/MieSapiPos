@@ -5709,6 +5709,7 @@ async function autoSyncFromSupabase() {
         var localOnly = ST.shifts.filter(function(s){
           return !sbCodes.has(s.id) && s.status !== 'open';
         });
+        console.log('[AutoSync] ST.shifts sebelum:', ST.shifts.length, '→ replace dengan:', sbShifts.length, 'sb +', localOnly.length, 'local');
         ST.shifts = sbShifts.concat(localOnly);
         _dbg('[Shift] Loaded', ST.shifts.length, 'shifts dari Supabase +', localOnly.length, 'lokal');
       }
@@ -6586,7 +6587,9 @@ async function prosesTutupKasir() {
     onlinePlatforms: validOnline, totalOnline: totalOnlineManual,
     onlineOrders: onlineOrdersShift,  // simpan orders final shift ini
   };
+  console.log('[TutupKasir] unshift closed, ST.shifts.length:', ST.shifts.length+1);
   ST.shifts.unshift(closed); ST.currentShift = null;
+  console.log('[TutupKasir] setelah unshift, ST.shifts.length:', ST.shifts.length);
   closeModal('tutup-modal'); updateShiftTopbar(); renderShiftPage();
   showNotif('🔒 Kasir ditutup — ' + closed.id, '#6C5CE7');
   lihatLaporanShift(closed.id);
@@ -6706,6 +6709,7 @@ async function syncShiftHistory() {
     // Merge dengan data lokal yang belum ada di Supabase
     var sbCodes = new Set(sbShifts.map(function(s){return s.id;}));
     var localOnly = ST.shifts.filter(function(s){return !sbCodes.has(s.id) && s.status!=='open';});
+    console.log('[SyncHist] ST.shifts sebelum:', ST.shifts.length, '→ replace dengan:', sbShifts.length, 'sb +', localOnly.length, 'local');
     ST.shifts = sbShifts.concat(localOnly);
     saveShiftLocal();
     renderShiftHist();
