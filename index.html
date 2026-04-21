@@ -5733,7 +5733,7 @@ async function autoSyncFromSupabase() {
       var cp = window._currentPage;
       if (cp === 'laporan') { renderLaporan(); fetchLaporanFromSupabase(); }
       else if (cp === 'riwayat') renderRiwayat();
-      else if (cp === 'shift') { renderShiftPage(); syncShiftHistory(); }
+      else if (cp === 'shift') { renderShiftPage(); }
       else if (cp === 'order') { renderMenuGrid(); updateTotals(); }
       else if (cp === 'keuangan') renderKeuanganPage();
       updateLastSync('ok');
@@ -6599,7 +6599,7 @@ async function prosesTutupKasir() {
   saveCFG();
   syncRestoStatusToSupabase();
   renderRestoStatusUI();
-  sbSyncShift(closed);
+  await sbSyncShift(closed);
   saveShiftLocal();
   if (window._currentPage === 'laporan') renderLaporan();
   // Auto-logout timer: jika tidak ada shift baru dibuka dalam 30 menit
