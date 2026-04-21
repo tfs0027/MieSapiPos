@@ -6682,7 +6682,6 @@ async function syncShiftHistory() {
       .eq('restaurant_id', rid)
       .order('shift_code', {ascending: false})
       .limit(500);
-    console.log('[SyncShift] result:', res.error ? 'ERROR:'+res.error.message : (res.data ? res.data.length+' rows' : '0 rows'));
     if (res.error) throw res.error;
     if (!res.data || !res.data.length) {
       showNotif('Tidak ada riwayat shift di Supabase','#F59E0B'); 
@@ -8151,7 +8150,6 @@ async function sbSyncShift(sh) {
     };
     // Coba upsert by shift_code
     var res = await _sb.from('shifts').upsert(data, {onConflict:'shift_code'});
-    console.log('[sbSyncShift]', sh.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (res.error) { console.warn('sbSyncShift:', res.error.message); return false; }
     return true;
   } catch(e) { console.warn('sbSyncShift:', e.message); return false; }
