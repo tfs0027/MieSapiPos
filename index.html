@@ -8132,7 +8132,7 @@ async function sbSyncShift(sh) {
       tanggal: sh.tanggal||'',
       created_at: _shCreatedAt,
       waktu_buka: sh.waktuBuka||'',
-      waktu_tutup: sh.waktuTutup||null,
+      waktu_tutup: null,  // jam lokal, tidak disimpan sebagai timestamp
       waktu_buka_iso: _shBukaISO,
       waktu_tutup_iso: _shTutupISO,
       catatan_buka: sh.catatanBuka||'',
