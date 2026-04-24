@@ -6713,6 +6713,43 @@ async function prosesBukaKasir() {
 async function showTutupModal() {
   if (!isOpen()) { showNotif('Tidak ada shift aktif','#E17055'); return; }
   const sh = ST.currentShift;
+  console.log('[Tutup] local sh.userId:', sh.userId, 'ST.cu.id:', ST.cu.id, 'sh.kasir:', sh.kasir, 'ST.cu.name:', ST.cu.name);
+  
+  // VALIDASI PEMILIK SHIFT: cek real-time dari Supabase
+  if (_sb && CFG.restaurantId && navigator.onLine) {
+    try {
+      var chk = await _sb.from('shifts').select('user_id,kasir_nama,status')
+        .eq('restaurant_id', CFG.restaurantId)
+        .eq('shift_code', sh.id)
+        .maybeSingle();
+      console.log('[Tutup] Supabase check:', JSON.stringify(chk.data), 'error:', chk.error ? chk.error.message : 'none');
+      if (chk.data) {
+        if (chk.data.status !== 'open') {
+          showNotif('⛔ Shift ini sudah ditutup', '#E17055');
+          ST.currentShift = null; saveShiftLocal(); updateShiftTopbar(); renderShiftPage();
+          return;
+        }
+        if (chk.data.user_id && chk.data.user_id !== ST.cu.id) {
+          showNotif('⛔ Shift ini dibuka oleh ' + (chk.data.kasir_nama || 'user lain') + '. Hanya dia yang bisa menutup.', '#E17055');
+          return;
+        }
+        if (!chk.data.user_id && chk.data.kasir_nama && chk.data.kasir_nama !== ST.cu.name) {
+          showNotif('⛔ Shift ini dibuka oleh ' + chk.data.kasir_nama + '. Hanya dia yang bisa menutup.', '#E17055');
+          return;
+        }
+      }
+    } catch(e) { console.warn('validate tutup:', e.message); }
+  }
+  // Fallback local validation
+  if (sh.userId && sh.userId !== ST.cu.id) {
+    showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa menutup.', '#E17055');
+    return;
+  }
+  if (!sh.userId && sh.kasir && sh.kasir !== ST.cu.name) {
+    showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa menutup.', '#E17055');
+    return;
+  }
+  
   // Fetch online orders untuk shift ini langsung dari Supabase (paling akurat)
   await fetchShiftOnlineOrders(sh);
   const totalPenjualan = sh.transaksi.reduce((a,t)=>a+t.total,0);
@@ -8633,6 +8670,7 @@ async function sbSyncShift(sh) {
       updated_at: new Date().toISOString()
     };
     // Coba upsert by shift_code
+    console.log('[sbSyncShift] send user_id:', data.user_id, 'status:', data.status);
     var res = await _sb.from('shifts').upsert(data, {onConflict:'shift_code'});
     if (res.error) { console.warn('sbSyncShift:', res.error.message); return false; }
     return true;
