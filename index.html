@@ -692,7 +692,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         <div class="card">
           <div class="card-hd"><span class="card-title">Riwayat Shift</span>
             <span id="manual-peng-btn-wrap"></span>
-            <button class="btn btn-sm" onclick="syncShiftHistory()" style="font-size:11px">🔄 Muat Ulang Riwayat</button>
+            <button class="btn btn-sm" onclick="syncShiftHistory()" style="font-size:11px">🔄 Muat Ulang Riwayat</button> <button class="btn btn-sm" style="background:#F59E0B;color:#fff" onclick="if(confirm('Pulihkan shift yang hilang dari data transaksi?')) recoverShiftsFromTransactions()">🔧 Pulihkan Shift Hilang</button>
           </div>
           <div class="tbl-wrap"><table><thead><tr><th>Shift</th><th>Kasir</th><th>Tanggal</th><th>Buka</th><th>Tutup</th><th>Penjualan</th><th>Pengeluaran</th><th>Laba Bersih</th><th>Online</th><th>Selisih Kas</th><th>Aksi</th></tr></thead><tbody id="shift-hist"></tbody></table></div>
         </div>
@@ -6673,6 +6673,103 @@ function renderShiftPage() {
     liveEl.style.display = 'none';
   }
   renderShiftHist();
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// RECOVERY: Rekonstruksi shift yang hilang dari data transaksi
+// ═══════════════════════════════════════════════════════════════
+function recoverShiftsFromTransactions() {
+  if (!ST.transactions || !ST.transactions.length) {
+    showNotif('Tidak ada transaksi untuk recovery', '#E17055');
+    return;
+  }
+  var existingIds = new Set(ST.shifts.map(function(s){ return s.id; }));
+  if (ST.currentShift) existingIds.add(ST.currentShift.id);
+  
+  // Kelompokkan transaksi berdasarkan shiftId
+  var trxByShift = {};
+  ST.transactions.forEach(function(t) {
+    if (!t.shiftId || t.voided) return;
+    if (!trxByShift[t.shiftId]) trxByShift[t.shiftId] = [];
+    trxByShift[t.shiftId].push(t);
+  });
+  
+  var recovered = [];
+  Object.keys(trxByShift).forEach(function(shiftId) {
+    if (existingIds.has(shiftId)) return; // sudah ada, skip
+    
+    var trx = trxByShift[shiftId];
+    // Ambil info dari transaksi pertama sebagai referensi
+    var first = trx[0];
+    var total = trx.reduce(function(sum, t){ return sum + (t.total||0); }, 0);
+    
+    // Hitung pembayaran per metode (termasuk split)
+    var tunai = 0, qris = 0, transfer = 0;
+    trx.forEach(function(t) {
+      if (t.splitPay && typeof t.splitPay === 'object') {
+        tunai    += t.splitPay.tunai    || 0;
+        qris     += t.splitPay.qris     || 0;
+        transfer += t.splitPay.transfer || 0;
+      } else if (t.pay === 'tunai')    tunai    += t.total || 0;
+      else if   (t.pay === 'qris')     qris     += t.total || 0;
+      else if   (t.pay === 'transfer') transfer += t.total || 0;
+    });
+    
+    // Ambil tanggal dari transaksi pertama
+    var tgl = first.date ? new Date(first.date) : new Date();
+    var jamBuka = first.time || '00.00';
+    var jamTutup = trx[trx.length-1].time || jamBuka;
+    
+    var recoveredShift = {
+      id: shiftId,
+      kasir: first.kasir || 'Unknown',
+      status: 'closed',
+      tanggal: tgl.toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}),
+      waktuBuka: jamBuka,
+      waktuTutup: jamTutup,
+      isoOpen: tgl.toISOString(),
+      isoClose: new Date(tgl.getTime()+8*60*60*1000).toISOString(), // +8 jam estimasi
+      modalAwal: 0,
+      catatanBuka: '(Recovery otomatis dari data transaksi)',
+      catatanTutup: '',
+      totalPenjualan: total,
+      totalPengeluaran: 0,
+      labaBersih: total,
+      tunai: tunai, qris: qris, transfer: transfer,
+      ekspektasiKas: tunai, kasFisik: tunai, selisih: 0,
+      totalOnline: 0,
+      pengeluaran: [],
+      transaksi: trx
+    };
+    recovered.push(recoveredShift);
+  });
+  
+  if (!recovered.length) {
+    showNotif('Tidak ada shift yang perlu dipulihkan', '#00B894');
+    return;
+  }
+  
+  // Tambahkan ke ST.shifts dan simpan
+  ST.shifts = ST.shifts.concat(recovered);
+  // Urutkan berdasarkan tanggal terbaru dulu
+  ST.shifts.sort(function(a, b){
+    var ta = a.isoOpen || '0';
+    var tb = b.isoOpen || '0';
+    return tb.localeCompare(ta);
+  });
+  
+  saveShiftLocal();
+  
+  // Upload ke Supabase supaya browser lain juga dapat
+  (async function() {
+    for (var i = 0; i < recovered.length; i++) {
+      await sbSyncShift(recovered[i]);
+    }
+    renderShiftHist();
+    if (window._currentPage === 'shift') renderShiftPage();
+    showNotif('✅ ' + recovered.length + ' shift dipulihkan', '#00B894');
+  })();
 }
 
 async function syncShiftHistory() {
