@@ -2846,6 +2846,122 @@ async function checkPin() {
   }
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// SINGLE-LOGIN PROTECTION: cegah akun sama login di 2 browser
+// ═══════════════════════════════════════════════════════════════
+var _sessionId = null;
+var _sessionHeartbeatTimer = null;
+
+function _genSessionId() {
+  return 'sess-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
+
+function _getDeviceInfo() {
+  var ua = navigator.userAgent;
+  var device = /Mobile/.test(ua) ? 'Mobile' : 'Desktop';
+  var browser = 'Unknown';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/Chrome/.test(ua) && !/Edg/.test(ua)) browser = 'Chrome';
+  else if (/Firefox/.test(ua)) browser = 'Firefox';
+  else if (/Safari/.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+  else if (/Arc/.test(ua)) browser = 'Arc';
+  var os = 'Unknown';
+  if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Mac/.test(ua)) os = 'Mac';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad/.test(ua)) os = 'iOS';
+  return browser + ' di ' + os + ' (' + device + ')';
+}
+
+// Cek apakah user sedang login di tempat lain
+async function checkActiveSessionBeforeLogin(userId) {
+  if (!_sb || !CFG.restaurantId) return { canLogin: true };
+  try {
+    var res = await _sb.from('active_sessions').select('*')
+      .eq('user_id', userId)
+      .eq('restaurant_id', CFG.restaurantId)
+      .maybeSingle();
+    if (res.error) { console.warn('check session:', res.error.message); return { canLogin: true }; }
+    if (res.data) {
+      // Cek last_seen: jika sudah > 2 menit, anggap stale, bisa override
+      var lastSeen = new Date(res.data.last_seen || res.data.login_at);
+      var diffMin = (Date.now() - lastSeen.getTime()) / 60000;
+      if (diffMin > 2) return { canLogin: true, staleSession: true };
+      return { 
+        canLogin: false, 
+        existingDevice: res.data.device_info || 'perangkat lain',
+        loginAt: res.data.login_at
+      };
+    }
+    return { canLogin: true };
+  } catch(e) {
+    console.warn('checkActiveSession:', e.message);
+    return { canLogin: true };
+  }
+}
+
+// Daftarkan session ke Supabase
+async function registerActiveSession() {
+  if (!_sb || !CFG.restaurantId || !ST.cu) return;
+  _sessionId = _genSessionId();
+  try {
+    await _sb.from('active_sessions').upsert({
+      user_id: ST.cu.id,
+      restaurant_id: CFG.restaurantId,
+      session_id: _sessionId,
+      device_info: _getDeviceInfo(),
+      login_at: new Date().toISOString(),
+      last_seen: new Date().toISOString()
+    }, { onConflict: 'user_id,restaurant_id' });
+    console.log('[Session] registered:', _sessionId);
+  } catch(e) { console.warn('registerSession:', e.message); }
+}
+
+// Heartbeat + cek validity
+async function _sessionHeartbeat() {
+  if (!_sb || !CFG.restaurantId || !ST.cu || !_sessionId) return;
+  try {
+    var res = await _sb.from('active_sessions').select('session_id,device_info')
+      .eq('user_id', ST.cu.id)
+      .eq('restaurant_id', CFG.restaurantId)
+      .maybeSingle();
+    if (res.data && res.data.session_id !== _sessionId) {
+      // Session ID berubah - ada login di tempat lain, force logout
+      stopSessionHeartbeat();
+      alert('⚠️ Akun ini login di ' + (res.data.device_info || 'perangkat lain') + '. Anda akan logout.');
+      doLogout();
+      return;
+    }
+    // Update last_seen
+    await _sb.from('active_sessions').update({ last_seen: new Date().toISOString() })
+      .eq('user_id', ST.cu.id)
+      .eq('restaurant_id', CFG.restaurantId);
+  } catch(e) { /* silent */ }
+}
+
+function startSessionHeartbeat() {
+  stopSessionHeartbeat();
+  _sessionHeartbeatTimer = setInterval(_sessionHeartbeat, 30000); // 30 detik
+}
+
+function stopSessionHeartbeat() {
+  if (_sessionHeartbeatTimer) { clearInterval(_sessionHeartbeatTimer); _sessionHeartbeatTimer = null; }
+}
+
+// Unregister saat logout
+async function unregisterActiveSession() {
+  stopSessionHeartbeat();
+  if (!_sb || !CFG.restaurantId || !ST.cu) return;
+  try {
+    await _sb.from('active_sessions').delete()
+      .eq('user_id', ST.cu.id)
+      .eq('restaurant_id', CFG.restaurantId);
+  } catch(e) { /* silent */ }
+  _sessionId = null;
+}
+
 function doLogin(u) {
   // Bersihkan banner stuck dari sesi sebelumnya
   ['recovery-banner','force-logout-banner'].forEach(function(id){
@@ -2914,6 +3030,40 @@ function doLogin(u) {
     setTimeout(function() {
       // Load dari localStorage terlebih dahulu (penting saat login manual setelah browser ditutup)
       loadShiftLocal();
+      // Cek: jika localStorage tidak ada currentShift, tapi di Supabase ada shift open,
+      // otomatis adopt shift tersebut (karena terbuka di browser lain)
+      setTimeout(async function(){
+        if (!ST.currentShift && _sb && CFG.restaurantId && navigator.onLine) {
+          try {
+            var r = await _sb.from('shifts').select('*')
+              .eq('restaurant_id', CFG.restaurantId).eq('status', 'open').limit(1);
+            if (!r.error && r.data && r.data.length > 0) {
+              var s = r.data[0];
+              ST.currentShift = {
+                id: s.shift_code,
+                kasir: s.kasir_nama || ST.cu.name,
+                userId: ST.cu.id,
+                modalAwal: s.modal_awal || 0,
+                waktuBuka: s.waktu_buka || _isoToJam(s.waktu_buka_iso),
+                waktuTutup: null,
+                tanggal: s.tanggal || '',
+                status: 'open',
+                isoOpen: s.waktu_buka_iso || null,
+                isoClose: null,
+                pengeluaran: [], transaksi: [], onlineOrders: [],
+                catatanBuka: s.catatan_buka || ''
+              };
+              ST.currentShift.transaksi = ST.transactions.filter(function(t){
+                return t.shiftId === s.shift_code && !t.voided;
+              });
+              saveShiftLocal();
+              updateShiftTopbar();
+              if (window._currentPage === 'shift') renderShiftPage();
+              showNotif('ℹ️ Shift aktif '+s.shift_code+' ('+s.kasir_nama+') diambil dari Supabase', '#F59E0B');
+            }
+          } catch(e) { console.warn('sync open shift:', e.message); }
+        }
+      }, 1500);
       // Lalu sync dari Supabase untuk mendapatkan data terbaru
       if (!ST.transactions.length) loadShiftLocal();
       loadSubscription();
@@ -2937,6 +3087,8 @@ function cancelAutoLogoutTimer() {
 }
 
 function doLogout() {
+  // Unregister session aktif di Supabase
+  unregisterActiveSession();
   clearTimeout(_idleTimer);
   clearTimeout(_idleWarningTimer);
   var b = document.getElementById('idle-warning-banner');
@@ -6429,7 +6581,54 @@ function updateShiftTopbar() {
     : '<button class="btn btn-success btn-sm" onclick="showBukaModal()">🔓 Buka Kasir</button>';
 }
 
-function showBukaModal() {
+async function showBukaModal() {
+  // Cek apakah sudah ada shift aktif di Supabase (dari browser lain)
+  if (_sb && CFG.restaurantId && navigator.onLine) {
+    try {
+      var res = await _sb.from('shifts').select('*')
+        .eq('restaurant_id', CFG.restaurantId)
+        .eq('status', 'open')
+        .limit(1);
+      if (!res.error && res.data && res.data.length > 0) {
+        var openSh = res.data[0];
+        // Ada shift aktif - apakah ini shift milik user saat ini?
+        var kasirSama = (openSh.kasir_nama || '') === ST.cu.name;
+        var msg = kasirSama 
+          ? '⚠️ Anda sudah membuka kasir di browser lain (shift: '+openSh.shift_code+'). Lanjutkan shift tersebut?'
+          : '⚠️ Kasir sudah dibuka oleh ' + (openSh.kasir_nama||'user lain') + ' (shift: '+openSh.shift_code+'). Tidak bisa buka kasir baru. Ambil alih shift ini?';
+        if (confirm(msg)) {
+          // Adopt shift yang ada ke session ini
+          ST.currentShift = {
+            id: openSh.shift_code,
+            kasir: openSh.kasir_nama || ST.cu.name,
+            userId: ST.cu.id,
+            modalAwal: openSh.modal_awal || 0,
+            waktuBuka: openSh.waktu_buka || _isoToJam(openSh.waktu_buka_iso),
+            waktuTutup: null,
+            tanggal: openSh.tanggal || '',
+            status: 'open',
+            isoOpen: openSh.waktu_buka_iso || null,
+            isoClose: null,
+            pengeluaran: [], transaksi: [], onlineOrders: [],
+            catatanBuka: openSh.catatan_buka || ''
+          };
+          // Populate transaksi dari ST.transactions yang cocok
+          ST.currentShift.transaksi = ST.transactions.filter(function(t){
+            return t.shiftId === openSh.shift_code && !t.voided;
+          });
+          saveShiftLocal();
+          updateShiftTopbar();
+          renderShiftPage();
+          showNotif('✅ Shift ' + openSh.shift_code + ' diambil alih', '#00B894');
+          return;
+        } else {
+          showNotif('Dibatalkan — tidak ada shift baru dibuka', '#E17055');
+          return;
+        }
+      }
+    } catch(e) { console.warn('check open shift:', e.message); }
+  }
+  // Tidak ada shift aktif di Supabase, lanjut buka modal normal
   const now = new Date();
   $('buka-info').innerHTML =
     '<div class="sum-row"><span>Kasir</span><b>' + ST.cu.name + '</b></div>' +
@@ -6440,9 +6639,22 @@ function showBukaModal() {
   $('buka-modal').classList.add('open');
 }
 
-function prosesBukaKasir() {
+async function prosesBukaKasir() {
   const modal = parseFloat($('buka-modal-val').value)||0;
   if (!modal) { showNotif('Modal awal harus diisi','#E17055'); return; }
+  // Double-check: pastikan tidak ada shift open di Supabase (user lain mungkin baru buka)
+  if (_sb && CFG.restaurantId && navigator.onLine) {
+    try {
+      var chk = await _sb.from('shifts').select('shift_code,kasir_nama')
+        .eq('restaurant_id', CFG.restaurantId).eq('status', 'open').limit(1);
+      if (!chk.error && chk.data && chk.data.length > 0) {
+        var s0 = chk.data[0];
+        showNotif('⚠️ Shift '+s0.shift_code+' sudah aktif ('+s0.kasir_nama+'). Tidak bisa buka shift baru.', '#E17055');
+        closeModal('buka-modal');
+        return;
+      }
+    } catch(e) { console.warn('prosesBuka check:', e.message); }
+  }
   const now = new Date();
   var _shDatePrefix = new Date().getFullYear().toString() + String(new Date().getMonth()+1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0');
   const shiftId = 'SHF-' + _shDatePrefix + '-' + String(ST.shiftCounter).padStart(3,'0'); ST.shiftCounter++;
@@ -11716,6 +11928,8 @@ setInterval(function() {
 
 // ── Simpan saat tab/window ditutup atau di-refresh ─────────────────────────
 window.addEventListener('beforeunload', function() {
+  // Stop heartbeat (session akan stale sendirinya setelah 2 menit)
+  stopSessionHeartbeat();
   if (ST.currentShift && ST.currentShift.status === 'open') {
     saveShiftLocal();
     // Tandai session sebagai "interrupted" agar bisa dilanjutkan
