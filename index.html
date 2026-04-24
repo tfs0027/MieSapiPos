@@ -3791,6 +3791,16 @@ function updateMejaSelect() {
 function openPay(method) {
   if (!ST.cart.length) { showNotif('Tambahkan menu terlebih dahulu', '#E17055'); return; }
   if (!isOpen()) { showNotif('⚠️ Buka kasir dahulu!', '#E17055'); return; }
+  // Validasi: hanya pembuka shift yang boleh proses payment
+  var sh = ST.currentShift;
+  if (sh.userId && sh.userId !== ST.cu.id) {
+    showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa melakukan transaksi.', '#E17055');
+    return;
+  }
+  if (!sh.userId && sh.kasir && sh.kasir !== ST.cu.name) {
+    showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa melakukan transaksi.', '#E17055');
+    return;
+  }
   // Close any open receipt modal (e.g. bon sementara) before payment
   closeModal('receipt-modal');
   ST.payMethod = method;
@@ -7181,7 +7191,7 @@ async function syncShiftHistory() {
       .filter(function(sh){ return sh.status !== 'open'; })
       .map(function(sh){
         return {
-          id: sh.shift_code||sh.id, kasir: sh.kasir_nama||'', status: sh.status||'closed',
+          id: sh.shift_code||sh.id, kasir: sh.kasir_nama||'', userId: sh.user_id||null, userId: sh.user_id||null, status: sh.status||'closed',
           tanggal: sh.tanggal||'', modalAwal: sh.modal_awal||0,
           totalPenjualan: sh.total_penjualan||0, totalPengeluaran: sh.total_pengeluaran||0,
           labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
