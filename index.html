@@ -2704,6 +2704,7 @@ function loadShiftLocal() {
     if (d.trxCounter) ST.trxCounter = d.trxCounter;
     if (d.shiftCounter) ST.shiftCounter = d.shiftCounter;
     if (d.transactions) ST.transactions = d.transactions;
+    if (d.priceLog) ST.priceLog = d.priceLog;
   } catch(e) { console.warn('loadShiftLocal:', e.message); }
 }
 
@@ -3091,7 +3092,7 @@ function doLogin(u) {
       startRealtimeOrders();
       autoSyncFromSupabase(); // sync semua data dari Supabase saat login/refresh
       // Daftarkan session aktif & mulai heartbeat
-      registerActiveSession().then(function(){ startSessionHeartbeat(); });
+      registerActiveSession().then(function(){ startSessionHeartbeat(); startChangeListener(); });
       var rEl = document.getElementById('sb-sub-rid');
       if (rEl) rEl.textContent = 'ID: ' + (CFG.restaurantId||'—');
       var strip = document.getElementById('sb-sub-strip');
@@ -3109,6 +3110,7 @@ function cancelAutoLogoutTimer() {
 function doLogout() {
   // Unregister session aktif di Supabase
   unregisterActiveSession();
+  stopChangeListener();
   clearTimeout(_idleTimer);
   clearTimeout(_idleWarningTimer);
   var b = document.getElementById('idle-warning-banner');
@@ -4092,6 +4094,7 @@ function toggleMenuStatus(id) {
   // Sync ke Supabase agar halaman order pelanggan langsung update
   sbSyncMenu(m);
   var label = m.status==='available' ? '✅ Diaktifkan' : '❌ Dinonaktifkan';
+  broadcastChange('menu', 'Menu "'+m.name+'" '+(m.status==='available'?'diaktifkan':'dinonaktifkan'));
   showNotif(label + ': ' + m.name, m.status==='available'?'#00B894':'#E17055');
 }
 
@@ -4115,7 +4118,8 @@ function hapusMenu(id) {
   if (idx > -1) ST.menus.splice(idx, 1);
   renderMenuTable(); renderMenuGrid(); buildCatTabs();
   showNotif('✅ Menu "' + m.name + '" dihapus', '#00B894');
-}
+
+  broadcastChange('menu', 'Menu dihapus');}
 
 function renderFmCatSelect(selectedCat) {
   const sel = $('fm-cat'); if(!sel) return;
@@ -4436,7 +4440,21 @@ function saveMenu() {
     if (existing && existing.price !== price) {
       if (!ST.priceLog) ST.priceLog = [];
       var now2 = new Date();
-      ST.priceLog.push({menuId:ST.editMenuId,menuName:name,oldPrice:existing.price,newPrice:price,changedBy:ST.cu?ST.cu.name:'Admin',date:fmtDate(now2),time:fmtTime(now2)});
+      var logEntry = {
+        menuId: ST.editMenuId,
+        menuName: name,
+        oldPrice: existing.price,
+        newPrice: price,
+        changedBy: ST.cu ? ST.cu.name : 'Admin',
+        changedById: ST.cu ? ST.cu.id : null,
+        date: fmtDate(now2),
+        time: fmtTime(now2),
+        iso: now2.toISOString()
+      };
+      ST.priceLog.push(logEntry);
+      saveShiftLocal(); // simpan ke localStorage
+      sbSyncPriceLog(logEntry); // sync ke Supabase
+      broadcastChange('price', 'Harga "'+name+'" '+fmt(existing.price)+' → '+fmt(price));
     }
   }
   if (ST.editMenuId) Object.assign(ST.menus.find(m=>m.id===ST.editMenuId), data);
@@ -4444,6 +4462,7 @@ function saveMenu() {
   closeModal('menu-modal'); renderMenuTable(); renderMenuGrid(); buildCatTabs();
   var savedMenu = ST.editMenuId ? ST.menus.find(function(m){return m.id===ST.editMenuId;}) : ST.menus[ST.menus.length-1];
   if (savedMenu) sbSyncMenu(savedMenu);
+  broadcastChange('menu', 'Menu "'+name+'" diubah');
   showNotif('Menu disimpan');
 }
 
@@ -4695,6 +4714,7 @@ function saveStok() {
   }
   closeModal('stok-modal'); renderStok();
   syncRestoStatusToSupabase();
+  broadcastChange('stok', 'Stok "'+name+'" diubah');
   showNotif('✅ Stok disimpan');
 }
 
@@ -5996,6 +6016,32 @@ async function autoSyncFromSupabase() {
     else renderLaporan(); // selalu update laporan di background
     showNotif('✅ Data tersinkronisasi dari Supabase', '#00B894');
   updateLastSync('ok');
+
+  // 9. Price Log — ambil riwayat perubahan harga
+    try {
+      var plRes = await _sb.from('price_log').select('*')
+        .eq('restaurant_id', rid)
+        .order('changed_at', {ascending: false})
+        .limit(200);
+      if (!plRes.error && plRes.data) {
+        ST.priceLog = plRes.data.map(function(p){
+          return {
+            menuId: p.menu_id,
+            menuName: p.menu_name || '',
+            oldPrice: p.old_price || 0,
+            newPrice: p.new_price || 0,
+            changedBy: p.changed_by || '',
+            changedById: p.changed_by_id || null,
+            date: p.changed_at ? new Date(p.changed_at).toLocaleDateString('id-ID') : '',
+            time: p.changed_at ? new Date(p.changed_at).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'}) : '',
+            iso: p.changed_at || ''
+          };
+        });
+        saveShiftLocal();
+        if (window._currentPage === 'menu') { try { renderPriceLog(); } catch(e){} }
+      }
+    } catch(e) { console.warn('priceLog sync:', e.message); }
+
   } catch(e) {
     console.warn('autoSync error:', e.message);
   } finally {
@@ -6631,6 +6677,7 @@ async function saveUser() {
 
   closeModal('user-modal');
   renderUsers();
+  broadcastChange('user', 'User "'+name+'" ditambahkan/diubah');
   showNotif('✅ ' + name + ' berhasil ditambahkan', '#00B894');
 }
 
@@ -8051,7 +8098,8 @@ async function hapusMember(id) {
       if (res.error) console.warn('Hapus member Supabase:', res.error.message);
     } catch(e) { console.warn('hapusMember sync:', e.message); }
   }
-}
+
+  broadcastChange('member', 'Member dihapus');}
 
 
 // ═══════════════════════════════
@@ -8662,6 +8710,106 @@ async function sbSyncTransaction(trx) {
   } else {
     addToPendingQueue(trx); // simpan ke queue untuk retry nanti
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// SYNC PRICE LOG ke Supabase
+// ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// BROADCAST perubahan antar browser (via Supabase polling)
+// ═══════════════════════════════════════════════════════════════
+var _lastChangeSeen = null; // timestamp perubahan terakhir yang sudah dilihat
+var _changeCheckTimer = null;
+
+// Catat perubahan - dipanggil setiap ada perubahan penting
+async function broadcastChange(changeType, message) {
+  if (!_sb || !CFG.restaurantId) return;
+  try {
+    await _sb.from('change_log').upsert({
+      restaurant_id: CFG.restaurantId,
+      last_change_type: changeType,
+      last_changed_by: ST.cu ? ST.cu.name : 'System',
+      last_changed_by_id: ST.cu ? ST.cu.id : null,
+      last_changed_at: new Date().toISOString(),
+      message: message || ''
+    }, { onConflict: 'restaurant_id' });
+  } catch(e) { console.warn('broadcastChange:', e.message); }
+}
+
+// Cek perubahan dari browser lain
+async function checkExternalChanges() {
+  if (!_sb || !CFG.restaurantId || !ST.cu) return;
+  try {
+    var res = await _sb.from('change_log').select('*')
+      .eq('restaurant_id', CFG.restaurantId)
+      .maybeSingle();
+    if (res.error || !res.data) return;
+    var ch = res.data;
+    // Pertama kali: set baseline, jangan notif
+    if (_lastChangeSeen === null) {
+      _lastChangeSeen = ch.last_changed_at;
+      return;
+    }
+    // Ada perubahan baru?
+    if (ch.last_changed_at > _lastChangeSeen) {
+      _lastChangeSeen = ch.last_changed_at;
+      // Skip jika perubahan dibuat oleh user ini sendiri (device ini)
+      if (ch.last_changed_by_id === (ST.cu ? ST.cu.id : null)) return;
+      
+      // Tampilkan notif + auto re-sync
+      var msgMap = {
+        'menu': '📝 Menu/harga diubah oleh',
+        'price': '💰 Harga menu diubah oleh',
+        'member': '👥 Data member diubah oleh',
+        'setting': '⚙️ Pengaturan toko diubah oleh',
+        'user': '🔐 User/akses diubah oleh',
+        'stok': '📦 Stok diubah oleh',
+        'ingredient': '🥘 Bahan/COGS diubah oleh'
+      };
+      var prefix = msgMap[ch.last_change_type] || '🔔 Data diubah oleh';
+      var notifMsg = prefix + ' ' + (ch.last_changed_by || 'user lain');
+      if (ch.message) notifMsg += ': ' + ch.message;
+      showNotif(notifMsg + ' — memperbarui...', '#F59E0B');
+      
+      // Auto re-sync supaya data up-to-date
+      setTimeout(function(){
+        if (!_autoSyncing) autoSyncFromSupabase();
+      }, 500);
+    }
+  } catch(e) { /* silent */ }
+}
+
+function startChangeListener() {
+  stopChangeListener();
+  // Polling setiap 15 detik
+  _changeCheckTimer = setInterval(checkExternalChanges, 15000);
+  // First check setelah 2 detik
+  setTimeout(checkExternalChanges, 2000);
+}
+
+function stopChangeListener() {
+  if (_changeCheckTimer) { clearInterval(_changeCheckTimer); _changeCheckTimer = null; }
+  _lastChangeSeen = null;
+}
+
+async function sbSyncPriceLog(entry) {
+  if (!_sb || !CFG.restaurantId || !navigator.onLine) return false;
+  try {
+    var res = await _sb.from('price_log').insert({
+      restaurant_id: CFG.restaurantId,
+      menu_id: entry.menuId ? String(entry.menuId) : null,
+      menu_name: entry.menuName || '',
+      old_price: entry.oldPrice || 0,
+      new_price: entry.newPrice || 0,
+      changed_by: entry.changedBy || '',
+      changed_by_id: entry.changedById || null,
+      changed_at: entry.iso || new Date().toISOString()
+    });
+    if (res.error) { console.warn('sbSyncPriceLog:', res.error.message); return false; }
+    return true;
+  } catch(e) { console.warn('sbSyncPriceLog err:', e.message); return false; }
 }
 
 async function sbSyncShift(sh) {
@@ -11677,6 +11825,7 @@ function saveCfgToko() {
   $('sb-name-el').textContent = CFG.nama + ' POS';
   $('login-title').textContent = CFG.nama + ' POS';
   renderStrukPreview();
+  broadcastChange('setting', 'Pengaturan toko diubah');
   showNotif('✅ Informasi toko disimpan','#00B894');
   var opu = $('cfg-order-page-url'); if(opu) CFG.orderPageUrl = opu.value.trim();
   syncRestoStatusToSupabase();
@@ -12825,7 +12974,7 @@ async function simpanBahan(){
     var nb=Object.assign({id:'loc-'+Date.now()},payload);ST_ingredients.push(nb);
     if(_sb){var res=await _sb.from('ingredients').insert(payload).select('id').single();if(!res.error)nb.id=res.data.id;}
   }
-  closeModal('modal-bahan');renderBahanList();renderMenuCogs();showNotif('Bahan disimpan','#00B894');
+  closeModal('modal-bahan');renderBahanList();renderMenuCogs();broadcastChange('ingredient', 'Bahan disimpan');showNotif('Bahan disimpan','#00B894');
 }
 
 async function hapusBahan(id){
@@ -12840,7 +12989,7 @@ async function hapusBahan(id){
   }
   ST_ingredients=ST_ingredients.filter(function(x){return x.id!==id;});
   if(_sb)await _sb.from('ingredients').delete().eq('id',id).eq('restaurant_id',CFG.restaurantId);
-  renderBahanList();renderMenuCogs();showNotif('Bahan dihapus','#A8A5BE');
+  renderBahanList();renderMenuCogs();broadcastChange('ingredient', 'Bahan dihapus');showNotif('Bahan dihapus','#A8A5BE');
 }
 
 function renderBahanList(){
@@ -12963,7 +13112,7 @@ async function simpanResep(){
       if(_resepTemp.length){var rows=_resepTemp.map(function(r){return {menu_id:_editResepMenuId,ingredient_id:r.ingredient_id,jumlah:r.jumlah,restaurant_id:CFG.restaurantId};});await _sb.from('menu_recipes').insert(rows);}
     }catch(e){console.warn('simpanResep:',e.message);}
   }
-  closeModal('modal-resep');renderMenuCogs();renderCogsLaporan();showNotif('Resep disimpan','#00B894');
+  closeModal('modal-resep');renderMenuCogs();renderCogsLaporan();broadcastChange('ingredient', 'Resep disimpan');showNotif('Resep disimpan','#00B894');
 }
 
 // ════════════════════════════════════════════════════════════════
