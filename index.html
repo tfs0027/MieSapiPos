@@ -692,7 +692,7 @@ tr:hover td{background:rgba(108,92,231,.03)}
         <div class="card">
           <div class="card-hd"><span class="card-title">Riwayat Shift</span>
             <span id="manual-peng-btn-wrap"></span>
-            <button class="btn btn-sm" onclick="syncShiftHistory()" style="font-size:11px">🔄 Muat Ulang Riwayat</button> <button class="btn btn-sm" style="background:#F59E0B;color:#fff" onclick="if(confirm('Pulihkan shift yang hilang dari data transaksi?')) recoverShiftsFromTransactions()">🔧 Pulihkan Shift Hilang</button>
+            <button class="btn btn-sm" onclick="syncShiftHistory()" style="font-size:11px">🔄 Muat Ulang Riwayat</button> <button class="btn btn-sm" style="background:#F59E0B;color:#fff" onclick="if(confirm('Pulihkan shift yang hilang dari data transaksi?')) recoverShiftsFromTransactions()">🔧 Pulihkan Shift Hilang</button> <button class="btn btn-sm" style="background:#6C5CE7;color:#fff" onclick="migrateOldIds()">🔄 Migrasi Format ID</button>
           </div>
           <div class="tbl-wrap"><table><thead><tr><th>Shift</th><th>Kasir</th><th>Tanggal</th><th>Buka</th><th>Tutup</th><th>Penjualan</th><th>Pengeluaran</th><th>Laba Bersih</th><th>Online</th><th>Selisih Kas</th><th>Aksi</th></tr></thead><tbody id="shift-hist"></tbody></table></div>
         </div>
@@ -3688,7 +3688,8 @@ function processPayment() {
   const mejaVal = $('cart-meja').value;
   const cashRec = ST.payMethod==='cash' ? (parseFloat($('cash-inp') ? $('cash-inp').value : grand)||grand) : grand;
   const change = ST.payMethod==='cash' ? Math.max(0, Math.round(cashRec-grand)) : 0;
-  const id = 'TRX-' + String(ST.trxCounter).padStart(3,'0'); ST.trxCounter++;
+  var _trxDatePrefix = new Date().getFullYear().toString() + String(new Date().getMonth()+1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0');
+  const id = 'TRX-' + _trxDatePrefix + '-' + String(ST.trxCounter).padStart(4,'0'); ST.trxCounter++;
   const now = new Date();
   const trx = {
     id, time:fmtTime(now), date:isoDate(now), dateDisplay:fmtDate(now),
@@ -4856,7 +4857,8 @@ function processPaymentSplit() {
   var tax = CFG.enablePajak ? taxable*(CFG.pajak/100):0;
   var grand = Math.max(0, Math.round(taxable+tax)); // poinDiskon sudah di-apply ke taxable
   var mejaVal = $('cart-meja').value;
-  var id = 'TRX-'+String(ST.trxCounter).padStart(3,'0'); ST.trxCounter++;
+  var _trxDatePrefix2 = new Date().getFullYear().toString() + String(new Date().getMonth()+1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0');
+  var id = 'TRX-'+_trxDatePrefix2+'-'+String(ST.trxCounter).padStart(4,'0'); ST.trxCounter++;
   var now = new Date();
   var labelPay = function(m){return m==='cash'?'Tunai':m==='qris'?'QRIS':'Transfer';};
   var trx = {
@@ -5454,6 +5456,37 @@ function _isoToJam(iso) {
     if (isNaN(d)) return '';
     return String(d.getHours()).padStart(2,'0') + '.' + String(d.getMinutes()).padStart(2,'0');
   } catch(e) { return ''; }
+}
+
+// Helper: format tampilan TRX ID - jika format lama (TRX-NNN), prepend tanggal
+function _fmtTrxId(t) {
+  if (!t || !t.id) return '';
+  // Jika sudah format baru (TRX-YYYYMMDD-NNNN), tampilkan apa adanya
+  if (/^TRX-\d{8}-/.test(t.id)) return t.id;
+  // Format lama: prepend tanggal dari field date
+  if (t.date) {
+    var ymd = t.date.replace(/-/g, '');
+    return t.id.replace('TRX-', 'TRX-' + ymd + '-');
+  }
+  return t.id;
+}
+
+// Helper: format tampilan Shift ID - sama
+function _fmtShiftId(s) {
+  if (!s || !s.id) return '';
+  if (/^SHF-\d{8}-/.test(s.id)) return s.id;
+  // Ambil tanggal dari isoOpen
+  var ymd = '';
+  if (s.isoOpen) ymd = s.isoOpen.slice(0,10).replace(/-/g,'');
+  if (!ymd && s.tanggal) {
+    try {
+      var d = new Date(parseTanggalShift(s.tanggal));
+      if (!isNaN(d)) {
+        ymd = d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+      }
+    } catch(e) {}
+  }
+  return ymd ? s.id.replace('SHF-', 'SHF-'+ymd+'-') : s.id;
 }
 
 
@@ -6411,7 +6444,8 @@ function prosesBukaKasir() {
   const modal = parseFloat($('buka-modal-val').value)||0;
   if (!modal) { showNotif('Modal awal harus diisi','#E17055'); return; }
   const now = new Date();
-  const shiftId = 'SHF-' + String(ST.shiftCounter).padStart(3,'0'); ST.shiftCounter++;
+  var _shDatePrefix = new Date().getFullYear().toString() + String(new Date().getMonth()+1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0');
+  const shiftId = 'SHF-' + _shDatePrefix + '-' + String(ST.shiftCounter).padStart(3,'0'); ST.shiftCounter++;
   ST.currentShift = {
     id:shiftId, kasir:ST.cu.name, userId:ST.cu.id, modalAwal:modal,
     waktuBuka:fmtTime(now), waktuTutup:null, tanggal:fmtDate(now), status:'open',
@@ -6678,6 +6712,94 @@ function renderShiftPage() {
 
 // ═══════════════════════════════════════════════════════════════
 // RECOVERY: Rekonstruksi shift yang hilang dari data transaksi
+
+// ═══════════════════════════════════════════════════════════════
+// MIGRATION: Ubah format ID lama → format dengan tanggal
+// TRX-001 → TRX-20260422-0001
+// SHF-001 → SHF-20260422-001
+// ═══════════════════════════════════════════════════════════════
+async function migrateOldIds() {
+  if (!confirm('Migrasi format ID lama (TRX-001 → TRX-20260422-0001) untuk transaksi & shift?\n\nProses ini akan:\n1. Update ID lokal\n2. Upload ulang ke Supabase\n3. Hapus record lama dari Supabase\n\nLanjutkan?')) return;
+  
+  showNotif('⏳ Migrasi ID sedang berjalan...', '#6C5CE7');
+  
+  var trxMigrated = 0, shiftMigrated = 0;
+  var shiftIdMap = {}; // old id → new id untuk update shiftId di transaksi
+  
+  // STEP 1: Update shift IDs
+  ST.shifts.forEach(function(s) {
+    if (/^SHF-\d{8}-/.test(s.id)) return; // sudah format baru
+    var ymd = '';
+    if (s.isoOpen) ymd = s.isoOpen.slice(0,10).replace(/-/g,'');
+    if (!ymd && s.tanggal) {
+      try {
+        var d = new Date(parseTanggalShift(s.tanggal));
+        if (!isNaN(d)) {
+          ymd = d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+        }
+      } catch(e) {}
+    }
+    if (!ymd) return;
+    var newId = s.id.replace('SHF-', 'SHF-'+ymd+'-');
+    shiftIdMap[s.id] = newId;
+    s.id = newId;
+    shiftMigrated++;
+  });
+  
+  // STEP 2: Update transaction IDs & shiftId reference
+  ST.transactions.forEach(function(t) {
+    // Update shiftId reference jika mapped
+    if (shiftIdMap[t.shiftId]) t.shiftId = shiftIdMap[t.shiftId];
+    
+    // Update trx id jika format lama
+    if (/^TRX-\d{8}-/.test(t.id)) return;
+    if (!t.date) return;
+    var ymd = t.date.replace(/-/g, '');
+    t.id = t.id.replace('TRX-', 'TRX-'+ymd+'-');
+    trxMigrated++;
+  });
+  
+  saveShiftLocal();
+  showNotif('Lokal: '+trxMigrated+' trx, '+shiftMigrated+' shift diupdate. Upload...', '#6C5CE7');
+  
+  // STEP 3: Re-upload ke Supabase (upsert pakai ID baru)
+  if (_sb && CFG.restaurantId && navigator.onLine) {
+    for (var i = 0; i < ST.shifts.length; i++) {
+      await sbSyncShift(ST.shifts[i]);
+    }
+    // Upload ulang transaksi
+    for (var j = 0; j < ST.transactions.length; j++) {
+      await _doSyncTrxToSupabase(ST.transactions[j]);
+    }
+    
+    // STEP 4: Hapus record lama dari Supabase (yang masih format lama TRX-001, SHF-001)
+    // Berdasarkan ID map yang kita buat
+    try {
+      var oldShiftIds = Object.keys(shiftIdMap);
+      if (oldShiftIds.length) {
+        await _sb.from('shifts').delete()
+          .eq('restaurant_id', CFG.restaurantId)
+          .in('shift_code', oldShiftIds);
+      }
+      // Hapus transaksi lama berdasarkan trx_code format lama
+      var oldTrxIds = ST.transactions
+        .filter(function(t){ return !/^TRX-\d{8}-/.test(t._oldId || ''); })
+        .map(function(t){ return t._oldId; })
+        .filter(Boolean);
+      if (oldTrxIds.length) {
+        await _sb.from('transactions').delete()
+          .eq('restaurant_id', CFG.restaurantId)
+          .in('trx_code', oldTrxIds);
+      }
+    } catch(e) { console.warn('cleanup old ids:', e.message); }
+  }
+  
+  renderShiftHist();
+  if (window._currentPage === 'riwayat') renderRiwayat();
+  if (window._currentPage === 'shift') renderShiftPage();
+  showNotif('✅ Migrasi selesai: '+trxMigrated+' trx, '+shiftMigrated+' shift', '#00B894');
+}
+
 // ═══════════════════════════════════════════════════════════════
 function recoverShiftsFromTransactions() {
   if (!ST.transactions || !ST.transactions.length) {
@@ -6687,19 +6809,43 @@ function recoverShiftsFromTransactions() {
   var existingIds = new Set(ST.shifts.map(function(s){ return s.id; }));
   if (ST.currentShift) existingIds.add(ST.currentShift.id);
   
-  // Kelompokkan transaksi berdasarkan shiftId
+  // Kelompokkan transaksi berdasarkan shiftId + tanggal
+  // (shift lama mungkin pakai ID sama di tanggal berbeda)
   var trxByShift = {};
   ST.transactions.forEach(function(t) {
     if (!t.shiftId || t.voided) return;
-    if (!trxByShift[t.shiftId]) trxByShift[t.shiftId] = [];
-    trxByShift[t.shiftId].push(t);
+    // Buat key kombinasi: shiftId-date untuk memisahkan shift dgn ID sama di tanggal berbeda
+    var dateKey = (t.date || '').slice(0,10); // YYYY-MM-DD
+    var groupKey = t.shiftId + '|' + dateKey;
+    if (!trxByShift[groupKey]) trxByShift[groupKey] = { shiftId: t.shiftId, date: dateKey, trx: [] };
+    trxByShift[groupKey].trx.push(t);
   });
   
   var recovered = [];
-  Object.keys(trxByShift).forEach(function(shiftId) {
-    if (existingIds.has(shiftId)) return; // sudah ada, skip
+  Object.keys(trxByShift).forEach(function(groupKey) {
+    var group = trxByShift[groupKey];
+    var shiftId = group.shiftId;
+    var dateKey = group.date;
+    var trx = group.trx;
     
-    var trx = trxByShift[shiftId];
+    // Cek: apakah SHIFT dengan id ini DAN tanggal yang SAMA sudah ada
+    var alreadyExists = ST.shifts.some(function(s){
+      if (s.id !== shiftId) return false;
+      // Cek tanggal shift (dari isoOpen atau tanggal)
+      var sd = s.isoOpen ? s.isoOpen.slice(0,10) : '';
+      if (!sd && s.tanggal) {
+        try { sd = new Date(parseTanggalShift(s.tanggal)).toISOString().slice(0,10); } catch(e) {}
+      }
+      return sd === dateKey;
+    });
+    if (alreadyExists) return;
+    
+    // Jika shift ID sama sudah ada untuk tanggal LAIN, beri suffix tanggal agar unik
+    var finalShiftId = shiftId;
+    if (existingIds.has(shiftId)) {
+      finalShiftId = shiftId + '-' + dateKey.replace(/-/g,'');
+    }
+    
     // Ambil info dari transaksi pertama sebagai referensi
     var first = trx[0];
     var total = trx.reduce(function(sum, t){ return sum + (t.total||0); }, 0);
@@ -6722,7 +6868,7 @@ function recoverShiftsFromTransactions() {
     var jamTutup = trx[trx.length-1].time || jamBuka;
     
     var recoveredShift = {
-      id: shiftId,
+      id: finalShiftId,
       kasir: first.kasir || 'Unknown',
       status: 'closed',
       tanggal: tgl.toLocaleDateString('id-ID', {day:'2-digit', month:'short', year:'numeric'}),
