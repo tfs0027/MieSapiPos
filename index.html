@@ -3114,7 +3114,7 @@ function doLogout() {
   var b = document.getElementById('idle-warning-banner');
   if (b) b.remove();
   if (isOpen()) {
-    var isOwner = !ST.currentShift.userId || ST.currentShift.userId===ST.cu.id || ST.cu.role==='admin';
+    var isOwner = !ST.currentShift.userId || ST.currentShift.userId===ST.cu.id;
     if (isOwner) {
       if (!confirm('⚠️ Kasir ' + ST.currentShift.id + ' masih buka!\n\nTutup kasir dahulu sebelum keluar, atau pilih OK untuk tetap keluar tanpa menutup shift.')) return;
     }
@@ -6916,7 +6916,7 @@ function renderShiftPage() {
     const totalK = sh.pengeluaran.reduce((a,p)=>a+p.nominal,0);
     const laba = totalP-totalK;
     const tunai = sh.transaksi.filter(t=>t.pay==='cash').reduce((a,t)=>a+t.total,0);
-    var isOwner = !sh.userId || sh.userId === ST.cu.id || ST.cu.role==='admin';
+    var isOwner = !sh.userId || sh.userId === ST.cu.id;
     bannerEl.innerHTML = '<div style="background:var(--green-bg);border:1px solid #A7EDD3;border-radius:var(--radius-lg);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
       '<div><div style="font-size:13px;font-weight:700;color:var(--green-dk)">🟢 Kasir Sedang Buka — ' + sh.id + '</div>' +
       '<div style="font-size:11px;color:#3B7D5E;margin-top:3px">Kasir: ' + sh.kasir + ' · Buka: ' + sh.waktuBuka + ' · ' + sh.tanggal + ' · Modal: ' + fmt(sh.modalAwal) + '</div>' +
