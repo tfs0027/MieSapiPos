@@ -3433,8 +3433,58 @@ function renderMenuGrid() {
 
 let _varMenu = null;
 
+
+// ═══════════════════════════════════════════════════════════════
+// Validasi: cek apakah user saat ini boleh melakukan transaksi
+// (hanya pembuka shift yang boleh)
+// ═══════════════════════════════════════════════════════════════
+function canTransact(silent) {
+  if (!isOpen()) { 
+    if (!silent) showNotif('⚠️ Buka kasir dahulu!', '#E17055');
+    return false; 
+  }
+  var sh = ST.currentShift;
+  if (sh.userId && sh.userId !== ST.cu.id) {
+    if (!silent) showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa transaksi.', '#E17055');
+    return false;
+  }
+  if (!sh.userId && sh.kasir && sh.kasir !== ST.cu.name) {
+    if (!silent) showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa transaksi.', '#E17055');
+    return false;
+  }
+  return true;
+}
+
+// Real-time check ke Supabase — pakai di titik kritis (tutup kasir, finalisasi bayar)
+async function canTransactRT() {
+  if (!canTransact()) return false;
+  if (!_sb || !CFG.restaurantId || !navigator.onLine) return true; // offline, trust local
+  try {
+    var chk = await _sb.from('shifts').select('user_id,kasir_nama,status')
+      .eq('restaurant_id', CFG.restaurantId)
+      .eq('shift_code', ST.currentShift.id)
+      .maybeSingle();
+    if (!chk.data) return true; // shift belum tersync, trust local
+    if (chk.data.status !== 'open') {
+      showNotif('⛔ Shift sudah ditutup di tempat lain', '#E17055');
+      ST.currentShift = null; saveShiftLocal(); updateShiftTopbar(); 
+      if (window._currentPage === 'shift') renderShiftPage();
+      return false;
+    }
+    if (chk.data.user_id && chk.data.user_id !== ST.cu.id) {
+      showNotif('⛔ Shift dibuka oleh ' + (chk.data.kasir_nama||'user lain') + '. Hanya dia yang bisa transaksi.', '#E17055');
+      return false;
+    }
+    if (!chk.data.user_id && chk.data.kasir_nama && chk.data.kasir_nama !== ST.cu.name) {
+      showNotif('⛔ Shift dibuka oleh ' + chk.data.kasir_nama + '. Hanya dia yang bisa transaksi.', '#E17055');
+      return false;
+    }
+  } catch(e) { console.warn('canTransactRT:', e.message); }
+  return true;
+}
+
 function addToCart(id) {
-  if (!isOpen()) { showNotif('⚠️ Buka kasir dahulu!', '#E17055'); return; }
+  if (!canTransact()) return;
   const menu = ST.menus.find(m => m.id===id);
   if (!menu || menu.status==='out') return;
   if (menu.opts && menu.opts.length > 0) {
@@ -3589,8 +3639,9 @@ function clearCart() { ST.cart = []; $('disc-pct').value = 0; renderCart(); }
 // ═══════════════════════════════
 // PENDING ORDERS
 // ═══════════════════════════════
-function simpanPesanan() {
+async function simpanPesanan() {
   if (!ST.cart.length) { showNotif('Keranjang kosong, tidak ada yang disimpan','#E17055'); return; }
+  if (!(await canTransactRT())) return;
   const meja = $('cart-meja').value;
   const disc = parseFloat($('disc-pct').value)||0;
   const sub = ST.cart.reduce((a,c)=>a+c.price*c.qty,0);
@@ -3618,6 +3669,7 @@ function simpanPesanan() {
 }
 
 function muatPesanan(id) {
+  if (!canTransact()) return;
   const idx = ST.pendingOrders.findIndex(p=>p.id===id);
   if (idx<0) return;
   if (ST.cart.length) {
@@ -3638,6 +3690,7 @@ function muatPesanan(id) {
 
 function hapusPesananTertunda(id, e) {
   e.stopPropagation();
+  if (!canTransact()) return;
   ST.pendingOrders = ST.pendingOrders.filter(p=>p.id!==id);
   renderPendingList();
   updatePendingBadge();
@@ -3788,19 +3841,10 @@ function updateMejaSelect() {
 // ═══════════════════════════════
 // PAYMENT
 // ═══════════════════════════════
-function openPay(method) {
+async function openPay(method) {
   if (!ST.cart.length) { showNotif('Tambahkan menu terlebih dahulu', '#E17055'); return; }
-  if (!isOpen()) { showNotif('⚠️ Buka kasir dahulu!', '#E17055'); return; }
-  // Validasi: hanya pembuka shift yang boleh proses payment
-  var sh = ST.currentShift;
-  if (sh.userId && sh.userId !== ST.cu.id) {
-    showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa melakukan transaksi.', '#E17055');
-    return;
-  }
-  if (!sh.userId && sh.kasir && sh.kasir !== ST.cu.name) {
-    showNotif('⛔ Shift dibuka oleh ' + sh.kasir + '. Hanya dia yang bisa melakukan transaksi.', '#E17055');
-    return;
-  }
+  // Real-time check ke Supabase
+  if (!(await canTransactRT())) return;
   // Close any open receipt modal (e.g. bon sementara) before payment
   closeModal('receipt-modal');
   ST.payMethod = method;
@@ -7377,10 +7421,10 @@ function simpanManualPengeluaran() {
   showNotif('✅ Pengeluaran manual ditambahkan ke ' + shiftId, '#E17055');
 }
 
-function tambahPengeluaran() {
+async function tambahPengeluaran() {
   const nama = $('pn').value.trim(), nominal = parseFloat($('pa').value)||0;
   if (!nama||!nominal) { showNotif('Nama & nominal wajib diisi','#E17055'); return; }
-  if (!isOpen()) { showNotif('Buka kasir dahulu','#E17055'); return; }
+  if (!(await canTransactRT())) return;
   var entry = {
     id: Date.now(), nama, nominal, kategori:$('pk').value,
     ket:$('pket').value.trim(), ref:$('pref').value.trim(), waktu:fmtTime(new Date())
