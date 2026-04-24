@@ -2828,6 +2828,24 @@ async function checkPin() {
 
   if (match) {
     clearPinLock(u.id); // reset counter saat berhasil
+    // Cek apakah akun ini sudah login di tempat lain
+    var sessCheck = await checkActiveSessionBeforeLogin(u.id);
+    if (!sessCheck.canLogin) {
+      ST.pin = ''; renderPinDots();
+      var loginTime = sessCheck.loginAt ? new Date(sessCheck.loginAt).toLocaleString('id-ID') : '';
+      var msg = '⚠️ Akun ini sedang login di: ' + sessCheck.existingDevice +
+                (loginTime ? '\nSejak: ' + loginTime : '') +
+                '\n\nLanjutkan? (Device yang lain akan otomatis logout dalam 30 detik)';
+      if (confirm(msg)) {
+        doLogin(u);
+      } else {
+        showNotif('Login dibatalkan', '#E17055');
+      }
+      return;
+    }
+    if (sessCheck.staleSession) {
+      showNotif('ℹ️ Session lama sudah kadaluarsa, login diteruskan', '#F59E0B');
+    }
     doLogin(u);
   } else {
     ST.pin = ''; renderPinDots();
@@ -3072,6 +3090,8 @@ function doLogin(u) {
       checkForceLogout();
       startRealtimeOrders();
       autoSyncFromSupabase(); // sync semua data dari Supabase saat login/refresh
+      // Daftarkan session aktif & mulai heartbeat
+      registerActiveSession().then(function(){ startSessionHeartbeat(); });
       var rEl = document.getElementById('sb-sub-rid');
       if (rEl) rEl.textContent = 'ID: ' + (CFG.restaurantId||'—');
       var strip = document.getElementById('sb-sub-strip');
