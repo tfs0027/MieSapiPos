@@ -5997,8 +5997,38 @@ async function autoSyncFromSupabase() {
         .order('shift_code', {ascending:false})
         .limit(200);
       if (!shRes.error && shRes.data) {
+        // CHECK: jika currentShift local masih 'open' tapi di Supabase sudah 'closed'
+        // → clear currentShift (browser ini harus ikut tertutup)
+        if (ST.currentShift && ST.currentShift.status === 'open') {
+          var match = shRes.data.find(function(sh){ return sh.shift_code === ST.currentShift.id; });
+          if (match && match.status !== 'open') {
+            console.log('[AutoSync] currentShift', ST.currentShift.id, 'sudah ditutup di tempat lain, clear local');
+            // Tambahkan ke history sebagai shift closed
+            var closedSh = {
+              id: match.shift_code, kasir: match.kasir_nama||'', status: 'closed',
+              tanggal: match.tanggal||'', modalAwal: match.modal_awal||0,
+              totalPenjualan: match.total_penjualan||0, totalPengeluaran: match.total_pengeluaran||0,
+              labaBersih: match.laba_bersih||0, tunai: match.tunai||0, qris: match.qris||0,
+              transfer: match.transfer||0, ekspektasiKas: match.ekspektasi_kas||0,
+              kasFisik: match.kas_fisik||0, selisih: match.selisih||0,
+              totalOnline: match.total_online||0,
+              waktuBuka: match.waktu_buka||_isoToJam(match.waktu_buka_iso),
+              waktuTutup: match.waktu_tutup||_isoToJam(match.waktu_tutup_iso),
+              isoOpen: match.waktu_buka_iso||null, isoClose: match.waktu_tutup_iso||null,
+              pengeluaran: [], transaksi: []
+            };
+            // Cek apakah sudah ada di shifts
+            if (!ST.shifts.some(function(s){return s.id===closedSh.id;})) {
+              ST.shifts.unshift(closedSh);
+            }
+            ST.currentShift = null;
+            saveShiftLocal();
+            updateShiftTopbar();
+            // Tampilkan notif
+            showNotif('🔒 Shift telah ditutup di perangkat lain', '#F59E0B');
+          }
+        }
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
-        // Simpan shift aktif (open) yang mungkin belum tersync
         var openShift = ST.currentShift && ST.currentShift.status === 'open' ? ST.currentShift : null;
         var sbShifts = shRes.data
           .filter(function(sh){ return sh.status !== 'open'; })
@@ -6851,6 +6881,7 @@ async function prosesBukaKasir() {
   syncRestoStatusToSupabase();
   renderRestoStatusUI();
   sbSyncShift(ST.currentShift);
+  broadcastChange('shift', 'Shift baru dibuka: '+ST.currentShift.id);
 }
 
 async function showTutupModal() {
@@ -7071,6 +7102,8 @@ async function prosesTutupKasir() {
   renderRestoStatusUI();
   await sbSyncShift(closed);
   saveShiftLocal();
+  // Broadcast ke browser lain: shift telah ditutup
+  broadcastChange('shift', 'Shift '+closed.id+' ditutup');
   if (window._currentPage === 'laporan') renderLaporan();
   // Auto-logout timer: jika tidak ada shift baru dibuka dalam 30 menit
   cancelAutoLogoutTimer();
@@ -8822,6 +8855,7 @@ async function checkExternalChanges() {
       
       // Tampilkan notif + auto re-sync
       var msgMap = {
+        'shift': '🔒 Status shift berubah karena',
         'menu': '📝 Menu/harga diubah oleh',
         'price': '💰 Harga menu diubah oleh',
         'member': '👥 Data member diubah oleh',
