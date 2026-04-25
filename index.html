@@ -6060,10 +6060,15 @@ async function autoSyncFromSupabase() {
               iso: p.changed_at || ''
             };
           });
-          // Merge: Supabase + local yang belum ada di Supabase (by iso timestamp + menuId)
-          var sbKeys = new Set(sbLog.map(function(l){return (l.iso||'') + '|' + (l.menuId||'');}));
+          // Merge: Supabase + local yang belum ada di Supabase
+          // Key: timestamp ms + menuId + oldPrice + newPrice (lebih robust)
+          var _logKey = function(l) {
+            var ts = l.iso ? Math.floor(new Date(l.iso).getTime()/1000) : 0; // detik
+            return ts + '|' + (l.menuId||'') + '|' + (l.oldPrice||0) + '|' + (l.newPrice||0);
+          };
+          var sbKeys = new Set(sbLog.map(_logKey));
           var localOnly = (ST.priceLog||[]).filter(function(l){
-            return !sbKeys.has((l.iso||'') + '|' + (l.menuId||''));
+            return !sbKeys.has(_logKey(l));
           });
           // Upload localOnly ke Supabase
           if (localOnly.length > 0) {
