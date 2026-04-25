@@ -5756,7 +5756,7 @@ async function autoSyncFromSupabase() {
     ST._onlineOrdersCache = [];
     ST._expensesCache = [];
     ST.members = [];
-    ST.priceLog = [];
+    // priceLog TIDAK di-reset — akan di-merge di section price log di bawah
     ST.stokLog = [];
     var d90 = new Date(); d90.setDate(d90.getDate()-90);
     var iso90 = d90.toISOString();
