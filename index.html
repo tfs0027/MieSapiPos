@@ -2705,7 +2705,7 @@ function loadShiftLocal() {
     if (d.trxCounter) ST.trxCounter = d.trxCounter;
     if (d.shiftCounter) ST.shiftCounter = d.shiftCounter;
     if (d.transactions) ST.transactions = d.transactions;
-    if (d.priceLog) ST.priceLog = d.priceLog;
+    if (d.priceLog) { ST.priceLog = d.priceLog; console.log('[loadShiftLocal] priceLog loaded:', d.priceLog.length); }
   } catch(e) { console.warn('loadShiftLocal:', e.message); }
 }
 
@@ -4455,7 +4455,9 @@ function saveMenu() {
         iso: now2.toISOString()
       };
       ST.priceLog.push(logEntry);
+      console.log('[PriceLog] PUSH', logEntry, 'total:', ST.priceLog.length);
       saveShiftLocal(); // simpan ke localStorage
+      console.log('[PriceLog] saveShiftLocal done');
       sbSyncPriceLog(logEntry); // sync ke Supabase
       broadcastChange('price', 'Harga "'+name+'" '+fmt(existing.price)+' → '+fmt(price));
     }
@@ -6041,6 +6043,7 @@ async function autoSyncFromSupabase() {
         .eq('restaurant_id', rid)
         .order('changed_at', {ascending: false})
         .limit(200);
+      console.log('[AutoSync] priceLog from Supabase:', plRes.error ? 'ERR:'+plRes.error.message : (plRes.data?plRes.data.length:0)+' rows', '| local:', (ST.priceLog||[]).length);
       if (!plRes.error && plRes.data) {
         // Jika Supabase punya data, ambil
         if (plRes.data.length > 0) {
@@ -8849,8 +8852,12 @@ function stopChangeListener() {
 }
 
 async function sbSyncPriceLog(entry) {
-  if (!_sb || !CFG.restaurantId || !navigator.onLine) return false;
+  if (!_sb || !CFG.restaurantId || !navigator.onLine) {
+    console.warn('[sbSyncPriceLog] skip: no _sb/rid/online');
+    return false;
+  }
   try {
+    console.log('[sbSyncPriceLog] sending:', entry.menuName, entry.oldPrice, '→', entry.newPrice);
     var res = await _sb.from('price_log').insert({
       restaurant_id: CFG.restaurantId,
       menu_id: entry.menuId ? String(entry.menuId) : null,
@@ -8861,7 +8868,8 @@ async function sbSyncPriceLog(entry) {
       changed_by_id: entry.changedById || null,
       changed_at: entry.iso || new Date().toISOString()
     });
-    if (res.error) { console.warn('sbSyncPriceLog:', res.error.message); return false; }
+    if (res.error) { console.warn('[sbSyncPriceLog] FAIL:', res.error.message); return false; }
+    console.log('[sbSyncPriceLog] OK');
     return true;
   } catch(e) { console.warn('sbSyncPriceLog err:', e.message); return false; }
 }
