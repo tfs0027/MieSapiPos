@@ -2648,6 +2648,7 @@ function saveShiftLocal() {
       trxCounter: ST.trxCounter,
       shiftCounter: ST.shiftCounter,
       transactions: ST.transactions,
+      priceLog: ST.priceLog || [],
     });
     // Cegah QuotaExceededError: cek ukuran sebelum simpan
     if (payload.length > 4 * 1024 * 1024) { // > 4MB
@@ -3092,7 +3093,9 @@ function doLogin(u) {
       startRealtimeOrders();
       autoSyncFromSupabase(); // sync semua data dari Supabase saat login/refresh
       // Daftarkan session aktif & mulai heartbeat
-      registerActiveSession().then(function(){ startSessionHeartbeat(); startChangeListener(); });
+      registerActiveSession().then(function(){ startSessionHeartbeat(); });
+      startChangeListener();  // jalan terpisah, tidak tergantung session
+      console.log('[Broadcast] change listener started');
       var rEl = document.getElementById('sb-sub-rid');
       if (rEl) rEl.textContent = 'ID: ' + (CFG.restaurantId||'—');
       var strip = document.getElementById('sb-sub-strip');
@@ -5972,6 +5975,21 @@ async function autoSyncFromSupabase() {
     try {
       // Query tanpa filter created_at — gunakan waktu_buka_iso atau tanggal sebagai fallback
       // Filter created_at sering gagal jika saat insert tidak ada created_at
+      // PRE-UPLOAD: pastikan semua shift local yang masih 'closed' ada di Supabase
+      // (defense terhadap sbSyncShift yang mungkin gagal sebelumnya)
+      var shBefore = await _sb.from('shifts').select('shift_code')
+        .eq('restaurant_id', rid);
+      var knownCodes = new Set((shBefore.data||[]).map(function(r){return r.shift_code;}));
+      var needUpload = ST.shifts.filter(function(s){
+        return s.status === 'closed' && !knownCodes.has(s.id);
+      });
+      if (needUpload.length > 0) {
+        console.log('[AutoSync] Upload', needUpload.length, 'shifts yang belum tersync...');
+        for (var ii = 0; ii < needUpload.length; ii++) {
+          await sbSyncShift(needUpload[ii]);
+        }
+      }
+      // Baru download semua shifts
       var shRes = await _sb.from('shifts').select('*')
         .eq('restaurant_id', rid)
         .order('shift_code', {ascending:false})
@@ -6024,21 +6042,47 @@ async function autoSyncFromSupabase() {
         .order('changed_at', {ascending: false})
         .limit(200);
       if (!plRes.error && plRes.data) {
-        ST.priceLog = plRes.data.map(function(p){
-          return {
-            menuId: p.menu_id,
-            menuName: p.menu_name || '',
-            oldPrice: p.old_price || 0,
-            newPrice: p.new_price || 0,
-            changedBy: p.changed_by || '',
-            changedById: p.changed_by_id || null,
-            date: p.changed_at ? new Date(p.changed_at).toLocaleDateString('id-ID') : '',
-            time: p.changed_at ? new Date(p.changed_at).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'}) : '',
-            iso: p.changed_at || ''
-          };
-        });
+        // Jika Supabase punya data, ambil
+        if (plRes.data.length > 0) {
+          var sbLog = plRes.data.map(function(p){
+            return {
+              menuId: p.menu_id,
+              menuName: p.menu_name || '',
+              oldPrice: p.old_price || 0,
+              newPrice: p.new_price || 0,
+              changedBy: p.changed_by || '',
+              changedById: p.changed_by_id || null,
+              date: p.changed_at ? new Date(p.changed_at).toLocaleDateString('id-ID') : '',
+              time: p.changed_at ? new Date(p.changed_at).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'}) : '',
+              iso: p.changed_at || ''
+            };
+          });
+          // Merge: Supabase + local yang belum ada di Supabase (by iso timestamp + menuId)
+          var sbKeys = new Set(sbLog.map(function(l){return (l.iso||'') + '|' + (l.menuId||'');}));
+          var localOnly = (ST.priceLog||[]).filter(function(l){
+            return !sbKeys.has((l.iso||'') + '|' + (l.menuId||''));
+          });
+          // Upload localOnly ke Supabase
+          if (localOnly.length > 0) {
+            console.log('[AutoSync] Upload', localOnly.length, 'priceLog entries yang belum tersync...');
+            for (var li = 0; li < localOnly.length; li++) {
+              await sbSyncPriceLog(localOnly[li]);
+            }
+          }
+          ST.priceLog = sbLog.concat(localOnly);
+        } else {
+          // Supabase kosong, tapi mungkin ada data di local — upload semua
+          if (ST.priceLog && ST.priceLog.length > 0) {
+            console.log('[AutoSync] Supabase kosong, upload', ST.priceLog.length, 'priceLog lokal...');
+            for (var li2 = 0; li2 < ST.priceLog.length; li2++) {
+              await sbSyncPriceLog(ST.priceLog[li2]);
+            }
+          }
+        }
         saveShiftLocal();
         if (window._currentPage === 'menu') { try { renderPriceLog(); } catch(e){} }
+      } else if (plRes.error) {
+        console.warn('[AutoSync] priceLog error:', plRes.error.message);
       }
     } catch(e) { console.warn('priceLog sync:', e.message); }
 
@@ -8725,9 +8769,10 @@ var _changeCheckTimer = null;
 
 // Catat perubahan - dipanggil setiap ada perubahan penting
 async function broadcastChange(changeType, message) {
-  if (!_sb || !CFG.restaurantId) return;
+  if (!_sb || !CFG.restaurantId) { console.warn('[Broadcast] skip: no _sb/restaurantId'); return; }
   try {
-    await _sb.from('change_log').upsert({
+    console.log('[Broadcast] send:', changeType, '-', message);
+    var res = await _sb.from('change_log').upsert({
       restaurant_id: CFG.restaurantId,
       last_change_type: changeType,
       last_changed_by: ST.cu ? ST.cu.name : 'System',
@@ -8735,6 +8780,8 @@ async function broadcastChange(changeType, message) {
       last_changed_at: new Date().toISOString(),
       message: message || ''
     }, { onConflict: 'restaurant_id' });
+    if (res && res.error) console.warn('[Broadcast] send FAIL:', res.error.message);
+    else console.log('[Broadcast] send OK');
   } catch(e) { console.warn('broadcastChange:', e.message); }
 }
 
@@ -8745,7 +8792,14 @@ async function checkExternalChanges() {
     var res = await _sb.from('change_log').select('*')
       .eq('restaurant_id', CFG.restaurantId)
       .maybeSingle();
-    if (res.error || !res.data) return;
+    if (res.error) {
+      console.warn('[Broadcast] checkExternal error:', res.error.message);
+      return;
+    }
+    if (!res.data) {
+      console.log('[Broadcast] no change_log row yet');
+      return;
+    }
     var ch = res.data;
     // Pertama kali: set baseline, jangan notif
     if (_lastChangeSeen === null) {
