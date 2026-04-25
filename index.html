@@ -5750,6 +5750,7 @@ async function autoSyncFromSupabase() {
     return;
   }
   _autoSyncing = true;
+  console.log('[AutoSync] start, ST.currentShift:', ST.currentShift ? ST.currentShift.id+':'+ST.currentShift.status : 'null');
   var rid = CFG.restaurantId;
   try {
     // FIX E: Bersihkan SEMUA cache lama sebelum sync — pastikan tidak ada sisa data toko lain
@@ -5999,7 +6000,7 @@ async function autoSyncFromSupabase() {
       if (!shRes.error && shRes.data) {
         // CHECK: jika currentShift local masih 'open' tapi di Supabase sudah 'closed'
         // → clear currentShift (browser ini harus ikut tertutup)
-        if (ST.currentShift && ST.currentShift.status === 'open') {
+        if (ST.currentShift) {  // cek apapun currentShift yang masih ada di local
           var match = shRes.data.find(function(sh){ return sh.shift_code === ST.currentShift.id; });
           if (match && match.status !== 'open') {
             console.log('[AutoSync] currentShift', ST.currentShift.id, 'sudah ditutup di tempat lain, clear local');
