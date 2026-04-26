@@ -2965,7 +2965,7 @@ async function _sessionHeartbeat() {
 
 function startSessionHeartbeat() {
   stopSessionHeartbeat();
-  _sessionHeartbeatTimer = setInterval(_sessionHeartbeat, 30000); // 30 detik
+  _sessionHeartbeatTimer = setInterval(_sessionHeartbeat, 60000); // 60 detik (hemat egress)
 }
 
 function stopSessionHeartbeat() {
@@ -8936,7 +8936,7 @@ async function checkExternalChanges() {
 function startChangeListener() {
   stopChangeListener();
   // Polling setiap 15 detik
-  _changeCheckTimer = setInterval(checkExternalChanges, 15000);
+  _changeCheckTimer = setInterval(checkExternalChanges, 30000); // 30 detik (hemat egress)
   // First check setelah 2 detik
   setTimeout(checkExternalChanges, 2000);
 }
