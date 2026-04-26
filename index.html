@@ -2649,6 +2649,7 @@ function saveShiftLocal() {
       shiftCounter: ST.shiftCounter,
       transactions: ST.transactions,
       priceLog: ST.priceLog || [],
+      stokLog: ST.stokLog || [],
     });
     // Cegah QuotaExceededError: cek ukuran sebelum simpan
     if (payload.length > 4 * 1024 * 1024) { // > 4MB
@@ -2706,6 +2707,7 @@ function loadShiftLocal() {
     if (d.shiftCounter) ST.shiftCounter = d.shiftCounter;
     if (d.transactions) ST.transactions = d.transactions;
     if (d.priceLog) { ST.priceLog = d.priceLog; console.log('[loadShiftLocal] priceLog loaded:', d.priceLog.length); }
+    if (d.stokLog) { ST.stokLog = d.stokLog; console.log('[loadShiftLocal] stokLog loaded:', d.stokLog.length); }
   } catch(e) { console.warn('loadShiftLocal:', e.message); }
 }
 
@@ -4525,12 +4527,19 @@ function renderStok() {
 
 function addStokLog(stokId, stokName, tipe, jumlah, satuan, sblm, sesudah, ket) {
   const now = new Date();
-  ST.stokLog.unshift({
+  var entry = {
     id: ST.stokLogCounter++,
-    stokId, stokName, tipe, jumlah, satuan, sblm, sesudah, ket: ket||'',
+    stokId: stokId, stokName: stokName, tipe: tipe, jumlah: jumlah, satuan: satuan,
+    sblm: sblm, sesudah: sesudah, ket: ket||'',
     ref: '', waktu: fmtTime(now),
-    tanggal: fmtDate(now), kasir: ST.cu ? ST.cu.name : 'Sistem'
-  });
+    tanggal: fmtDate(now),
+    kasir: ST.cu ? ST.cu.name : 'Sistem',
+    iso: now.toISOString()
+  };
+  ST.stokLog.unshift(entry);
+  console.log('[StokLog] PUSH', entry.stokName, entry.tipe, entry.jumlah, '→ total:', ST.stokLog.length);
+  saveShiftLocal();
+  sbSyncStokLog(entry);
 }
 
 function openRestokModal(id) {
@@ -5758,7 +5767,7 @@ async function autoSyncFromSupabase() {
     ST._expensesCache = [];
     ST.members = [];
     // priceLog TIDAK di-reset — akan di-merge di section price log di bawah
-    ST.stokLog = [];
+    // stokLog tidak di-reset — akan di-merge di section 10
     var d90 = new Date(); d90.setDate(d90.getDate()-90);
     var iso90 = d90.toISOString();
 
@@ -6124,6 +6133,52 @@ async function autoSyncFromSupabase() {
         console.warn('[AutoSync] priceLog error:', plRes.error.message);
       }
     } catch(e) { console.warn('priceLog sync:', e.message); }
+
+    // 10. Stok Log
+    try {
+      var slRes = await _sb.from('stok_log').select('*')
+        .eq('restaurant_id', rid)
+        .order('changed_at', {ascending: false})
+        .limit(500);
+      console.log('[AutoSync] stokLog from Supabase:', slRes.error ? 'ERR:'+slRes.error.message : (slRes.data?slRes.data.length:0)+' rows', '| local:', (ST.stokLog||[]).length);
+      if (!slRes.error && slRes.data) {
+        if (slRes.data.length > 0) {
+          var sbStokLog = slRes.data.map(function(s){
+            return {
+              id: s.id, stokId: s.stok_id, stokName: s.stok_name||'',
+              tipe: s.tipe||'', jumlah: s.jumlah||0, satuan: s.satuan||'',
+              sblm: s.stok_sebelum||0, sesudah: s.stok_sesudah||0,
+              ket: s.keterangan||'', kasir: s.kasir||'',
+              waktu: s.changed_at ? new Date(s.changed_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '',
+              tanggal: s.changed_at ? new Date(s.changed_at).toLocaleDateString('id-ID') : '',
+              iso: s.changed_at || ''
+            };
+          });
+          // Merge: gabungkan local yg belum di Supabase
+          var _slKey = function(l) {
+            var ts = l.iso ? Math.floor(new Date(l.iso).getTime()/1000) : 0;
+            return ts + '|' + (l.stokId||'') + '|' + (l.tipe||'') + '|' + (l.jumlah||0);
+          };
+          var sbKeys = new Set(sbStokLog.map(_slKey));
+          var localOnly = (ST.stokLog||[]).filter(function(l){ return !sbKeys.has(_slKey(l)); });
+          if (localOnly.length > 0) {
+            console.log('[AutoSync] Upload', localOnly.length, 'stokLog entries...');
+            for (var sli = 0; sli < localOnly.length; sli++) {
+              await sbSyncStokLog(localOnly[sli]);
+            }
+          }
+          ST.stokLog = sbStokLog.concat(localOnly);
+        } else if ((ST.stokLog||[]).length > 0) {
+          // Supabase kosong, upload semua local
+          console.log('[AutoSync] Supabase stokLog kosong, upload', ST.stokLog.length, 'entries...');
+          for (var sli2 = 0; sli2 < ST.stokLog.length; sli2++) {
+            await sbSyncStokLog(ST.stokLog[sli2]);
+          }
+        }
+        saveShiftLocal();
+        if (window._currentPage === 'stok') { try { renderStokLog(); } catch(e){} }
+      }
+    } catch(e) { console.warn('stokLog sync:', e.message); }
 
   } catch(e) {
     console.warn('autoSync error:', e.message);
@@ -8889,6 +8944,32 @@ function startChangeListener() {
 function stopChangeListener() {
   if (_changeCheckTimer) { clearInterval(_changeCheckTimer); _changeCheckTimer = null; }
   _lastChangeSeen = null;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// SYNC STOK LOG ke Supabase
+// ═══════════════════════════════════════════════════════════════
+async function sbSyncStokLog(entry) {
+  if (!_sb || !CFG.restaurantId || !navigator.onLine) return false;
+  try {
+    var res = await _sb.from('stok_log').insert({
+      restaurant_id: CFG.restaurantId,
+      stok_id: entry.stokId ? String(entry.stokId) : null,
+      stok_name: entry.stokName || '',
+      tipe: entry.tipe || '',
+      jumlah: entry.jumlah || 0,
+      satuan: entry.satuan || '',
+      stok_sebelum: entry.sblm || 0,
+      stok_sesudah: entry.sesudah || 0,
+      keterangan: entry.ket || '',
+      kasir: entry.kasir || '',
+      changed_at: entry.iso || new Date().toISOString()
+    });
+    if (res.error) { console.warn('[sbSyncStokLog] FAIL:', res.error.message); return false; }
+    console.log('[sbSyncStokLog] OK', entry.stokName);
+    return true;
+  } catch(e) { console.warn('sbSyncStokLog err:', e.message); return false; }
 }
 
 async function sbSyncPriceLog(entry) {
