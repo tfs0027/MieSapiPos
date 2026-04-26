@@ -2286,6 +2286,11 @@ try {
   if (s) {
     const saved = JSON.parse(s);
     CFG = Object.assign(CFG, saved);
+    // Restore STOK_CATS dari CFG jika ada
+    if (CFG.stokCats && Array.isArray(CFG.stokCats) && CFG.stokCats.length > 0) {
+      STOK_CATS.length = 0;
+      CFG.stokCats.forEach(function(x){ STOK_CATS.push(x); });
+    }
     // FIX: URL param ?r= selalu menang atas localStorage
     if (_urlR && _urlR.length > 10) {
       // Jika restaurantId BERUBAH (pindah toko), reset semua data per-toko
@@ -4486,6 +4491,55 @@ function switchStokTab(tab, btn) {
   if(tab==='setting') { renderStokKatList(); }
 }
 
+
+function hapusStok(id) {
+  var s = ST.stocks.find(function(x){ return x.id === id; });
+  if (!s) return;
+  // Cek apakah bahan ini dipakai resep
+  var dipakai = [];
+  if (ST.resep) {
+    Object.keys(ST.resep).forEach(function(menuId){
+      var resep = ST.resep[menuId] || [];
+      if (resep.some(function(r){ return r.bahanId === id; })) {
+        var menu = ST.menus.find(function(m){ return m.id == menuId; });
+        if (menu) dipakai.push(menu.name);
+      }
+    });
+  }
+  var msg = 'Hapus bahan "' + s.name + '"?';
+  if (dipakai.length > 0) {
+    msg += '\n\n⚠️ Bahan ini dipakai di resep ' + dipakai.length + ' menu:\n• ' + dipakai.slice(0,5).join('\n• ');
+    if (dipakai.length > 5) msg += '\n• ...dan ' + (dipakai.length-5) + ' lainnya';
+    msg += '\n\nResep menu tersebut akan ikut terhapus referensinya.';
+  }
+  if (!confirm(msg)) return;
+  
+  // Catat ke stok log sebelum hapus (sebagai history)
+  if (typeof addStokLog === 'function') {
+    addStokLog(s.id, s.name, 'hapus', s.qty, s.unit, s.qty, 0, 'Bahan dihapus');
+  }
+  
+  // Hapus dari resep yang menggunakan bahan ini
+  if (ST.resep) {
+    Object.keys(ST.resep).forEach(function(menuId){
+      if (ST.resep[menuId]) {
+        ST.resep[menuId] = ST.resep[menuId].filter(function(r){ return r.bahanId !== id; });
+      }
+    });
+  }
+  
+  // Hapus dari ST.stocks
+  ST.stocks = ST.stocks.filter(function(x){ return x.id !== id; });
+  
+  // Sync ke Supabase via syncRestoStatusToSupabase (yang sudah include ST.stocks)
+  syncRestoStatusToSupabase();
+  broadcastChange('stok', 'Bahan "' + s.name + '" dihapus');
+  
+  renderStok();
+  if (typeof renderMenuCogs === 'function') renderMenuCogs();
+  showNotif('Bahan "' + s.name + '" dihapus', '#A8A5BE');
+}
+
 function renderStok() {
   const low = ST.stocks.filter(s=>s.qty<=s.min).length;
   const nilai = ST.stocks.reduce((a,s)=>a+s.qty*s.cost,0);
@@ -4521,6 +4575,7 @@ function renderStok() {
       '<button class="btn btn-sm" onclick="openRestokModal(' + s.id + ')">+Restock</button>' +
       '<button class="btn btn-sm" onclick="openStokModal(' + s.id + ')">Edit</button>' +
       '<button class="btn btn-sm" onclick="penyesuaianStok(' + s.id + ')" style="color:var(--amber-dk)">Sesuaikan</button>' +
+      '<button class="btn btn-sm" onclick="hapusStok(' + s.id + ')" style="color:var(--red-dk)">Hapus</button>' +
       '</td></tr>';
   }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--txt3);padding:20px">Tidak ada bahan ditemukan</td></tr>';
 }
@@ -5822,6 +5877,12 @@ async function autoSyncFromSupabase() {
             ST.stocks = cfg.stocks.map(function(s){
               return {id:s.id,name:s.name,cat:s.cat||'Umum',qty:s.qty||0,unit:s.unit||'pcs',min:s.min||0,cost:s.cost||0};
             });
+          }
+          // Restore kategori stok yang user-defined dari Supabase
+          if (cfg.stokCats && Array.isArray(cfg.stokCats) && cfg.stokCats.length > 0) {
+            STOK_CATS.length = 0;
+            cfg.stokCats.forEach(function(x){ STOK_CATS.push(x); });
+            CFG.stokCats = STOK_CATS.slice();
           }
         }
         saveCFG();
