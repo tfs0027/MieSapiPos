@@ -4720,6 +4720,9 @@ function simpanStokKat(i){
   const old=STOK_CATS[i];
   STOK_CATS[i]=newName;
   ST.stocks.forEach(s=>{if(s.cat===old)s.cat=newName;});
+  CFG.stokCats = STOK_CATS.slice(); saveCFG();
+  syncRestoStatusToSupabase();
+  broadcastChange('setting', 'Kategori stok diubah: '+old+' → '+newName);
   renderStokKatList();renderStok();
   showNotif('Kategori diubah: '+old+' → '+newName);
 }
@@ -4728,7 +4731,11 @@ function hapusStokKat(i){
   const cat=STOK_CATS[i];
   const used=ST.stocks.filter(s=>s.cat===cat).length;
   if(used>0){showNotif('Masih digunakan '+used+' bahan','#E17055');return;}
-  STOK_CATS.splice(i,1);renderStokKatList();
+  STOK_CATS.splice(i,1);
+  CFG.stokCats = STOK_CATS.slice(); saveCFG();
+  syncRestoStatusToSupabase();
+  broadcastChange('setting', 'Kategori stok dihapus: '+cat);
+  renderStokKatList();
   showNotif('Kategori '+cat+' dihapus','#A8A5BE');
 }
 
@@ -4737,6 +4744,9 @@ function tambahStokKat(){
   if(!name){showNotif('Masukkan nama kategori','#E17055');return;}
   if(STOK_CATS.includes(name)){showNotif('Kategori sudah ada','#E17055');return;}
   STOK_CATS.push(name);$('stok-kat-new').value='';
+  CFG.stokCats = STOK_CATS.slice(); saveCFG();
+  syncRestoStatusToSupabase();
+  broadcastChange('setting', 'Kategori stok ditambah: '+name);
   renderStokKatList();
   showNotif('Kategori '+name+' ditambahkan','#00B894');
 }
@@ -9530,6 +9540,7 @@ async function syncRestoStatusToSupabase(){
       serviceFlat: CFG.serviceFlat||0,
       serviceNama: CFG.serviceNama||'Biaya Layanan',
       kurirList: CFG.kurirList||[],
+      stokCats: CFG.stokCats || STOK_CATS || [],
       // FIX: simpan meja, stok, pajak, rekrutmen per toko ke Supabase
       tables: ST.tables ? ST.tables.map(function(t){
         return {id:t.id,num:t.num,capacity:t.capacity,status:t.status==='occupied'?'available':t.status,order:null};
