@@ -6006,6 +6006,17 @@ async function autoSyncFromSupabase() {
           return !sbCodes.has(t.id);
         });
         // Set dari Supabase sebagai base, tambahkan lokal yang belum ada
+        // Preserve cashRec & change dari local jika Supabase tidak punya (cash_received belum ada/NULL)
+        var localById = {};
+        ST.transactions.forEach(function(t){ localById[t.id] = t; });
+        sbMapped = sbMapped.map(function(t) {
+          var local = localById[t.id];
+          if (local) {
+            if (t.cashRec === undefined && local.cashRec !== undefined && !isNaN(local.cashRec)) t.cashRec = local.cashRec;
+            if (t.change === undefined && local.change !== undefined && !isNaN(local.change)) t.change = local.change;
+          }
+          return t;
+        });
         ST.transactions = sbMapped.concat(localUnsync);
         // Retry sync untuk transaksi lokal yang belum masuk Supabase
         if (localUnsync.length) {
