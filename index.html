@@ -4008,10 +4008,13 @@ function showReceipt(trx) {
     var payLbl = function(m){return m==='cash'?'Tunai':m==='qris'?'QRIS':'Transfer';};
     html += '<div class="r-r"><span>Bayar 1 ('+payLbl(sp.m1)+')</span><span>'+fmt(sp.a1)+'</span></div>';
     html += '<div class="r-r"><span>Bayar 2 ('+payLbl(sp.m2)+')</span><span>'+fmt(sp.a2)+'</span></div>';
-    if (trx.change>0) html += '<div class="kembalian-box"><span>KEMBALIAN</span><span>'+fmt(trx.change)+'</span></div>';
+    var _chg = (trx.change!==undefined && !isNaN(trx.change)) ? trx.change : 0;
+    if (_chg>0) html += '<div class="kembalian-box"><span>KEMBALIAN</span><span>'+fmt(_chg)+'</span></div>';
   } else {
-    html += '<div class="r-r"><span>Bayar (' + (trx.pay==='cash'?'Tunai':trx.pay==='qris'?'QRIS':'Transfer') + ')</span><span>' + fmt(trx.cashRec) + '</span></div>';
-    if (trx.pay==='cash') html += '<div class="kembalian-box"><span>KEMBALIAN</span><span>' + fmt(trx.change) + '</span></div>';
+    var _cashRec = (trx.cashRec !== undefined && !isNaN(trx.cashRec)) ? trx.cashRec : trx.total;
+    var _change  = (trx.change  !== undefined && !isNaN(trx.change))  ? trx.change  : 0;
+    html += '<div class="r-r"><span>Bayar (' + (trx.pay==='cash'?'Tunai':trx.pay==='qris'?'QRIS':'Transfer') + ')</span><span>' + fmt(_cashRec) + '</span></div>';
+    if (trx.pay==='cash') html += '<div class="kembalian-box"><span>KEMBALIAN</span><span>' + fmt(_change) + '</span></div>';
   }
   html += '<hr class="r-d">';
   // Member & poin info
