@@ -3924,7 +3924,11 @@ function processPayment() {
   // Biaya layanan tidak berlaku di kasir (hanya pesanan online)
   const grand = Math.max(0, Math.round(taxable + tax));
   const mejaVal = $('cart-meja').value;
-  const cashRec = ST.payMethod==='cash' ? (parseFloat($('cash-inp') ? $('cash-inp').value : grand)||grand) : grand;
+  var _cashInpEl = $('cash-inp');
+  var _cashInpVal = _cashInpEl ? parseFloat(_cashInpEl.value) : NaN;
+  const cashRec = ST.payMethod==='cash'
+    ? ((!isNaN(_cashInpVal) && _cashInpVal >= grand) ? _cashInpVal : grand)
+    : grand;
   const change = ST.payMethod==='cash' ? Math.max(0, Math.round(cashRec-grand)) : 0;
   var _trxDatePrefix = new Date().getFullYear().toString() + String(new Date().getMonth()+1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0');
   const id = 'TRX-' + _trxDatePrefix + '-' + String(ST.trxCounter).padStart(4,'0'); ST.trxCounter++;
