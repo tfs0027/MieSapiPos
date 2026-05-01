@@ -5995,6 +5995,7 @@ async function autoSyncFromSupabase() {
             splitPay: t.split_pay ? (typeof t.split_pay==='string'?JSON.parse(t.split_pay):t.split_pay) : null,
             kasir: t.kasir_nama||'Kasir', shiftId: t.shift_code||'',
             items: (function(){ try{ return t.items_json?(typeof t.items_json==='string'?JSON.parse(t.items_json):t.items_json):[]; }catch(e){return [];} })(),
+            cashRec: t.cash_received||t.total||0, change: t.change_amount||0,
             voided: t.voided||false, voidAlasan: t.void_alasan||'', orderNote: t.order_note||''
           };
         });
@@ -8890,6 +8891,8 @@ async function _doSyncTrxToSupabase(trx) {
       total: trx.total||0,
       pay_method: trx.pay==='split'?'split':trx.pay,
       split_pay: trx.splitPay ? JSON.stringify(trx.splitPay) : null,
+      cash_received: (trx.cashRec!==undefined && !isNaN(trx.cashRec)) ? trx.cashRec : null,
+      change_amount: (trx.change!==undefined && !isNaN(trx.change)) ? trx.change : null,
       kasir_nama: trx.kasir||'',
       kasir_id: trx.userId || null,
       items_json: trx.items ? JSON.stringify(trx.items) : '[]',
