@@ -6018,6 +6018,13 @@ async function autoSyncFromSupabase() {
           if (local) {
             if (t.cashRec === undefined && local.cashRec !== undefined && !isNaN(local.cashRec)) t.cashRec = local.cashRec;
             if (t.change === undefined && local.change !== undefined && !isNaN(local.change)) t.change = local.change;
+            // Preserve void status dari local jika Supabase belum terupdate
+            if (local.voided && !t.voided) {
+              t.voided = true;
+              t.voidAlasan = local.voidAlasan || '';
+              t.voidBy = local.voidBy || '';
+              t.voidTime = local.voidTime || '';
+            }
           }
           return t;
         });
@@ -6665,31 +6672,52 @@ function confirmVoid(trxId) {
   prosesVoid(t, alasan.trim());
 }
 
-function prosesVoid(t, alasan) {
-  // Mark transaction as voided
+async function prosesVoid(t, alasan) {
+  // Mark transaction as voided di ST.transactions (by reference + by index)
   t.voided = true;
   t.voidAlasan = alasan;
-  t.voidBy = ST.cu.name;
+  t.voidBy = ST.cu ? ST.cu.name : 'Admin';
   t.voidTime = fmtTime(new Date());
-  // Remove from shift transaksi list
+
+  // Pastikan update di array ST.transactions (bukan hanya object reference)
+  var _tidx = ST.transactions.findIndex(function(x){return x.id===t.id;});
+  if (_tidx >= 0) {
+    ST.transactions[_tidx].voided = true;
+    ST.transactions[_tidx].voidAlasan = alasan;
+    ST.transactions[_tidx].voidBy = t.voidBy;
+    ST.transactions[_tidx].voidTime = t.voidTime;
+  }
+
+  // Update totals di shift terkait
   var sh = ST.shifts.find(function(s){return s.id===t.shiftId;}) ||
            (ST.currentShift && ST.currentShift.id===t.shiftId ? ST.currentShift : null);
-  if (sh && sh.transaksi) {
-    sh.transaksi = sh.transaksi.filter(function(x){return x.id!==t.id;});
-    // Recalculate shift totals
-    // Exclude voided from shift totals
-    var nonVoided = sh.transaksi.filter(function(x){
-      var trxFull = ST.transactions.find(function(tt){return tt.id===x.id;});
-      return !trxFull || !trxFull.voided;
+  if (sh) {
+    // Hitung ulang dari ST.transactions langsung (bukan sh.transaksi)
+    var nonVoided = ST.transactions.filter(function(x){
+      return x.shiftId === sh.id && !x.voided;
     });
-    sh.totalPenjualan = nonVoided.reduce(function(a,x){return a+x.total;},0);
-    sh.tunai = nonVoided.filter(function(x){return x.pay==='cash';}).reduce(function(a,x){return a+x.total;},0);
-    sh.qris = nonVoided.filter(function(x){return x.pay==='qris';}).reduce(function(a,x){return a+x.total;},0);
-    sh.transfer = nonVoided.filter(function(x){return x.pay==='transfer';}).reduce(function(a,x){return a+x.total;},0);
-    if (sh.status==='closed') sh.labaBersih = sh.totalPenjualan - sh.totalPengeluaran;
+    sh.totalPenjualan = nonVoided.reduce(function(a,x){return a+(x.total||0);},0);
+    sh.tunai = nonVoided.filter(function(x){return x.pay==='cash';}).reduce(function(a,x){return a+(x.total||0);},0);
+    sh.qris = nonVoided.filter(function(x){return x.pay==='qris';}).reduce(function(a,x){return a+(x.total||0);},0);
+    sh.transfer = nonVoided.filter(function(x){return x.pay==='transfer';}).reduce(function(a,x){return a+(x.total||0);},0);
+    sh.labaBersih = sh.totalPenjualan - (sh.totalPengeluaran||0);
+    // Update sh.transaksi juga
+    if (sh.transaksi) sh.transaksi = sh.transaksi.filter(function(x){return x.id!==t.id;});
   }
+
+  // Simpan ke localStorage dulu
+  saveShiftLocal();
+
+  // Sync ke Supabase (await supaya tidak race condition)
+  await _doSyncTrxToSupabase(t);
+
+  // Simpan lagi setelah sync selesai (anti race condition autoSync)
+  saveShiftLocal();
+
+  broadcastChange('shift', 'Void trx ' + t.id);
   renderRiwayat();
   renderShiftPage();
+  if (window._currentPage === 'laporan') { try { renderLaporan(); } catch(e){} }
   showNotif('✅ Void ' + t.id + ' berhasil — ' + alasan, '#E17055');
 }
 
