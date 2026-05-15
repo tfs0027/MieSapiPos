@@ -6337,6 +6337,25 @@ async function fetchLaporanFromSupabase() {
       var localUnsync2 = ST.transactions.filter(function(t){
         return !sbCodes2.has(t.id);
       });
+      // Preserve voided + cashRec + change dari local sebelum replace
+      var localById2 = {};
+      ST.transactions.forEach(function(t){ localById2[t.id] = t; });
+      sbMapped2 = sbMapped2.map(function(t) {
+        var local = localById2[t.id];
+        if (local) {
+          // Preserve void status jika Supabase belum terupdate
+          if (local.voided && !t.voided) {
+            t.voided = true;
+            t.voidAlasan = local.voidAlasan || '';
+            t.voidBy = local.voidBy || '';
+            t.voidTime = local.voidTime || '';
+          }
+          // Preserve cashRec & change
+          if (t.cashRec === undefined && local.cashRec !== undefined) t.cashRec = local.cashRec;
+          if (t.change === undefined && local.change !== undefined) t.change = local.change;
+        }
+        return t;
+      });
       ST.transactions = sbMapped2;
       if (localUnsync2.length) {
         localUnsync2.forEach(function(trx) {
@@ -6791,7 +6810,7 @@ function renderRiwayat() {
 
   $('riwayat-body').innerHTML = trxs.length ? trxs.map(function(t) {
     return '<tr>' +
-    '<td style="font-weight:700;color:' + (t.voided?'var(--txt3)':'var(--accent)') + ';text-decoration:' + (t.voided?'line-through':'none') + '">' + t.id + (t.voided?' <span style="font-size:9px;color:var(--red-dk)">[VOID]</span>':'') + '</td>' +
+    '<td style="font-weight:700;color:' + (t.voided?'var(--txt3)':'var(--accent)') + ';text-decoration:' + (t.voided?'line-through':'none') + '">' + t.id + (t.voided?' <span style="font-size:9px;color:var(--red-dk)" title="Alasan: '+(t.voidAlasan||'-')+'">[VOID: '+(t.voidAlasan||'-')+']</span>':'') + '</td>' +
     '<td style="font-size:11px;color:var(--txt2)">' + (t.date||'—') + '</td>' +
     '<td>' + (t.time||'—') + '</td>' +
     '<td>' + t.table + '</td>' +
@@ -6805,7 +6824,7 @@ function renderRiwayat() {
     '<td style="display:flex;gap:4px">' +
     '<button class="btn btn-sm" onclick="viewReceipt(\'' + t.id + '\')">Struk</button>' +
     '<button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366;font-size:10px" onclick="openWAModal(\'' + t.id + '\')">WA</button>' +
-    (can('void_trx') ? '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="confirmVoid(\'' + t.id + '\')">Void</button>' : '') +
+    (can('void_trx') && !t.voided ? '<button class="btn btn-sm" style="color:var(--red-dk)" onclick="confirmVoid(\'' + t.id + '\')">Void</button>' : (t.voided ? '<span style="font-size:10px;color:var(--red-dk)">✗ VOID</span>' : '')) +
     '</td></tr>';
   }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--txt3);padding:20px">Tidak ada transaksi yang sesuai filter</td></tr>';
 }
