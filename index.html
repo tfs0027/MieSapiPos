@@ -6728,8 +6728,27 @@ async function prosesVoid(t, alasan) {
   saveShiftLocal();
 
   // Sync ke Supabase (await supaya tidak race condition)
-  var voidSyncOK = await _doSyncTrxToSupabase(t);
-  console.log('[Void] sync result:', voidSyncOK ? 'OK' : 'FAIL - void mungkin tidak tersimpan ke Supabase');
+  // Untuk void: langsung UPDATE kolom voided saja (lebih ringan + pasti update)
+  var voidSyncOK = false;
+  if (_sb && CFG.restaurantId) {
+    try {
+      var vRes = await _sb.from('transactions')
+        .update({ voided: true, void_alasan: t.voidAlasan || '' })
+        .eq('restaurant_id', CFG.restaurantId)
+        .eq('trx_code', t.id);
+      if (!vRes.error) {
+        voidSyncOK = true;
+        console.log('[Void] sync OK:', t.id);
+      } else {
+        console.warn('[Void] sync FAIL:', vRes.error.message);
+        // Fallback: full upsert
+        voidSyncOK = await _doSyncTrxToSupabase(t);
+      }
+    } catch(e) {
+      console.warn('[Void] sync error:', e.message);
+    }
+  }
+  console.log('[Void] sync result:', voidSyncOK ? 'OK' : 'FAIL');
 
   // Simpan lagi setelah sync selesai (anti race condition autoSync)
   saveShiftLocal();
@@ -8995,10 +9014,20 @@ async function _doSyncTrxToSupabase(trx) {
     var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code,restaurant_id'});
     console.log('[SyncTrx] Upsert result:', trx.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (!res.error) return true;
-    // Jika upsert gagal karena constraint belum ada, coba insert biasa
-    var res2 = await _sb.from('transactions').insert(data);
+    // Fallback 2: coba UPDATE jika row sudah ada (untuk void update)
+    var res2 = await _sb.from('transactions').update({
+      voided: data.voided,
+      void_alasan: data.void_alasan,
+      cash_received: data.cash_received,
+      change_amount: data.change_amount
+    })
+    .eq('restaurant_id', data.restaurant_id)
+    .eq('trx_code', data.trx_code);
     if (!res2.error) return true;
-    console.warn('sbSync gagal (' + trx.id + '):', res2.error.message);
+    // Fallback 3: coba insert biasa (row belum ada)
+    var res3 = await _sb.from('transactions').insert(data);
+    if (!res3.error) return true;
+    console.warn('sbSync gagal (' + trx.id + '):', res3.error.message);
     return false;
   } catch(e) {
     console.warn('sbSyncTransaction error (' + trx.id + '):', e.message);
