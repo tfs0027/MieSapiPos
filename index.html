@@ -6113,7 +6113,7 @@ async function autoSyncFromSupabase() {
       var shRes = await _sb.from('shifts').select('*')
         .eq('restaurant_id', rid)
         .order('shift_code', {ascending:false})
-        .limit(200);
+        .limit(500);
       if (!shRes.error && shRes.data) {
         // CHECK: jika currentShift local masih 'open' tapi di Supabase sudah 'closed'
         // → clear currentShift (browser ini harus ikut tertutup)
@@ -6149,7 +6149,12 @@ async function autoSyncFromSupabase() {
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
         var openShift = ST.currentShift && ST.currentShift.status === 'open' ? ST.currentShift : null;
         var sbShifts = shRes.data
-          .filter(function(sh){ return sh.status !== 'open'; })
+          .filter(function(sh){
+            // Exclude shift yang masih open (ditangani terpisah via currentShift)
+            // Include NULL/undefined status (mungkin shift lama yang belum ada status)
+            return sh.status === 'closed' || sh.status === null || sh.status === undefined ||
+                   (sh.status !== 'open' && sh.shift_code !== (ST.currentShift ? ST.currentShift.id : null));
+          })
           .map(function(sh){
             return {
               id: sh.shift_code, kasir: sh.kasir_nama||'', status: sh.status||'closed',
@@ -6163,12 +6168,33 @@ async function autoSyncFromSupabase() {
               isoClose: sh.waktu_tutup_iso||null, pengeluaran: [], transaksi: []
             };
           });
-        // Merge: Supabase sebagai referensi + lokal yang belum tersync
+        // Supabase = sumber kebenaran utama
+        // Preserve data lokal (totalPenjualan, pengeluaran, transaksi) dari local ke sbShifts
+        var localById = {};
+        ST.shifts.forEach(function(s){ localById[s.id] = s; });
+        sbShifts = sbShifts.map(function(sh) {
+          var local = localById[sh.id];
+          if (local) {
+            // Preserve transaksi dan pengeluaran dari local jika belum ada
+            if ((!sh.transaksi || !sh.transaksi.length) && local.transaksi && local.transaksi.length)
+              sh.transaksi = local.transaksi;
+            if ((!sh.pengeluaran || !sh.pengeluaran.length) && local.pengeluaran && local.pengeluaran.length)
+              sh.pengeluaran = local.pengeluaran;
+          }
+          return sh;
+        });
+        // Tambahkan local yang belum tersync ke Supabase (belum ada di sbShifts)
         var sbCodes = new Set(sbShifts.map(function(s){return s.id;}));
         var localOnly = ST.shifts.filter(function(s){
-          return !sbCodes.has(s.id) && s.status !== 'open';
+          return !sbCodes.has(s.id) && s.status === 'closed';
         });
-        console.log('[AutoSync-Shift] ST.shifts:', ST.shifts.length, '→', sbShifts.length+localOnly.length, '(', sbShifts.length, 'sb +', localOnly.length, 'local)');
+        if (localOnly.length > 0) {
+          console.log('[AutoSync-Shift] Upload', localOnly.length, 'local shifts ke Supabase...');
+          for (var _li = 0; _li < localOnly.length; _li++) {
+            await sbSyncShift(localOnly[_li]);
+          }
+        }
+        console.log('[AutoSync-Shift] sbShifts:', sbShifts.length, '+ localOnly:', localOnly.length);
         ST.shifts = sbShifts.concat(localOnly);
         _dbg('[Shift] Loaded', ST.shifts.length, 'shifts dari Supabase +', localOnly.length, 'lokal');
       }
