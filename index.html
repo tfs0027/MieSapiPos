@@ -6160,7 +6160,20 @@ async function autoSyncFromSupabase() {
           .map(function(sh){
             return {
               id: sh.shift_code, kasir: sh.kasir_nama||'', status: sh.status||'closed',
-              tanggal: sh.tanggal||'', modalAwal: sh.modal_awal||0,
+              tanggal: (function(){
+        // Konversi "15 Mei 2026" → "2026-05-15" untuk Supabase
+        try {
+          if (!sh.tanggal) return null;
+          // Jika sudah format YYYY-MM-DD, langsung pakai
+          if (/^\d{4}-\d{2}-\d{2}$/.test(sh.tanggal)) return sh.tanggal;
+          var _ts = parseTanggalShift(sh.tanggal);
+          if (_ts) {
+            var _d = new Date(_ts);
+            if (!isNaN(_d)) return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+          }
+        } catch(e) {}
+        return null; // kirim null daripada format salah
+      })(), modalAwal: sh.modal_awal||0,
               totalPenjualan: sh.total_penjualan||0, totalPengeluaran: sh.total_pengeluaran||0,
               labaBersih: sh.laba_bersih||0, tunai: sh.tunai||0, qris: sh.qris||0,
               transfer: sh.transfer||0, ekspektasiKas: sh.ekspektasi_kas||0,
@@ -6191,10 +6204,13 @@ async function autoSyncFromSupabase() {
           return !sbCodes.has(s.id) && s.status === 'closed';
         });
         if (localOnly.length > 0) {
-          console.log('[AutoSync-Shift] Upload', localOnly.length, 'local shifts ke Supabase...');
+          console.log('[AutoSync-Shift] Upload', localOnly.length, 'local shifts ke Supabase:', localOnly.map(function(s){return s.id;}).join(', '));
           for (var _li = 0; _li < localOnly.length; _li++) {
-            await sbSyncShift(localOnly[_li]);
+            var _uploadOK = await sbSyncShift(localOnly[_li]);
+            console.log('[AutoSync-Shift] Upload', localOnly[_li].id, ':', _uploadOK ? 'OK' : 'FAIL');
           }
+        } else {
+          console.log('[AutoSync-Shift] Tidak ada local shifts yang perlu diupload');
         }
         console.log('[AutoSync-Shift] sbShifts:', sbShifts.length, '+ localOnly:', localOnly.length);
         console.log('[AutoSync-Shift] sbShifts IDs:', sbShifts.map(function(s){return s.id;}).join(', '));
