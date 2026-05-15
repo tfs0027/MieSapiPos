@@ -6077,6 +6077,17 @@ async function autoSyncFromSupabase() {
             shiftId: e.shift_code||'', kasir: e.kasir_nama||''
           };
         });
+        // Populate pengeluaran ke currentShift dan shifts dari _expensesCache
+        if (ST.currentShift) {
+          ST.currentShift.pengeluaran = ST._expensesCache.filter(function(e){
+            return e.shiftId === ST.currentShift.id;
+          });
+        }
+        // Update pengeluaran di riwayat shifts juga
+        ST.shifts.forEach(function(sh) {
+          var shExps = ST._expensesCache.filter(function(e){ return e.shiftId === sh.id; });
+          if (shExps.length > 0) sh.pengeluaran = shExps;
+        });
       }
     } catch(e) { console.warn('sync expenses:', e.message); }
 
@@ -7780,6 +7791,7 @@ async function tambahPengeluaran() {
   // Lalu sync ke Supabase dengan shiftId & tanggal eksplisit
   sbSyncExpense(entry, ST.currentShift.id, ST.currentShift.tanggal, ST.cu ? ST.cu.name : '');
   ['pn','pa','pket','pref'].forEach(x => $(x).value='');
+  broadcastChange('stok', 'Pengeluaran: '+entry.nama+' '+fmt(entry.nominal));
   renderShiftPage();
   if (window._currentPage === 'laporan') renderLaporan();
   showNotif('✅ Pengeluaran dicatat','#E17055');
