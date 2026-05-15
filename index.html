@@ -6728,7 +6728,8 @@ async function prosesVoid(t, alasan) {
   saveShiftLocal();
 
   // Sync ke Supabase (await supaya tidak race condition)
-  await _doSyncTrxToSupabase(t);
+  var voidSyncOK = await _doSyncTrxToSupabase(t);
+  console.log('[Void] sync result:', voidSyncOK ? 'OK' : 'FAIL - void mungkin tidak tersimpan ke Supabase');
 
   // Simpan lagi setelah sync selesai (anti race condition autoSync)
   saveShiftLocal();
@@ -7978,7 +7979,7 @@ function lihatLaporanShift(id) {
     }
     return 0;
   }
-  var _trx = sh.transaksi || [];
+  var _trx = (sh.transaksi || []).filter(function(t){ return !t.voided; });
   var _tunai    = _trx.length ? _trx.reduce(function(a,t){return a+_getPayAmt(t,'cash');},0)    : (sh.tunai||0);
   var _qris     = _trx.length ? _trx.reduce(function(a,t){return a+_getPayAmt(t,'qris');},0)    : (sh.qris||0);
   var _transfer = _trx.length ? _trx.reduce(function(a,t){return a+_getPayAmt(t,'transfer');},0): (sh.transfer||0);
@@ -8991,7 +8992,7 @@ async function _doSyncTrxToSupabase(trx) {
       created_at: _trxCreatedAt  // FIX 2: simpan waktu transaksi yang akurat
     };
     // Coba upsert dulu (update jika sudah ada, insert jika belum)
-    var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code'});
+    var res = await _sb.from('transactions').upsert(data, {onConflict:'trx_code,restaurant_id'});
     console.log('[SyncTrx] Upsert result:', trx.id, res.error ? 'FAIL:'+res.error.message : 'OK');
     if (!res.error) return true;
     // Jika upsert gagal karena constraint belum ada, coba insert biasa
