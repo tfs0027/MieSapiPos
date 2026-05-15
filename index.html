@@ -6148,6 +6148,8 @@ async function autoSyncFromSupabase() {
         }
         // FIX: Reset shifts dari Supabase — jangan pertahankan data toko lain
         var openShift = ST.currentShift && ST.currentShift.status === 'open' ? ST.currentShift : null;
+        console.log('[AutoSync-Shift] raw dari Supabase:', shRes.data.length, 'rows');
+        console.log('[AutoSync-Shift] status list:', shRes.data.map(function(s){return s.shift_code+':'+s.status;}).join(', '));
         var sbShifts = shRes.data
           .filter(function(sh){
             // Exclude shift yang masih open (ditangani terpisah via currentShift)
@@ -6195,6 +6197,7 @@ async function autoSyncFromSupabase() {
           }
         }
         console.log('[AutoSync-Shift] sbShifts:', sbShifts.length, '+ localOnly:', localOnly.length);
+        console.log('[AutoSync-Shift] sbShifts IDs:', sbShifts.map(function(s){return s.id;}).join(', '));
         ST.shifts = sbShifts.concat(localOnly);
         _dbg('[Shift] Loaded', ST.shifts.length, 'shifts dari Supabase +', localOnly.length, 'lokal');
       }
