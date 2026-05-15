@@ -8090,6 +8090,33 @@ function renderWAPreview() {
   const t = _waTrx;
   const extra = $('wa-pesan').value;
   const lines = [];
+
+  // Jika transaksi sudah di-void, tampilkan pesan pembatalan
+  if (t.voided) {
+    lines.push(CFG.logo + ' *' + CFG.nama + '*');
+    if (CFG.tagline) lines.push('_' + CFG.tagline + '_');
+    lines.push('');
+    lines.push('🚫 *TRANSAKSI DIBATALKAN*');
+    lines.push('');
+    lines.push('No. Transaksi: *' + t.id + '*');
+    lines.push('Tanggal: ' + t.date + ' · ' + t.time);
+    lines.push('Total: ' + fmt(t.total));
+    lines.push('Kasir: ' + t.kasir);
+    lines.push('');
+    lines.push('Alasan pembatalan:');
+    lines.push('_' + (t.voidAlasan || '-') + '_');
+    lines.push('');
+    if (extra) lines.push('💬 ' + extra);
+    lines.push('──────────────────');
+    lines.push('_Mohon maaf atas ketidaknyamanannya._');
+    if (CFG.sosmed) { lines.push(''); lines.push('📱 ' + CFG.sosmed); }
+    $('wa-preview').textContent = lines.join('\n');
+    // Ubah judul modal supaya jelas ini notif void
+    var sub = $('wa-sub');
+    if (sub) sub.textContent = '🚫 Notifikasi Void: ' + t.id + ' · ' + fmt(t.total);
+    return;
+  }
+
   lines.push(CFG.logo + ' *' + CFG.nama + '*');
   if (CFG.tagline) lines.push('_' + CFG.tagline + '_');
   lines.push('');
