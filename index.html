@@ -9277,7 +9277,20 @@ async function sbSyncShift(sh) {
       kasir_nama: sh.kasir||'',
       modal_awal: sh.modalAwal||0,
       status: sh.status||'open',
-      tanggal: sh.tanggal||'',
+      tanggal: (function(){
+        if (!sh.tanggal) return null;
+        // Jika sudah YYYY-MM-DD, langsung return
+        if (/^\d{4}-\d{2}-\d{2}$/.test(sh.tanggal)) return sh.tanggal;
+        // Konversi format Indonesia "15 Mei 2026" → "2026-05-15"
+        var _bulan = {Jan:1,Feb:2,Mar:3,Apr:4,Mei:5,Jun:6,Jul:7,Agu:8,Sep:9,Okt:10,Nov:11,Des:12,
+          Januari:1,Februari:2,Maret:3,April:4,Juni:6,Juli:7,Agustus:8,September:9,Oktober:10,November:11,Desember:12};
+        var _parts = sh.tanggal.trim().split(/\s+/);
+        if (_parts.length === 3) {
+          var _d = parseInt(_parts[0]), _m = _bulan[_parts[1]], _y = parseInt(_parts[2]);
+          if (_d && _m && _y) return _y+'-'+String(_m).padStart(2,'0')+'-'+String(_d).padStart(2,'0');
+        }
+        return null; // kirim null daripada format salah
+      })(),
       created_at: _shCreatedAt,
       waktu_buka: sh.waktuBuka||'',
       waktu_tutup: null,  // jam lokal, tidak disimpan sebagai timestamp
