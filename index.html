@@ -1600,7 +1600,8 @@ tr:hover td{background:rgba(108,92,231,.03)}
           <div style="font-size:11px;color:var(--txt2)">Rekap arus kas, saldo, penarikan &amp; setoran</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-sm btn-primary" onclick="openMutasiModal('setoran')" id="btn-setoran" style="display:none">+ Setoran / Penarikan</button>
+          <button class="btn btn-sm btn-primary" onclick="openMutasiModal('setoran')" id="btn-setoran" style="display:none">+ Mutasi Kas</button>
+          <button class="btn btn-sm" onclick="openSimpanLaporanModal()" id="btn-simpan-laporan" style="background:var(--accent);color:#fff;display:none">💾 Simpan Laporan</button>
           <div id="keu-export-wrap" style="position:relative;display:inline-block">
             <button id="keu-export-btn-main" onclick="toggleKeuExportMenu()" style="display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--brd);border-radius:var(--radius-lg);background:var(--bg);color:var(--txt);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0"><path d="M7 1v8M4 6l3 3 3-3M2 10v1.5A.5.5 0 002.5 12h9a.5.5 0 00.5-.5V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -6229,6 +6230,48 @@ async function autoSyncFromSupabase() {
     else renderLaporan(); // selalu update laporan di background
     showNotif('✅ Data tersinkronisasi dari Supabase', '#00B894');
   updateLastSync('ok');
+
+  // 8b. Keu Mutasi dari Supabase
+    try {
+      if (_sb && CFG.restaurantId) {
+        var kmRes = await _sb.from('keu_mutasi').select('*')
+          .eq('restaurant_id', rid)
+          .order('created_at', {ascending:false})
+          .limit(500);
+        if (!kmRes.error && kmRes.data) {
+          // Merge dengan local - hindari duplikat by id
+          var sbMutIds = new Set(kmRes.data.map(function(m){return 'SB-'+m.id;}));
+          var localOnlyMut = _keuMutasi.filter(function(m){return !m._sbId;});
+          _keuMutasi = kmRes.data.map(function(m){
+            return {
+              id: 'SB-'+m.id, _sbId: m.id,
+              tipe: m.tipe, nominal: m.nominal||0,
+              ket: m.keterangan||'', waktu: m.waktu||'',
+              tanggalISO: m.tanggal||'',
+              kasir: m.dibuat_oleh||''
+            };
+          }).concat(localOnlyMut);
+          saveKeuMutasiLocal();
+        }
+      }
+    } catch(e) { console.warn('keu_mutasi autoSync:', e.message); }
+
+  // 8c. Saldo awal dari Supabase
+    try {
+      if (_sb && CFG.restaurantId) {
+        var today = getTodayStr();
+        var saRes = await _sb.from('keu_saldo_awal').select('*')
+          .eq('restaurant_id', rid)
+          .gte('tanggal', new Date(Date.now()-30*86400000).toISOString().slice(0,10));
+        if (!saRes.error && saRes.data) {
+          saRes.data.forEach(function(row) {
+            try {
+              localStorage.setItem(_keuSaldoStorageKey(row.tanggal), JSON.stringify(row.nominal));
+            } catch(e) {}
+          });
+        }
+      }
+    } catch(e) { console.warn('keu_saldo_awal autoSync:', e.message); }
 
   // 9. Price Log — ambil riwayat perubahan harga
     try {
@@ -13658,21 +13701,48 @@ function loadKeuSaldoManual(dateStr) {
 }
 function saveKeuSaldoManual(dateStr, val) {
   try { localStorage.setItem(_keuSaldoStorageKey(dateStr), JSON.stringify(val)); } catch(e) {}
+  // Sync ke Supabase keu_saldo_awal
+  if (_sb && CFG.restaurantId) {
+    _sb.from('keu_saldo_awal').upsert({
+      restaurant_id: CFG.restaurantId,
+      tanggal: dateStr,
+      nominal: val,
+      diubah_oleh: ST.cu ? ST.cu.name : '',
+      updated_at: new Date().toISOString()
+    }, {onConflict: 'restaurant_id,tanggal'}).then(function(){});
+  }
 }
 
 // Hitung saldo akhir dari shift kemarin (auto)
-function getAutoSaldoAwal() {
-  // Ambil dari kasFisik shift terakhir yang ditutup kemarin atau sebelumnya
-  var closed = ST.shifts.filter(function(s){ return s.status !== 'open'; });
+function getAutoSaldoAwal(forDate) {
+  // Ambil kasFisik dari shift terakhir yang tutup HARI SEBELUM tanggal target
+  // Jika forDate tidak diisi, pakai hari ini
+  var targetDate = forDate || getTodayStr(); // YYYY-MM-DD
+  var targetTs = new Date(targetDate + 'T00:00:00').getTime();
+  
+  var closed = ST.shifts.filter(function(s){
+    if (s.status === 'open') return false;
+    // Cari shift yang tanggalnya SEBELUM targetDate
+    var tgl = '';
+    if (s.isoOpen) {
+      tgl = s.isoOpen.slice(0,10);
+    } else {
+      var ts = parseTanggalShift(s.tanggal);
+      if (ts) tgl = new Date(ts).toISOString().slice(0,10);
+    }
+    return tgl && tgl < targetDate;
+  });
+  
   if (!closed.length) return 0;
-  // Shift terbaru (urutan pertama setelah sort)
+  
+  // Ambil shift terakhir (terbaru) sebelum hari ini
   var latest = closed.slice().sort(function(a,b){
-    var da = parseTanggalShift(a.tanggal) || ''; 
-    var db = parseTanggalShift(b.tanggal) || '';
+    var da = a.isoOpen ? a.isoOpen : (parseTanggalShift(a.tanggal)||'');
+    var db = b.isoOpen ? b.isoOpen : (parseTanggalShift(b.tanggal)||'');
     return db > da ? 1 : -1;
   })[0];
+  
   if (!latest) return 0;
-  // Pakai kasFisik (kas yang dihitung saat tutup) sebagai saldo awal
   return latest.kasFisik || latest.ekspektasiKas || 0;
 }
 
@@ -13757,6 +13827,221 @@ function setKeuPeriode(p, btn) {
   if (p !== 'custom') renderKeuanganPage();
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// KEUANGAN: Snapshot & Riwayat Laporan Harian
+// ═══════════════════════════════════════════════════════════════
+var _keuRiwayat = [];       // cache riwayat laporan
+var _keuRiwayatPage = 0;    // pagination
+var _keuRiwayatPerPage = 10;
+
+// Tampilkan preview konfirmasi sebelum simpan laporan
+function openSimpanLaporanModal() {
+  var d = _buildKeuanganData();
+  var isMasuk = function(t){ return ['setoran_modal','terima_piutang','dari_rekening','koreksi_plus','setoran'].indexOf(t)>=0; };
+  var totalMutasiMasuk = (d.mutasi||[]).filter(function(m){return isMasuk(m.tipe);}).reduce(function(a,m){return a+m.nominal;},0);
+  var totalMutasiKeluar = (d.mutasi||[]).filter(function(m){return !isMasuk(m.tipe);}).reduce(function(a,m){return a+m.nominal;},0);
+  
+  var selisihHtml = d.selisihKas !== null
+    ? '<div style="margin-top:8px;padding:8px;border-radius:8px;background:'+(d.selisihKas===0?'var(--green-bg)':d.selisihKas>0?'var(--blue-bg,#EFF6FF)':'var(--red-bg,#FEF2F2)')+'">' +
+      '<div style="font-size:11px;color:var(--txt2)">Selisih Kas Fisik</div>' +
+      '<div style="font-weight:700;color:'+(d.selisihKas===0?'var(--green)':d.selisihKas>0?'var(--blue,#3B82F6)':'var(--red-dk)')+'">'+
+      (d.selisihKas===0?'Pas ✓':(d.selisihKas>0?'+':'')+fmt(d.selisihKas))+'</div></div>'
+    : '';
+
+  var html = '<div id="simpan-laporan-modal" class="modal-overlay open" onclick="if(event.target===this)this.remove()">' +
+    '<div class="modal-box" style="max-width:420px">' +
+    '<div class="modal-header"><span>💾 Simpan Laporan Harian</span>' +
+    '<button class="modal-close" onclick="closeSLModal()">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div style="background:var(--bg2);border-radius:10px;padding:14px;font-size:13px">' +
+    '<div style="font-weight:700;font-size:14px;margin-bottom:10px">📊 Ringkasan '+d.tanggal+'</div>' +
+    '<div style="display:grid;gap:6px">' +
+    _keuRow('Saldo Awal', d.saldoAwal) +
+    _keuRow('+ Tunai Masuk', d.kasirTunai, 'var(--green)') +
+    _keuRow('+ QRIS', d.kasirQRIS, 'var(--green)') +
+    _keuRow('+ Transfer', d.kasirTransfer, 'var(--green)') +
+    _keuRow('+ Online', d.onlineRev, 'var(--green)') +
+    (d.mutasiMasuk>0 ? _keuRow('+ Mutasi Masuk', d.mutasiMasuk, 'var(--green)') : '') +
+    _keuRow('- Pengeluaran', d.totalPengeluaran, 'var(--red-dk)') +
+    (d.mutasiKeluar>0 ? _keuRow('- Mutasi Keluar', d.mutasiKeluar, 'var(--red-dk)') : '') +
+    '<div style="height:1px;background:var(--brd);margin:4px 0"></div>' +
+    _keuRow('Saldo Kas Akhir', d.saldoKasAkhir, 'var(--accent)', true) +
+    (d.kasFisikAkhir!==null ? _keuRow('Kas Fisik Akhir', d.kasFisikAkhir) : '') +
+    '</div>' + selisihHtml + '</div>' +
+    '<div style="margin-top:12px;font-size:11px;color:var(--txt2)">⚠️ Setelah disimpan, laporan akan terkunci. Butuh alasan untuk membuka kunci.</div>' +
+    '</div>' +
+    '<div class="modal-actions">' +
+    '<button class="btn" onclick="closeSLModal()">Batal</button>' +
+    '<button class="btn btn-success" onclick="eksekusiSimpanLaporan()">💾 Simpan & Kunci</button>' +
+    '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function _keuRow(label, val, color, bold) {
+  return '<div style="display:flex;justify-content:space-between;align-items:center">' +
+    '<span style="color:var(--txt2)">' + label + '</span>' +
+    '<span style="font-weight:'+(bold?'700':'500')+';color:'+(color||'var(--txt)')+'">' + fmt(val) + '</span>' +
+    '</div>';
+}
+
+// Helper close modal
+function closeSLModal() { var e=document.getElementById('simpan-laporan-modal'); if(e)e.remove(); }
+function closeDLModal() { var e=document.getElementById('detail-laporan-modal'); if(e)e.remove(); }
+
+// Eksekusi simpan laporan ke Supabase
+async function eksekusiSimpanLaporan() {
+  var d = _buildKeuanganData();
+  var btn = document.querySelector('#simpan-laporan-modal .btn-success');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyimpan...'; }
+
+  try {
+    if (_sb && CFG.restaurantId) {
+      var res = await _sb.from('keu_laporan_harian').upsert({
+        restaurant_id: CFG.restaurantId,
+        tanggal: d.tanggal,
+        data: JSON.stringify(d),
+        dikunci: true,
+        dibuat_oleh: ST.cu ? ST.cu.name : '',
+        updated_at: new Date().toISOString()
+      }, {onConflict: 'restaurant_id,tanggal'});
+
+      if (res.error) {
+        showNotif('Gagal simpan: ' + res.error.message, '#E17055');
+        if (btn) { btn.disabled=false; btn.textContent='💾 Simpan & Kunci'; }
+        return;
+      }
+    }
+    var el = document.getElementById('simpan-laporan-modal');
+    if (el) el.remove();
+    showNotif('✅ Laporan ' + d.tanggal + ' berhasil disimpan dan dikunci', '#00B894');
+    loadKeuRiwayat();
+  } catch(e) {
+    showNotif('Error: ' + e.message, '#E17055');
+    if (btn) { btn.disabled=false; btn.textContent='💾 Simpan & Kunci'; }
+  }
+}
+
+// Load riwayat laporan dari Supabase
+async function loadKeuRiwayat(page) {
+  if (!_sb || !CFG.restaurantId) return;
+  if (page !== undefined) _keuRiwayatPage = page;
+  var from = _keuRiwayatPage * _keuRiwayatPerPage;
+  var to = from + _keuRiwayatPerPage - 1;
+  try {
+    var res = await _sb.from('keu_laporan_harian').select('*', {count:'exact'})
+      .eq('restaurant_id', CFG.restaurantId)
+      .order('tanggal', {ascending:false})
+      .range(from, to);
+    if (res.error) { console.warn('loadKeuRiwayat:', res.error.message); return; }
+    _keuRiwayat = res.data || [];
+    _keuRiwayatTotal = res.count || 0;
+    renderKeuRiwayat();
+  } catch(e) { console.warn('loadKeuRiwayat error:', e.message); }
+}
+
+var _keuRiwayatTotal = 0;
+
+// Render tabel riwayat laporan
+function renderKeuRiwayat() {
+  var el = document.getElementById('keu-riwayat-wrap');
+  if (!el) return;
+  if (!_keuRiwayat.length) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--txt2);font-size:13px">Belum ada laporan tersimpan</div>';
+    return;
+  }
+  var totalPages = Math.ceil(_keuRiwayatTotal / _keuRiwayatPerPage);
+  var rows = _keuRiwayat.map(function(r) {
+    var d = {};
+    try { d = typeof r.data==='string' ? JSON.parse(r.data) : r.data; } catch(e) {}
+    return '<tr>' +
+      '<td style="font-weight:600">' + r.tanggal + '</td>' +
+      '<td>' + fmt(d.saldoAwal||0) + '</td>' +
+      '<td style="color:var(--green)">' + fmt((d.kasirTunai||0)+(d.kasirQRIS||0)+(d.kasirTransfer||0)+(d.onlineRev||0)) + '</td>' +
+      '<td style="color:var(--red-dk)">-' + fmt(d.totalPengeluaran||0) + '</td>' +
+      '<td style="font-weight:700">' + fmt(d.saldoKasAkhir||0) + '</td>' +
+      '<td>' + (d.selisihKas===0?'<span style="color:var(--green)">Pas ✓</span>':d.selisihKas!==null&&d.selisihKas!==undefined?'<span style="color:var(--red-dk)">'+fmt(d.selisihKas)+'</span>':'—') + '</td>' +
+      '<td>' + (r.dikunci ? '<span style="font-size:10px;color:var(--txt3)">🔒 Terkunci</span>' : '<span style="font-size:10px;color:var(--amber-dk)">🔓 Terbuka</span>') + '</td>' +
+      '<td><button class="btn btn-sm" onclick="lihatDetailLaporanHarian('+r.id+')">Detail</button>' +
+      (r.dikunci && ST.cu && ST.cu.role==='admin' ? ' <button class="btn btn-sm" style="color:var(--amber-dk)" onclick="bukaKunciLaporan('+r.id+')">Buka Kunci</button>' : '') +
+      '</td>' +
+      '</tr>';
+  }).join('');
+  
+  // Pagination
+  var paginationHtml = '';
+  if (totalPages > 1) {
+    paginationHtml = '<div style="display:flex;justify-content:center;gap:6px;margin-top:12px;flex-wrap:wrap">';
+    for (var i=0; i<totalPages; i++) {
+      var active = i===_keuRiwayatPage;
+      paginationHtml += '<button class="btn btn-sm" style="'+(active?'background:var(--accent);color:#fff':'')
+        +'" onclick="loadKeuRiwayat('+i+')">'+(i+1)+'</button>';
+    }
+    paginationHtml += '</div>';
+  }
+  
+  el.innerHTML = '<div style="overflow-x:auto"><table class="tbl"><thead><tr>' +
+    '<th>Tanggal</th><th>Saldo Awal</th><th>Pemasukan</th><th>Pengeluaran</th>' +
+    '<th>Saldo Akhir</th><th>Selisih Kas</th><th>Status</th><th>Aksi</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>' + paginationHtml;
+}
+
+// Lihat detail laporan harian
+function lihatDetailLaporanHarian(id) {
+  var r = _keuRiwayat.find(function(x){return x.id==id;});
+  if (!r) return;
+  var d = {};
+  try { d = typeof r.data==='string' ? JSON.parse(r.data) : r.data; } catch(e) {}
+  var isMasuk = function(t){ return ['setoran_modal','terima_piutang','dari_rekening','koreksi_plus','setoran'].indexOf(t)>=0; };
+  var mutHtml = (d.mutasi||[]).length ? (d.mutasi||[]).map(function(m){
+    return '<tr><td>'+m.tanggalISO+'</td><td>'+m.waktu+'</td><td>'+m.tipe.replace(/_/g,' ')+'</td><td>'+m.ket+'</td>' +
+      '<td style="color:'+(isMasuk(m.tipe)?'var(--green)':'var(--red-dk)')+';">'+(isMasuk(m.tipe)?'+':'-')+fmt(m.nominal)+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--txt2)">Tidak ada mutasi</td></tr>';
+  
+  var html = '<div class="modal-overlay open" id="detail-laporan-modal" onclick="if(event.target===this)this.remove()">' +
+    '<div class="modal-box" style="max-width:500px">' +
+    '<div class="modal-header"><span>📊 Detail Laporan '+r.tanggal+'</span>' +
+    '<button class="modal-close" onclick="closeDLModal()">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div style="background:var(--bg2);border-radius:10px;padding:14px;font-size:13px;margin-bottom:12px">' +
+    '<div style="display:grid;gap:6px">' +
+    _keuRow('Saldo Awal', d.saldoAwal) +
+    _keuRow('+ Tunai Masuk', d.kasirTunai||0, 'var(--green)') +
+    _keuRow('+ QRIS', d.kasirQRIS||0, 'var(--green)') +
+    _keuRow('+ Transfer', d.kasirTransfer||0, 'var(--green)') +
+    _keuRow('+ Online', d.onlineRev||0, 'var(--green)') +
+    _keuRow('+ Mutasi Masuk', d.mutasiMasuk||0, 'var(--green)') +
+    _keuRow('- Pengeluaran', d.totalPengeluaran||0, 'var(--red-dk)') +
+    _keuRow('- Mutasi Keluar', d.mutasiKeluar||0, 'var(--red-dk)') +
+    '<div style="height:1px;background:var(--brd);margin:4px 0"></div>' +
+    _keuRow('Saldo Kas Akhir', d.saldoKasAkhir||0, 'var(--accent)', true) +
+    (d.kasFisikAkhir!==null && d.kasFisikAkhir!==undefined ? _keuRow('Kas Fisik Aktual', d.kasFisikAkhir) + _keuRow('Selisih', d.selisihKas||0, d.selisihKas===0?'var(--green)':'var(--red-dk)') : '') +
+    '</div></div>' +
+    '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Mutasi Kas</div>' +
+    '<table class="tbl"><thead><tr><th>Tgl</th><th>Jam</th><th>Tipe</th><th>Keterangan</th><th>Nominal</th></tr></thead>' +
+    '<tbody>' + mutHtml + '</tbody></table>' +
+    '<div style="margin-top:8px;font-size:10px;color:var(--txt2)">Dibuat oleh: '+r.dibuat_oleh+' · '+(r.dikunci?'🔒 Terkunci':'🔓 Terbuka')+'</div>' +
+    '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+// Buka kunci laporan (admin only)
+async function bukaKunciLaporan(id) {
+  if (!ST.cu || ST.cu.role !== 'admin') { showNotif('Hanya admin', '#E17055'); return; }
+  var alasan = prompt('Alasan membuka kunci laporan (wajib):');
+  if (!alasan || !alasan.trim()) { showNotif('Alasan wajib diisi', '#E17055'); return; }
+  try {
+    var res = await _sb.from('keu_laporan_harian').update({
+      dikunci: false,
+      alasan_buka_kunci: alasan.trim(),
+      updated_at: new Date().toISOString()
+    }).eq('id', id).eq('restaurant_id', CFG.restaurantId);
+    if (res.error) { showNotif('Gagal: '+res.error.message, '#E17055'); return; }
+    showNotif('🔓 Laporan berhasil dibuka kunci', '#F59E0B');
+    loadKeuRiwayat();
+  } catch(e) { showNotif('Error: '+e.message, '#E17055'); }
+}
+
 function renderKeuanganPage() {
   // Tampilkan tombol admin only
   var isAdmin = ST.cu && ST.cu.role === 'admin';
@@ -13766,6 +14051,8 @@ function renderKeuanganPage() {
   if (btnSetoran) btnSetoran.style.display = isAdmin ? '' : 'none';
   if (btnEditSaldo) btnEditSaldo.style.display = isAdmin ? '' : 'none';
   if (btnMutasiAdd) btnMutasiAdd.style.display = isAdmin ? '' : 'none';
+  var btnSimpanLap = $('btn-simpan-laporan');
+  if (btnSimpanLap) btnSimpanLap.style.display = isAdmin ? '' : 'none';
 
   // Tentukan saldo awal
   var dateKey = getTodayStr();
@@ -13789,10 +14076,21 @@ function renderKeuanganPage() {
   var onlines = filterKeuOnlineOrders();
   var mutasi = filterKeuMutasi();
 
-  var kasirRev = trxs.reduce(function(a,t){return a+t.total;},0);
+  // Kalkulasi per metode pembayaran
+  var kasirTunai    = trxs.filter(function(t){return t.pay==='cash';}).reduce(function(a,t){return a+(t.total||0);},0);
+  var kasirQRIS     = trxs.filter(function(t){return t.pay==='qris';}).reduce(function(a,t){return a+(t.total||0);},0);
+  var kasirTransfer = trxs.filter(function(t){return t.pay==='transfer';}).reduce(function(a,t){return a+(t.total||0);},0);
+  trxs.filter(function(t){return t.pay==='split'&&t.splitPay;}).forEach(function(t){
+    var sp=t.splitPay;
+    if(sp.m1==='cash')kasirTunai+=(sp.a1||0); if(sp.m1==='qris')kasirQRIS+=(sp.a1||0); if(sp.m1==='transfer')kasirTransfer+=(sp.a1||0);
+    if(sp.m2==='cash')kasirTunai+=(sp.a2||0); if(sp.m2==='qris')kasirQRIS+=(sp.a2||0); if(sp.m2==='transfer')kasirTransfer+=(sp.a2||0);
+  });
+  var kasirRev = kasirTunai + kasirQRIS + kasirTransfer;
   var onlineRev = onlines.reduce(function(a,o){return a+(o.total||0);},0);
-  var setoranMasuk = mutasi.filter(function(m){return m.tipe==='setoran';}).reduce(function(a,m){return a+m.nominal;},0);
-  var penarikan = mutasi.filter(function(m){return m.tipe==='penarikan';}).reduce(function(a,m){return a+m.nominal;},0);
+  var TIPE_MASUK  = ['setoran_modal','terima_piutang','dari_rekening','koreksi_plus','setoran'];
+  var TIPE_KELUAR = ['penarikan','bayar_supplier','ke_rekening','koreksi_minus'];
+  var setoranMasuk = mutasi.filter(function(m){return TIPE_MASUK.indexOf(m.tipe)>=0;}).reduce(function(a,m){return a+m.nominal;},0);
+  var penarikan = mutasi.filter(function(m){return TIPE_KELUAR.indexOf(m.tipe)>=0;}).reduce(function(a,m){return a+m.nominal;},0);
 
   var totalPemasukan = kasirRev + onlineRev + setoranMasuk;
   var totalPengeluaran = pengs.reduce(function(a,p){return a+p.nominal;},0);
@@ -13924,7 +14222,7 @@ function openMutasiModal(tipeDefault) {
   modal.classList.add('open');
 }
 
-function simpanKeuMutasi() {
+async function simpanKeuMutasi() {
   var tipe = ($('mutasi-tipe')||{}).value;
   var nominal = parseFloat(($('mutasi-nominal')||{}).value)||0;
   var ket = ($('mutasi-ket')||{value:''}).value.trim();
@@ -13933,43 +14231,40 @@ function simpanKeuMutasi() {
   if (!nominal || nominal <= 0) { showNotif('Isi nominal','#E17055'); return; }
   if (!ket) { showNotif('Isi keterangan','#E17055'); return; }
 
-  // Format tanggal ke display format
-  var tglDisplay = tanggal;
-  if (tanggal) {
-    var parts = tanggal.split('-');
-    var mn = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-    tglDisplay = parseInt(parts[2])+' '+mn[parseInt(parts[1])-1]+' '+parts[0];
-  }
+  var TIPE_MASUK  = ['setoran_modal','terima_piutang','dari_rekening','koreksi_plus','setoran'];
+  var isMasuk = TIPE_MASUK.indexOf(tipe) >= 0;
 
   var entry = {
     id: 'MUT-'+Date.now(),
     tipe: tipe, nominal: nominal, ket: ket,
-    waktu: waktu, tanggal: tglDisplay,
-    tanggalISO: tanggal,
+    waktu: waktu || fmtTime(new Date()),
+    tanggalISO: tanggal || getTodayStr(),
     kasir: ST.cu ? ST.cu.name : ''
   };
   _keuMutasi.push(entry);
   saveKeuMutasiLocal();
 
-  // Sync ke Supabase expenses (penarikan sebagai pengeluaran kategori khusus)
+  // Sync ke tabel keu_mutasi di Supabase
   if (_sb && CFG.restaurantId) {
-    _sb.from('expenses').insert({
-      restaurant_id: CFG.restaurantId,
-      nama: (tipe==='penarikan'?'[PENARIKAN] ':'[SETORAN] ')+ket,
-      nominal: nominal,
-      kategori: tipe==='penarikan'?'Penarikan Kas':'Setoran Masuk',
-      keterangan: ket,
-      waktu: waktu,
-      tanggal: tglDisplay,
-      kasir_nama: ST.cu ? ST.cu.name : '',
-      shift_code: ST.currentShift ? ST.currentShift.id : null
-    }).then(function(){});
+    try {
+      await _sb.from('keu_mutasi').insert({
+        restaurant_id: CFG.restaurantId,
+        tipe: tipe,
+        nominal: nominal,
+        keterangan: ket,
+        tanggal: tanggal || getTodayStr(),
+        waktu: entry.waktu,
+        dibuat_oleh: ST.cu ? ST.cu.name : '',
+        created_at: new Date().toISOString()
+      });
+    } catch(e) { console.warn('keu_mutasi sync:', e.message); }
   }
 
+  broadcastChange('setting', 'Mutasi kas: '+(isMasuk?'+':'-')+fmt(nominal));
   var wrap = document.getElementById('mutasi-modal-wrap');
   if (wrap) wrap.remove();
   renderKeuanganPage();
-  showNotif('✅ Mutasi kas dicatat: '+(tipe==='penarikan'?'-':'+')+'Rp'+nominal.toLocaleString('id-ID'), tipe==='penarikan'?'#E17055':'#00B894');
+  showNotif('✅ Mutasi dicatat: '+(isMasuk?'+':'-')+fmt(nominal), isMasuk?'#00B894':'#E17055');
 }
 
 function hapusKeuMutasi(id) {
@@ -14023,42 +14318,80 @@ function toggleKeuExportMenu() {
   }, 10);
 }
 
-function _buildKeuanganData() {
+function _buildKeuanganData(forDate) {
   var trxs = filterKeuTrx();
   var pengs = filterKeuPengeluaran();
   var onlines = filterKeuOnlineOrders();
   var mutasi = filterKeuMutasi();
-  var dateKey = getTodayStr();
+  var dateKey = forDate || getTodayStr();
   var manualSaldo = loadKeuSaldoManual(dateKey);
-  var saldoAwal = (manualSaldo !== null) ? manualSaldo : getAutoSaldoAwal();
+  var saldoAwal = (manualSaldo !== null && manualSaldo !== undefined) ? manualSaldo : getAutoSaldoAwal(dateKey);
 
-  var kasirRev = trxs.reduce(function(a,t){return a+t.total;},0);
+  // Pisah pemasukan per metode pembayaran
+  var kasirTunai    = trxs.filter(function(t){return t.pay==='cash';}).reduce(function(a,t){return a+(t.total||0);},0);
+  var kasirQRIS     = trxs.filter(function(t){return t.pay==='qris';}).reduce(function(a,t){return a+(t.total||0);},0);
+  var kasirTransfer = trxs.filter(function(t){return t.pay==='transfer';}).reduce(function(a,t){return a+(t.total||0);},0);
+  // Split payment: pecah per metode
+  trxs.filter(function(t){return t.pay==='split' && t.splitPay;}).forEach(function(t){
+    var sp = t.splitPay;
+    if(sp.m1==='cash')    kasirTunai    += sp.a1||0;
+    if(sp.m1==='qris')    kasirQRIS     += sp.a1||0;
+    if(sp.m1==='transfer')kasirTransfer += sp.a1||0;
+    if(sp.m2==='cash')    kasirTunai    += sp.a2||0;
+    if(sp.m2==='qris')    kasirQRIS     += sp.a2||0;
+    if(sp.m2==='transfer')kasirTransfer += sp.a2||0;
+  });
+  var kasirRev  = kasirTunai + kasirQRIS + kasirTransfer;
   var onlineRev = onlines.reduce(function(a,o){return a+(o.total||0);},0);
-  var setoranMasuk = mutasi.filter(function(m){return m.tipe==='setoran';}).reduce(function(a,m){return a+m.nominal;},0);
-  var penarikan = mutasi.filter(function(m){return m.tipe==='penarikan';}).reduce(function(a,m){return a+m.nominal;},0);
-  var totalPemasukan = kasirRev + onlineRev + setoranMasuk;
+
+  // Mutasi per tipe (masuk dan keluar)
+  var TIPE_MASUK  = ['setoran_modal','terima_piutang','dari_rekening','koreksi_plus','setoran'];
+  var TIPE_KELUAR = ['penarikan','bayar_supplier','ke_rekening','koreksi_minus'];
+  var mutasiMasuk  = mutasi.filter(function(m){return TIPE_MASUK.indexOf(m.tipe)>=0;}).reduce(function(a,m){return a+m.nominal;},0);
+  var mutasiKeluar = mutasi.filter(function(m){return TIPE_KELUAR.indexOf(m.tipe)>=0;}).reduce(function(a,m){return a+m.nominal;},0);
+
+  // Kas fisik dari shift terakhir hari ini (untuk selisih)
+  var todayShifts = ST.shifts.filter(function(s){
+    if (s.status==='open') return false;
+    var tgl = s.isoOpen ? s.isoOpen.slice(0,10) : '';
+    if (!tgl && s.tanggal) {
+      var ts = parseTanggalShift(s.tanggal);
+      if (ts) tgl = new Date(ts).toISOString().slice(0,10);
+    }
+    return tgl === dateKey;
+  }).sort(function(a,b){
+    var ta = a.isoClose||a.isoOpen||''; var tb = b.isoClose||b.isoOpen||'';
+    return tb>ta?1:-1;
+  });
+  var kasFisikAkhir = todayShifts.length ? (todayShifts[0].kasFisik||0) : null;
+
   var totalPengeluaran = pengs.reduce(function(a,p){return a+p.nominal;},0);
-  var totalKeluar = totalPengeluaran + penarikan;
+  var saldoKasAkhir = saldoAwal + kasirTunai + mutasiMasuk - totalPengeluaran - mutasiKeluar;
+  var selisihKas = kasFisikAkhir !== null ? (kasFisikAkhir - saldoKasAkhir) : null;
   var labaBersih = kasirRev + onlineRev - totalPengeluaran;
   var margin = (kasirRev+onlineRev)>0 ? Math.round(labaBersih/(kasirRev+onlineRev)*100) : 0;
-  var saldoAkhir = saldoAwal + totalPemasukan - totalKeluar;
 
   // Per kategori pengeluaran
   var catMap = {};
   pengs.forEach(function(p){ catMap[p.kategori]=(catMap[p.kategori]||0)+p.nominal; });
 
-  var periodeLabel = {hari:'Hari ini ('+getTodayStr()+')',kemarin:'Kemarin',minggu:'7 hari terakhir',bulan:'Bulan ini',custom:'Custom'}[_keuPeriode]||_keuPeriode;
+  var periodeLabel = {hari:'Hari ini ('+dateKey+')',kemarin:'Kemarin',minggu:'7 hari terakhir',bulan:'Bulan ini',custom:'Custom'}[_keuPeriode]||_keuPeriode;
 
   return {
+    tanggal: dateKey,
     toko: CFG.nama||'WarungKu', periodeLabel: periodeLabel,
     tanggalCetak: new Date().toLocaleString('id-ID'),
-    saldoAwal: saldoAwal, kasirRev: kasirRev, onlineRev: onlineRev,
-    setoranMasuk: setoranMasuk, totalPemasukan: totalPemasukan,
-    catMap: catMap, totalPengeluaran: totalPengeluaran,
-    penarikan: penarikan, totalKeluar: totalKeluar,
-    labaBersih: labaBersih, margin: margin, saldoAkhir: saldoAkhir,
+    saldoAwal: saldoAwal,
+    kasirTunai: kasirTunai, kasirQRIS: kasirQRIS, kasirTransfer: kasirTransfer,
+    kasirRev: kasirRev, onlineRev: onlineRev,
+    mutasiMasuk: mutasiMasuk, mutasiKeluar: mutasiKeluar,
+    totalPengeluaran: totalPengeluaran,
+    saldoKasAkhir: saldoKasAkhir,
+    kasFisikAkhir: kasFisikAkhir, selisihKas: selisihKas,
+    labaBersih: labaBersih, margin: margin,
     trxCount: trxs.length, onlineCount: onlines.length,
-    mutasi: mutasi
+    mutasi: mutasi, catMap: catMap,
+    jumlahShift: todayShifts.length
   };
 }
 
