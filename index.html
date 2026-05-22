@@ -13810,7 +13810,10 @@ function filterKeuOnlineOrders() {
 function filterKeuMutasi() {
   var rng = getKeuDateRange();
   return _keuMutasi.filter(function(m) {
-    var d = parseTrxDate(m.tanggal, m.waktu);
+    // Support tanggalISO (YYYY-MM-DD) dan tanggal display lama
+    var tglStr = m.tanggalISO || m.tanggal || '';
+    var waktu = m.waktu || '00:00';
+    var d = parseTrxDate(tglStr, waktu);
     if (isNaN(d)) return false;
     if (rng.dari && d < rng.dari) return false;
     if (rng.sampai && d > rng.sampai) return false;
@@ -14052,7 +14055,7 @@ function renderKeuanganPage() {
   if (btnEditSaldo) btnEditSaldo.style.display = isAdmin ? '' : 'none';
   if (btnMutasiAdd) btnMutasiAdd.style.display = isAdmin ? '' : 'none';
   var btnSimpanLap = $('btn-simpan-laporan');
-  if (btnSimpanLap) btnSimpanLap.style.display = isAdmin ? '' : 'none';
+  if (btnSimpanLap) btnSimpanLap.style.display = ''; // tampil untuk semua user yang login
 
   // Tentukan saldo awal
   var dateKey = getTodayStr();
